@@ -45,4 +45,4 @@ flutter {
 """
 with open("android/app/build.gradle", "w") as f:
     f.write(content)
-print("build.gradle written")
+print("app/build.gradle written")
