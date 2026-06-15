@@ -25,7 +25,6 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
 
-      # تثبيت Android SDK 36 المطلوب
       - name: Install Android SDK Platform 36
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
