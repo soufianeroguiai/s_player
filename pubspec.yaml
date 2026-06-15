@@ -11,34 +11,33 @@ dependencies:
     sdk: flutter
 
   # ── Video ──────────────────────────────────────────────
-  better_player:            ^0.0.84   # تشغيل + إيماءات + ترجمة + سرعة
-  video_thumbnail:          ^0.5.3    # صور مصغرة
-  srt_parser:               ^2.0.0    # ترجمة SRT
+  better_player: ^0.0.84
+  video_thumbnail: ^0.5.3
 
   # ── Media / Files ──────────────────────────────────────
-  photo_manager:            ^3.3.0    # تصفح الفيديوهات + thumbnail سريع
-  file_picker:              ^8.1.2    # اختيار ملف يدوي
+  photo_manager: ^3.3.0
+  file_picker: ^8.1.2
 
   # ── Permissions ────────────────────────────────────────
-  permission_handler:       ^11.3.1
+  permission_handler: ^11.3.1
 
   # ── UI / Icons ─────────────────────────────────────────
-  material_symbols_icons:   ^4.2719.1
+  material_symbols_icons: ^4.2719.1
 
   # ── State / Storage ────────────────────────────────────
-  shared_preferences:       ^2.3.2
-  provider:                 ^6.1.2
+  shared_preferences: ^2.3.2
+  provider: ^6.1.2
 
   # ── Utilities ──────────────────────────────────────────
-  wakelock_plus:            ^1.2.1
-  share_plus:               ^10.0.2
-  path:                     ^1.9.0
-  path_provider:            ^2.1.4
+  wakelock_plus: ^1.2.1
+  share_plus: ^10.0.2
+  path: ^1.9.0
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints:            ^4.0.0
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
