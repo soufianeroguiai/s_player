@@ -175,22 +175,15 @@ jobs:
       # ------- إصلاحات المكتبات غير المتوافقة -------
       - name: Fix package_info_plus build.gradle bug
         run: |
-          FILE="$HOME/.pub-cache/hosted/pub.dev/package_info_plus-9.0.1/android/build.gradle"
-          if [ -f "$FILE" ]; then
-            sed -i 's/flutter\.compileSdkVersion/34/g' "$FILE"
-            sed -i 's/flutter\.minSdkVersion/21/g' "$FILE"
-            sed -i 's/flutter\.targetSdkVersion/34/g' "$FILE"
-            echo "Patched package_info_plus 9.0.1"
-          else
-            find "$HOME/.pub-cache/hosted/pub.dev/" -maxdepth 1 -type d -name "package_info_plus-*" | while read dir; do
-              if [ -f "$dir/android/build.gradle" ]; then
-                sed -i 's/flutter\.compileSdkVersion/34/g' "$dir/android/build.gradle"
-                sed -i 's/flutter\.minSdkVersion/21/g' "$dir/android/build.gradle"
-                sed -i 's/flutter\.targetSdkVersion/34/g' "$dir/android/build.gradle"
-                echo "Patched $(basename $dir)"
-              fi
-            done
-          fi
+          find "$HOME/.pub-cache/hosted/pub.dev/" -maxdepth 1 -type d -name "package_info_plus-*" | while read dir; do
+            FILE="$dir/android/build.gradle"
+            if [ -f "$FILE" ]; then
+              sed -i 's/flutter\.compileSdkVersion/34/g' "$FILE"
+              sed -i 's/flutter\.minSdkVersion/21/g' "$FILE"
+              sed -i 's/flutter\.targetSdkVersion/34/g' "$FILE"
+              echo "Patched $(basename $dir)"
+            fi
+          done
 
       - name: Fix screen_brightness_android build.gradle.kts bug
         run: |
@@ -221,6 +214,18 @@ jobs:
           else
             echo "File not found, skipping patch"
           fi
+
+      - name: Fix wakelock_plus build.gradle bug
+        run: |
+          find "$HOME/.pub-cache/hosted/pub.dev/" -maxdepth 1 -type d -name "wakelock_plus-*" | while read dir; do
+            FILE="$dir/android/build.gradle"
+            if [ -f "$FILE" ]; then
+              sed -i 's/flutter\.compileSdkVersion/34/g' "$FILE"
+              sed -i 's/flutter\.minSdkVersion/21/g' "$FILE"
+              sed -i 's/flutter\.targetSdkVersion/34/g' "$FILE"
+              echo "Patched $(basename $dir)"
+            fi
+          done
       # ---------------------------------------------
 
       - name: Analyze code
