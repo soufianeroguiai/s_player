@@ -1,41 +1,31 @@
-plugins {
-    id("com.android.application")
-    kotlin("android")
-    id("dev.flutter.flutter-gradle-plugin")
-}
-
-android {
-    namespace = "com.example.s_player"
-    compileSdk = 36
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+buildscript {
+    extra["kotlin_version"] = "2.1.20"
+    repositories {
+        google()
+        mavenCentral()
     }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    defaultConfig {
-        applicationId = "com.example.s_player"
-        minSdk = 21
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
-    }
-
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug") // توقيع مؤقت
-        }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.5.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${extra["kotlin_version"]}")
     }
 }
 
-flutter {
-    source = "../.."
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
 
-dependencies {
-    // إضافات Kotlin الأساسية (ستُضاف تلقائياً)
+rootProject.layout.buildDirectory.set(file("../build"))
+
+subprojects {
+    project.layout.buildDirectory.set(
+        rootProject.layout.buildDirectory.get().dir(project.name)
+    )
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete::class) {
+    delete(rootProject.layout.buildDirectory)
 }
