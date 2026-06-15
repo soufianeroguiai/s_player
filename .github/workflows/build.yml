@@ -16,8 +16,6 @@ jobs:
       # ── 1. Checkout ──────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          path: source
 
       # ── 2. Java ──────────────────────────────────────────────────
       - name: Set up Java 17
@@ -34,90 +32,146 @@ jobs:
           channel: stable
           cache: true
 
-      # ── 4. Create fresh Flutter project (ينشئ مجلد android كامل) ─
+      # ── 4. Create fresh Flutter project ──────────────────────────
       - name: Create base Flutter project
         run: |
           flutter create \
             --project-name s_player \
             --org com.splayer \
             --platforms android \
-            base_project
+            /tmp/base_project
 
-      # ── 5. Copy our source code over the base project ────────────
-      - name: Overlay our source onto base project
+      # ── 5. Copy our lib + pubspec into base project ───────────────
+      - name: Copy source files
         run: |
-          # نسخ كل كودنا فوق المشروع الجديد
-          cp -r source/lib                base_project/
-          cp    source/pubspec.yaml       base_project/
-          
-          # نسخ AndroidManifest و MainActivity و styles و build.gradle
-          cp source/android/app/src/main/AndroidManifest.xml \
-             base_project/android/app/src/main/AndroidManifest.xml
+          # lib و pubspec
+          cp -r lib          /tmp/base_project/lib
+          cp    pubspec.yaml /tmp/base_project/pubspec.yaml
 
-          cp source/android/app/src/main/kotlin/com/splayer/app/MainActivity.kt \
-             base_project/android/app/src/main/kotlin/com/splayer/app/MainActivity.kt
-
-          cp source/android/app/src/main/res/values/styles.xml \
-             base_project/android/app/src/main/res/values/styles.xml
-
-          cp source/android/app/src/main/res/drawable/launch_background.xml \
-             base_project/android/app/src/main/res/drawable/launch_background.xml
-
-          cp source/android/app/build.gradle \
-             base_project/android/app/build.gradle
-
-          cp source/android/gradle.properties \
-             base_project/android/gradle.properties
-
-          # نسخ assets لو موجودة
-          if [ -d "source/assets" ]; then
-            cp -r source/assets base_project/
+          # assets لو موجودة
+          if [ -d "assets" ]; then
+            cp -r assets /tmp/base_project/assets
           fi
 
-      # ── 6. Install dependencies ───────────────────────────────────
+      # ── 6. Patch AndroidManifest ──────────────────────────────────
+      - name: Patch AndroidManifest.xml
+        run: |
+          cat > /tmp/base_project/android/app/src/main/AndroidManifest.xml << 'MANIFEST'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.splayer.app">
+
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+                android:maxSdkVersion="32" />
+            <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+            <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.WAKE_LOCK" />
+            <uses-permission android:name="android.permission.INTERNET" />
+
+            <application
+                android:label="S-Player"
+                android:name="${applicationName}"
+                android:icon="@mipmap/ic_launcher"
+                android:requestLegacyExternalStorage="true"
+                android:hardwareAccelerated="true">
+
+              <activity
+                  android:name=".MainActivity"
+                  android:exported="true"
+                  android:launchMode="singleTop"
+                  android:theme="@style/LaunchTheme"
+                  android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+                  android:hardwareAccelerated="true"
+                  android:windowSoftInputMode="adjustResize"
+                  android:supportsPictureInPicture="true">
+
+                <meta-data
+                    android:name="io.flutter.embedding.android.NormalTheme"
+                    android:resource="@style/NormalTheme" />
+
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN" />
+                  <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+
+                <intent-filter>
+                  <action android:name="android.intent.action.VIEW" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <category android:name="android.intent.category.BROWSABLE" />
+                  <data android:mimeType="video/*" />
+                </intent-filter>
+
+              </activity>
+
+              <meta-data
+                  android:name="flutterEmbedding"
+                  android:value="2" />
+
+            </application>
+          </manifest>
+          MANIFEST
+
+      # ── 7. Patch build.gradle ─────────────────────────────────────
+      - name: Patch app build.gradle
+        run: |
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/' \
+            /tmp/base_project/android/app/build.gradle
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/' \
+            /tmp/base_project/android/app/build.gradle
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/' \
+            /tmp/base_project/android/app/build.gradle
+
+      # ── 8. Add gradle.properties ──────────────────────────────────
+      - name: Patch gradle.properties
+        run: |
+          cat >> /tmp/base_project/android/gradle.properties << 'PROPS'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G
+          PROPS
+
+      # ── 9. Install dependencies ───────────────────────────────────
       - name: Install dependencies
-        working-directory: base_project
+        working-directory: /tmp/base_project
         run: flutter pub get
 
-      # ── 7. Analyze (optional) ────────────────────────────────────
+      # ── 10. Analyze ───────────────────────────────────────────────
       - name: Analyze code
-        working-directory: base_project
+        working-directory: /tmp/base_project
         run: flutter analyze --no-fatal-infos
         continue-on-error: true
 
-      # ── 8. Build APK ─────────────────────────────────────────────
+      # ── 11. Build APK ─────────────────────────────────────────────
       - name: Build release APK
-        working-directory: base_project
+        working-directory: /tmp/base_project
         run: flutter build apk --release --no-shrink
 
-      # ── 9. Upload APK as artifact ─────────────────────────────────
-      - name: Upload APK artifact
+      # ── 12. Upload artifact ───────────────────────────────────────
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: s-player-apk
-          path: base_project/build/app/outputs/flutter-apk/app-release.apk
+          path: /tmp/base_project/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
-      # ── 10. GitHub Release (عند push لـ main فقط) ────────────────
-      - name: Get version from pubspec
+      # ── 13. GitHub Release ────────────────────────────────────────
+      - name: Get version
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         id: version
         run: |
-          VERSION=$(grep '^version:' source/pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release
+      - name: Create Release
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: S-Player v${{ steps.version.outputs.version }}
           body: |
-            ## S-Player APK
-            تم البناء تلقائياً بواسطة GitHub Actions ✅
-            
-            حمّل ملف `app-release.apk` وثبّته على جهازك.
-          files: base_project/build/app/outputs/flutter-apk/app-release.apk
+            ## S-Player APK ✅
+            تم البناء تلقائياً بواسطة GitHub Actions
+            حمّل `app-release.apk` وثبّته على جهازك.
+          files: /tmp/base_project/build/app/outputs/flutter-apk/app-release.apk
           draft: false
           prerelease: false
         env:
