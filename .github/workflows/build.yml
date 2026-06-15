@@ -28,13 +28,32 @@ jobs:
       - name: Recreate Android platform
         run: flutter create --platforms android .
 
+      # ── الإصلاحات الأساسية لتجنب أخطاء Gradle ───────────
+      - name: Fix Android SDK versions and Gradle compatibility
+        run: |
+          # 1. تحديث compileSdk و targetSdk و minSdk في build.gradle للتطبيق
+          sed -i 's/compileSdkVersion .*/compileSdkVersion 35/' android/app/build.gradle
+          sed -i 's/targetSdkVersion .*/targetSdkVersion 35/' android/app/build.gradle
+          sed -i 's/minSdkVersion .*/minSdkVersion 21/' android/app/build.gradle
+
+          # 2. إضافة خاصية flutter القديمة التي تحتاجها package_info_plus
+          #    (تُضاف بعد سطر "android {" في ملف build.gradle للمشروع)
+          sed -i '/^android {/a \    ext.flutter = [compileSdkVersion: 35]' android/build.gradle
+
+          # 3. التأكد من استخدام أحدث إصدار من Android Gradle Plugin
+          sed -i "s/classpath 'com.android.tools.build:gradle:.*/classpath 'com.android.tools.build:gradle:8.1.0'/" android/build.gradle
+
+          # 4. تعطيل تحذير الـ namespace (اختياري)
+          echo "android.enableJetifier=true" >> android/gradle.properties
+          echo "android.useAndroidX=true" >> android/gradle.properties
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Accept Android SDK licenses
         run: yes | flutter doctor --android-licenses
 
-      - name: Build release APK
+      - name: Build release APK (split per ABI)
         run: flutter build apk --release --split-per-abi
 
       - name: Upload APK artifacts
