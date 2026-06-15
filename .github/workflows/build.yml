@@ -188,8 +188,35 @@ jobs:
           echo "🔧 Fixing Kotlin DSL build.gradle.kts files with jvmTarget issue..."
           find "$HOME/.pub-cache/hosted/pub.dev/" -maxdepth 3 -type f -name "build.gradle.kts" | while read file; do
             if grep -q '^\s*jvmTarget\s*=' "$file"; then
-              sed -i 's/^\s*jvmTarget\s*=.*/    compilerOptions { jvmTarget.set(JvmTarget.JVM_1_8) }/g' "$file"
-              echo "Fixed jvmTarget in: $file"
+              # إذا كان الملف خاص بـ screen_brightness_android، استبدله بالكامل
+              if echo "$file" | grep -q "screen_brightness_android"; then
+                cat > "$file" << 'KTS'
+          plugins {
+              id("com.android.library")
+              id("kotlin-android")
+          }
+          android {
+              namespace = "com.example.screen_brightness_android"
+              compileSdk = 34
+              defaultConfig {
+                  minSdk = 21
+                  targetSdk = 34
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_1_8
+                  targetCompatibility = JavaVersion.VERSION_1_8
+              }
+          }
+          dependencies {
+              implementation("androidx.core:core-ktx:1.9.0")
+          }
+          KTS
+                echo "Replaced screen_brightness_android build.gradle.kts"
+              else
+                # للمكتبات الأخرى: استبدل السطر بالصيغة الصحيحة
+                sed -i 's/^\s*jvmTarget\s*=.*/    compilerOptions { jvmTarget.set(JvmTarget.JVM_1_8) }/g' "$file"
+                echo "Fixed jvmTarget in: $file"
+              fi
             fi
           done
           
