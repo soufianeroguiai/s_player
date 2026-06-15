@@ -31,21 +31,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Create local.properties
+      - name: Create local.properties (fix missing file and flutter.sdk)
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> local.properties
 
-      - name: Remove root settings.gradle.kts
+      - name: Remove rogue settings.gradle.kts from project root
         run: rm -f settings.gradle.kts
 
-      - name: Fix missing kotlin_version in build.gradle.kts
+      - name: Fix missing kotlin_version in android/build.gradle.kts
         run: |
-          if ! grep -q "kotlin_version" android/build.gradle.kts; then
-            echo "ext.kotlin_version = '1.9.0'" >> android/build.gradle.kts
-          else
-            # استبدل كل استخدام لـ kotlin_version برقم ثابت 1.9.0
-            sed -i 's/\$kotlin_version/1.9.0/g' android/build.gradle.kts
+          if ! grep -q "val kotlin_version" android/build.gradle.kts; then
+            sed -i '1i val kotlin_version = "1.9.0"\n' android/build.gradle.kts
           fi
 
       - name: Build release APK (split per ABI)
