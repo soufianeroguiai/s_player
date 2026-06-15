@@ -196,8 +196,28 @@ jobs:
         run: |
           FILE="$HOME/.pub-cache/hosted/pub.dev/screen_brightness_android-2.1.6/android/build.gradle.kts"
           if [ -f "$FILE" ]; then
-            sed -i 's/^\s*jvmTarget\s*=.*//g' "$FILE"
-            echo "Patched screen_brightness_android 2.1.6"
+            cat > "$FILE" << 'KTS'
+plugins {
+    id("com.android.library")
+    id("kotlin-android")
+}
+android {
+    namespace = "com.example.screen_brightness_android"
+    compileSdk = 34
+    defaultConfig {
+        minSdk = 21
+        targetSdk = 34
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+}
+dependencies {
+    implementation("androidx.core:core-ktx:1.9.0")
+}
+KTS
+            echo "Replaced screen_brightness_android build.gradle.kts"
           else
             echo "File not found, skipping patch"
           fi
