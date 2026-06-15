@@ -35,6 +35,22 @@ jobs:
           rm -rf android
           cp -r /tmp/fresh/android .
 
+      # ====== تحديث Android Gradle Plugin و Gradle ======
+      - name: Upgrade Android Gradle Plugin and Gradle
+        run: |
+          echo "🔧 Upgrading Android Gradle Plugin to 8.1.0..."
+          # في ملف build.gradle (الجذر) – buildscript classpath
+          sed -i "s/classpath 'com.android.tools.build:gradle:[^']*'/classpath 'com.android.tools.build:gradle:8.1.0'/" android/build.gradle
+          # في settings.gradle – المكونات الإضافية (plugins)
+          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.1.0"/' android/settings.gradle
+          sed -i 's/id "com.android.library" version "[^"]*"/id "com.android.library" version "8.1.0"/' android/settings.gradle
+          echo "AGP updated."
+          
+          echo "🔧 Upgrading Gradle wrapper to 8.3..."
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.3-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
+          echo "Gradle wrapper updated."
+      # ================================================
+
       # ====== ضبط Kotlin إلى 2.2.0 ======
       - name: Upgrade Kotlin to 2.2.0
         run: |
