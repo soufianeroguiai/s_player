@@ -6,8 +6,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_pip/flutter_pip.dart';
-import 'package:flutter_pip/models/pip_ratio.dart';
+import 'package:pip_flutter/pip_flutter.dart';
+
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import '../models/video_item.dart';
@@ -161,9 +161,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   // ── PiP ───────────────────────────────────────────────────────────
   Future<void> _enterPip() async {
     try {
-      await FlutterPip.enterPictureInPictureMode(
-        pipRatio: PipRatio(numerator: 16, denominator: 9),
-      );
+      await PipFlutter.enterPictureInPictureMode();
     } catch (_) {}
   }
 

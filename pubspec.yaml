@@ -10,32 +10,32 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ── Video Player (libmpv - يدعم HEVC/MKV/AV1/كل الترميزات) ────
+  # Video Player (supports HEVC/MKV/AV1 via libmpv)
   media_kit:                    ^1.1.11
   media_kit_video:              ^1.2.4
-  media_kit_libs_video:         ^1.0.4   # native libs للأندرويد
+  media_kit_libs_video:         ^1.0.4
 
-  # ── Subtitles ─────────────────────────────────────────────────
+  # Subtitles
   srt_parser:                   ^2.0.0
 
-  # ── Picture in Picture ────────────────────────────────────────
-  flutter_pip:                  ^1.0.4
+  # Picture in Picture
+  pip_flutter:                  ^0.0.3
 
-  # ── Media / Files ─────────────────────────────────────────────
+  # Media / Files
   photo_manager:                ^3.3.0
   file_picker:                  ^8.1.2
 
-  # ── Permissions ───────────────────────────────────────────────
+  # Permissions
   permission_handler:           ^11.3.1
 
-  # ── UI / Icons ────────────────────────────────────────────────
+  # UI / Icons
   material_symbols_icons:       ^4.2719.1
 
-  # ── State / Storage ───────────────────────────────────────────
+  # State / Storage
   shared_preferences:           ^2.3.2
   provider:                     ^6.1.2
 
-  # ── Utilities ─────────────────────────────────────────────────
+  # Utilities
   wakelock_plus:                ^1.2.1
   share_plus:                   ^10.0.2
   path:                         ^1.9.0
