@@ -58,6 +58,12 @@ jobs:
                   return sdkPath
               }()
               includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+              // إخبار Gradle بمكان البحث عن الإضافات (هذا ما كان ينقصنا)
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
           }
           plugins {
               id "com.android.application" version "8.2.1" apply false
@@ -156,7 +162,7 @@ jobs:
           </manifest>
           XML
 
-      - name: Patch app/build.gradle (Aligned to SDK 34)
+      - name: Patch app/build.gradle (Aligned to SDK 35)
         run: |
           cat > android/app/build.gradle << 'GRADLE'
           plugins {
@@ -166,7 +172,7 @@ jobs:
           }
           android {
               namespace "com.splayer.app"
-              compileSdk 34
+              compileSdk 35
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_1_8
                   targetCompatibility JavaVersion.VERSION_1_8
@@ -180,7 +186,7 @@ jobs:
               defaultConfig {
                   applicationId "com.splayer.app"
                   minSdk 21
-                  targetSdk 34
+                  targetSdk 35
                   versionCode flutter.versionCode
                   versionName flutter.versionName
               }
@@ -205,9 +211,9 @@ jobs:
           echo "flutter.sdk=$FLUTTER_ROOT"  > android/local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
 
-      - name: Install Android SDK 34
+      - name: Install Android SDK 35
         run: |
-          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
+          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-35"
 
       - name: Install dependencies
         run: flutter pub get
@@ -217,9 +223,9 @@ jobs:
           echo "🔧 Fixing flutter.* properties in Groovy build.gradle files..."
           find "$HOME/.pub-cache/hosted/pub.dev/" -maxdepth 3 -type f -name "build.gradle" | while read file; do
             if grep -q 'flutter\.compileSdkVersion\|flutter\.minSdkVersion\|flutter\.targetSdkVersion' "$file"; then
-              sed -i 's/flutter\.compileSdkVersion/34/g' "$file"
+              sed -i 's/flutter\.compileSdkVersion/35/g' "$file"
               sed -i 's/flutter\.minSdkVersion/21/g' "$file"
-              sed -i 's/flutter\.targetSdkVersion/34/g' "$file"
+              sed -i 's/flutter\.targetSdkVersion/35/g' "$file"
               echo "Patched: $file"
             fi
           done
