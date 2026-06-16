@@ -1,4 +1,4 @@
-name: Build S-Player APK
+Name: Build S-Player APK
 
 on:
   push:
@@ -34,27 +34,56 @@ jobs:
           flutter create --project-name s_player --org com.splayer --platforms android /tmp/fresh
           rm -rf android
           cp -r /tmp/fresh/android .
+          # إزالة ملفات Kotlin DSL الافتراضية لمنع التضارب مع ملفاتنا المخصصة
+          rm -f android/*.gradle.kts android/app/*.gradle.kts
 
-      - name: Upgrade Android Gradle Plugin and Gradle
+      - name: Inject Clean & Stable Gradle/Kotlin Configurations
         run: |
-          echo "🔧 Upgrading Android Gradle Plugin to 8.1.0..."
-          sed -i "s/classpath 'com.android.tools.build:gradle:[^']*'/classpath 'com.android.tools.build:gradle:8.1.0'/" android/build.gradle
-          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.1.0"/' android/settings.gradle
-          sed -i 's/id "com.android.library" version "[^"]*"/id "com.android.library" version "8.1.0"/' android/settings.gradle
-          echo "AGP updated."
-          
-          echo "🔧 Upgrading Gradle wrapper to 8.3..."
-          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.3-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
-          echo "Gradle wrapper updated."
+          echo "🔧 Injecting root settings.gradle..."
+          cat > android/settings.gradle << 'EOF'
+          pluginManagement {
+              def flutterSdkPath = {
+                  def properties = new Properties()
+                  def file = new File(settingsDir, "local.properties")
+                  if (file.exists()) {
+                      properties.load(file.newDataInputStream())
+                  }
+                  def sdkPath = properties.getProperty("flutter.sdk")
+                  if (sdkPath == null) {
+                      sdkPath = System.getenv("FLUTTER_ROOT")
+                  }
+                  if (sdkPath == null) {
+                      throw new GradleException("Flutter SDK not found.")
+                  }
+                  return sdkPath
+              }()
+              includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+          }
+          plugins {
+              id "com.android.application" version "8.2.1" apply false
+              id "org.jetbrains.kotlin.android" version "1.9.24" apply false
+              id "dev.flutter.flutter-gradle-plugin" version "1.0.0" apply false
+          }
+          include ":app"
+          EOF
 
-      - name: Upgrade Kotlin to 2.2.0
-        run: |
-          echo "🔧 Upgrading Kotlin version to 2.2.0..."
-          sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "2.2.0"/' android/settings.gradle
-          sed -i "s/ext.kotlin_version = '.*'/ext.kotlin_version = '2.2.0'/" android/build.gradle
-          echo "Kotlin updated successfully."
+          echo "🔧 Injecting root build.gradle..."
+          cat > android/build.gradle << 'EOF'
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          tasks.register("clean", Delete) {
+              delete rootProject.buildDir
+          }
+          EOF
 
-      - name: Apply custom MainActivity
+          echo "🔧 Upgrading Gradle wrapper to 8.5..."
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Apply custom MainActivity (with PiP Support)
         run: |
           mkdir -p android/app/src/main/kotlin/com/splayer/app
           cat > android/app/src/main/kotlin/com/splayer/app/MainActivity.kt << 'KT'
@@ -127,7 +156,7 @@ jobs:
           </manifest>
           XML
 
-      - name: Patch app/build.gradle
+      - name: Patch app/build.gradle (Aligned to SDK 34)
         run: |
           cat > android/app/build.gradle << 'GRADLE'
           plugins {
@@ -137,8 +166,7 @@ jobs:
           }
           android {
               namespace "com.splayer.app"
-              compileSdk 36
-              ndkVersion "26.1.10909125"
+              compileSdk 34
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_1_8
                   targetCompatibility JavaVersion.VERSION_1_8
@@ -152,7 +180,7 @@ jobs:
               defaultConfig {
                   applicationId "com.splayer.app"
                   minSdk 21
-                  targetSdk 36
+                  targetSdk 34
                   versionCode flutter.versionCode
                   versionName flutter.versionName
               }
@@ -163,9 +191,6 @@ jobs:
                       shrinkResources false
                   }
               }
-          }
-          flutter {
-              source "../.."
           }
           GRADLE
 
@@ -180,13 +205,9 @@ jobs:
           echo "flutter.sdk=$FLUTTER_ROOT"  > android/local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
 
-      - name: Install NDK 26
+      - name: Install Android SDK 34
         run: |
-          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;26.1.10909125"
-
-      - name: Install Android SDK 36
-        run: |
-          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-36"
+          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
 
       - name: Install dependencies
         run: flutter pub get
@@ -202,54 +223,6 @@ jobs:
               echo "Patched: $file"
             fi
           done
-          
-          echo "🔧 Fixing Kotlin DSL build.gradle.kts files with jvmTarget issue..."
-          find "$HOME/.pub-cache/hosted/pub.dev/" -maxdepth 3 -type f -name "build.gradle.kts" | while read file; do
-            if grep -q '^\s*jvmTarget\s*=' "$file"; then
-              if echo "$file" | grep -q "screen_brightness_android"; then
-                cat > "$file" << 'KTS'
-          plugins {
-              id("com.android.library")
-              id("kotlin-android")
-          }
-          android {
-              namespace = "com.example.screen_brightness_android"
-              compileSdk = 34
-              defaultConfig {
-                  minSdk = 21
-                  targetSdk = 34
-              }
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_1_8
-                  targetCompatibility = JavaVersion.VERSION_1_8
-              }
-              kotlinOptions {
-                  jvmTarget = "1.8"
-              }
-          }
-          dependencies {
-              implementation("androidx.core:core-ktx:1.9.0")
-          }
-          KTS
-                echo "Replaced screen_brightness_android build.gradle.kts"
-              else
-                sed -i 's/^\s*jvmTarget\s*=.*/    compilerOptions { jvmTarget.set(JvmTarget.JVM_1_8) }/g' "$file"
-                echo "Fixed jvmTarget in: $file"
-              fi
-            fi
-          done
-          
-          echo "🔧 Replacing screen_brightness_android AndroidManifest..."
-          MANIFEST_FILE="$HOME/.pub-cache/hosted/pub.dev/screen_brightness_android-2.1.6/android/src/main/AndroidManifest.xml"
-          if [ -f "$MANIFEST_FILE" ]; then
-            cat > "$MANIFEST_FILE" << 'XML'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-          </manifest>
-          XML
-            echo "Replaced screen_brightness_android AndroidManifest.xml"
-          fi
-          
-          echo "✅ All incompatible plugins have been patched."
 
       - name: Analyze code
         run: flutter analyze --no-fatal-infos
