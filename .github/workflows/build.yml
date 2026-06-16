@@ -241,12 +241,15 @@ jobs:
             fi
           done
           
-          # إزالة package من AndroidManifest.xml للإضافات القديمة (screen_brightness_android)
-          echo "🔧 Removing package attribute from screen_brightness_android AndroidManifest..."
+          # استبدال AndroidManifest.xml الخاص بـ screen_brightness_android بآخر صالح
+          echo "🔧 Replacing screen_brightness_android AndroidManifest..."
           MANIFEST_FILE="$HOME/.pub-cache/hosted/pub.dev/screen_brightness_android-2.1.6/android/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_FILE" ]; then
-            sed -i '/package=/d' "$MANIFEST_FILE"
-            echo "Removed package attribute from screen_brightness_android manifest."
+            cat > "$MANIFEST_FILE" << 'XML'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          </manifest>
+          XML
+            echo "Replaced screen_brightness_android AndroidManifest.xml"
           fi
           
           echo "✅ All incompatible plugins have been patched."
