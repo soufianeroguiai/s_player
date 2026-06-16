@@ -39,16 +39,20 @@ jobs:
         run: |
           sed -i 's/gradle-.*-all.zip/gradle-8.5-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Smart Patch Root and App Build Files (Force SDK 36 & Kotlin 1.9.24)
+      - name: Smart Patch Root and App Build Files (Force SDK 36, NDK & Kotlin 2.1.0)
         run: |
-          # 1. تحديث إصدار كوتلين والـ AGP داخل ملف الـ settings.gradle الأصلي لحل مشكلة compilerOptions
-          sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.9.24"/g' android/settings.gradle
-          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.3.2"/g' android/settings.gradle
+          # 1. تحديث إصدار كوتلين والـ AGP بريجكس مرن يدعم كل أنواع الاقتباسات والأقواس
+          sed -i -E "s/id\s+['\"]org.jetbrains.kotlin.android['\"]\s+version\s+['\"][^'\"]+['\"]/id 'org.jetbrains.kotlin.android' version '2.1.0'/g" android/settings.gradle
+          sed -i -E "s/id\s+['\"]com.android.application['\"]\s+version\s+['\"][^'\"]+['\"]/id 'com.android.application' version '8.3.2'/g" android/settings.gradle
 
-          # 2. تعديل أسطر الـ SDK داخل ملف الـ app/build.gradle الأصلي
+          # 2. دعم الحزم القديمة التي تبحث عن المتغير التقليدي لكوتلين
+          echo "ext.kotlin_version = '2.1.0'" >> android/build.gradle
+
+          # 3. تعديل أسطر الـ SDK وحقن الـ NDK المطلوبة مباشرة داخل بلوك android { }
           sed -i 's/compileSdk.*/compileSdk = 36/g' android/app/build.gradle
           sed -i 's/targetSdk.*/targetSdk = 36/g' android/app/build.gradle
           sed -i 's/minSdk.*/minSdk = 21/g' android/app/build.gradle
+          sed -i '/android {/a \    ndkVersion = "25.1.8937393"' android/app/build.gradle
 
       - name: Apply custom MainActivity (with PiP Support)
         run: |
@@ -129,9 +133,9 @@ jobs:
           echo "flutter.sdk=$FLUTTER_ROOT"  > android/local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
 
-      - name: Install Android SDK 36
+      - name: Install Android SDK 36 and NDK 25
         run: |
-          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-36"
+          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "ndk;25.1.8937393"
 
       - name: Install dependencies
         run: flutter pub get
