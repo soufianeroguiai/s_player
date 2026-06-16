@@ -16,24 +16,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ================= JAVA =================
+      # ================= JAVA 17 (AS REQUESTED) =================
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # ================= FLUTTER =================
+      # ================= FLUTTER (UPDATED FOR JAVA 17 COMPAT) =================
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.3"
+          flutter-version: "3.27.4"   # <-- يدعم Java 17 بدون مشاكل Groovy
           channel: stable
           cache: true
 
       # ================= PERMISSIONS =================
       - name: Fix Gradle permissions
         run: chmod +x android/gradlew
+
+      # ================= ACCEPT ANDROID LICENSES =================
+      - name: Accept Android SDK licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       # ================= CACHE =================
       - name: Cache pub dependencies
@@ -50,7 +55,7 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # ================= DOCTOR (DEBUG ONLY) =================
+      # ================= DOCTOR (DEBUG) =================
       - name: Flutter doctor
         run: flutter doctor -v
 
@@ -59,7 +64,7 @@ jobs:
         run: flutter analyze
         continue-on-error: true
 
-      # ================= BUILD (IMPORTANT FIX FOR KTS) =================
+      # ================= BUILD =================
       - name: Build release APK
         run: |
           flutter clean
@@ -90,7 +95,7 @@ jobs:
           body: |
             🎬 S-Player Stable Build (Kotlin DSL)
 
-            ✔ Flutter 3.24.3
+            ✔ Flutter 3.27.4
             ✔ Kotlin DSL Android project
             ✔ media_kit compatible
             ✔ Clean CI pipeline
