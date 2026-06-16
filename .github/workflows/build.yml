@@ -29,6 +29,13 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Force Upgrade Media-Kit Versions (Server-Side)
+        run: |
+          # هاد الخطوة تقوم بتحديث الإصدارات في الـ pubspec قبل التحميل لمنع صدام الجافا
+          sed -i 's/media_kit:.*/media_kit: ^1.2.6/g' pubspec.yaml
+          sed -i 's/media_kit_video:.*/media_kit: ^2.0.1/g' pubspec.yaml
+          sed -i 's/media_kit_libs_video:.*/media_kit: ^1.0.7/g' pubspec.yaml
+
       - name: Generate Pristine Android Project
         run: |
           flutter create --project-name s_player --org com.splayer --platforms android /tmp/fresh
@@ -48,11 +55,13 @@ jobs:
           # 2. دعم الحزم القديمة التي تبحث عن المتغير التقليدي لكوتلين
           echo "ext.kotlin_version = '2.1.0'" >> android/build.gradle
 
-          # 3. تعديل أسطر الـ SDK وحقن الـ NDK المطلوبة مباشرة داخل بلوك android { }
+          # 3. تعديل أسطر الـ SDK وحقن الـ NDK المطلوبة بشكل يضمن استبدالها بشكل صحيح
           sed -i 's/compileSdk.*/compileSdk = 36/g' android/app/build.gradle
           sed -i 's/targetSdk.*/targetSdk = 36/g' android/app/build.gradle
           sed -i 's/minSdk.*/minSdk = 21/g' android/app/build.gradle
-          sed -i '/android {/a \    ndkVersion = "25.1.8937393"' android/app/build.gradle
+          
+          # حقن الـ ndkVersion داخل بلوك android
+          sed -i '/defaultConfig {/i \    ndkVersion = "25.1.8937393"' android/app/build.gradle
 
       - name: Apply custom MainActivity (with PiP Support)
         run: |
