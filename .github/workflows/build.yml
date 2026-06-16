@@ -1,4 +1,4 @@
-Name: Build S-Player APK
+name: Build S-Player APK
 
 on:
   push:
