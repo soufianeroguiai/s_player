@@ -10,12 +10,12 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ================= VIDEO ENGINE (STABLE MEDIA_KIT STACK) =================
-  media_kit: ^1.2.0
-  media_kit_video: ^1.2.0
+  # ================= MEDIA_KIT (LATEST STABLE STACK) =================
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
 
-  # ================= FILE ACCESS =================
+  # ================= FILE & MEDIA =================
   file_picker: ^8.3.7
   photo_manager: ^3.6.0
 
