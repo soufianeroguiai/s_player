@@ -24,7 +24,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.29.0"   # أول إصدار مستقر يدعم Java 17 تماماً (بدون Groovy)
+          flutter-version: "3.32.3"   # إصدار حديث خالٍ من مشاكل Groovy مع Java 17
           channel: stable
           cache: true
 
@@ -81,7 +81,7 @@ jobs:
           body: |
             🎬 S-Player Stable Build
 
-            ✔ Flutter 3.29.0 (Java 17 ready)
+            ✔ Flutter 3.32.3 (Java 17 ready)
             ✔ Java 17
             ✔ AGP 9.0.1, Gradle 9.1.0
             ✔ media_kit compatible
