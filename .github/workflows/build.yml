@@ -35,7 +35,6 @@ jobs:
           rm -rf android
           cp -r /tmp/fresh/android .
 
-      # ====== تحديث Android Gradle Plugin و Gradle ======
       - name: Upgrade Android Gradle Plugin and Gradle
         run: |
           echo "🔧 Upgrading Android Gradle Plugin to 8.1.0..."
@@ -47,16 +46,13 @@ jobs:
           echo "🔧 Upgrading Gradle wrapper to 8.3..."
           sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.3-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
           echo "Gradle wrapper updated."
-      # ================================================
 
-      # ====== ضبط Kotlin إلى 2.2.0 ======
       - name: Upgrade Kotlin to 2.2.0
         run: |
           echo "🔧 Upgrading Kotlin version to 2.2.0..."
           sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "2.2.0"/' android/settings.gradle
           sed -i "s/ext.kotlin_version = '.*'/ext.kotlin_version = '2.2.0'/" android/build.gradle
           echo "Kotlin updated successfully."
-      # =================================
 
       - name: Apply custom MainActivity
         run: |
@@ -195,7 +191,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # ========== إصلاح جميع الإضافات غير المتوافقة ==========
       - name: Fix all incompatible plugins
         run: |
           echo "🔧 Fixing flutter.* properties in Groovy build.gradle files..."
@@ -244,7 +239,6 @@ jobs:
             fi
           done
           
-          # استبدال AndroidManifest.xml الخاص بـ screen_brightness_android بآخر صالح
           echo "🔧 Replacing screen_brightness_android AndroidManifest..."
           MANIFEST_FILE="$HOME/.pub-cache/hosted/pub.dev/screen_brightness_android-2.1.6/android/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_FILE" ]; then
@@ -256,6 +250,22 @@ jobs:
           fi
           
           echo "✅ All incompatible plugins have been patched."
+
+      # ====== إصلاح توافق media_kit_video مع Flutter 3.24 ======
+      - name: Fix media_kit_video compatibility with Flutter 3.24
+        run: |
+          FILE="$HOME/.pub-cache/hosted/pub.dev/media_kit_video-1.3.1/android/src/main/java/com/alexmercerind/media_kit_video/VideoOutput.java"
+          if [ -f "$FILE" ]; then
+            echo "Patching $FILE..."
+            sed -i '/public class VideoOutput implements TextureRegistry.SurfaceProducer.Callback {/a\
+    @Override\
+    public void onSurfaceDestroyed() {\
+        // Added for Flutter 3.24 compatibility\
+    }' "$FILE"
+            echo "Patched successfully."
+          else
+            echo "File not found, skipping patch."
+          fi
       # =============================================================
 
       - name: Analyze code
