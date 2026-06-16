@@ -1,5 +1,5 @@
-name: s_player
-description: S-Player - Advanced Video Player
+name: sr_player
+description: SR Player - Advanced Video Player
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -10,33 +10,28 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ================= MEDIA_KIT (LATEST STABLE STACK) =================
+  # 🎬 MEDIA_KIT FIXED STACK
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
 
-  # ================= FILE & MEDIA =================
+  # 📁 FILES
   file_picker: ^8.3.7
-  photo_manager: ^3.6.0
+  path_provider: ^2.1.5
 
-  # ================= PERMISSIONS =================
+  # 🔐 PERMISSIONS
   permission_handler: ^11.4.0
 
-  # ================= STATE MANAGEMENT =================
+  # 📦 STATE
   provider: ^6.1.2
   shared_preferences: ^2.4.0
 
-  # ================= UI =================
+  # 🎨 UI
   material_symbols_icons: ^4.2719.1
 
-  # ================= UTILITIES =================
-  path: ^1.9.0
-  path_provider: ^2.1.5
+  # ⚙️ UTILITIES
   share_plus: ^10.1.0
   wakelock_plus: ^1.4.0
-
-  # ================= PLAYER FEATURES =================
-  screen_brightness: ^2.1.7
   volume_controller: ^3.4.4
 
 dev_dependencies:

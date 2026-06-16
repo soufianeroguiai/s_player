@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.s_player"
+    namespace = "com.srplayer.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,7 +19,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.s_player"
+        applicationId = "com.srplayer.app"
         minSdk = 21
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
