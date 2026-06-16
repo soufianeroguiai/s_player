@@ -39,9 +39,13 @@ jobs:
         run: |
           sed -i 's/gradle-.*-all.zip/gradle-8.5-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Smart Patch app/build.gradle (Force SDK 36 on Native Template)
+      - name: Smart Patch Root and App Build Files (Force SDK 36 & Kotlin 1.9.24)
         run: |
-          # تعديل أسطر الـ SDK داخل الملف الأصلي لفلوتر دون تدمير بنيته الأساسية
+          # 1. تحديث إصدار كوتلين والـ AGP داخل ملف الـ settings.gradle الأصلي لحل مشكلة compilerOptions
+          sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.9.24"/g' android/settings.gradle
+          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.3.2"/g' android/settings.gradle
+
+          # 2. تعديل أسطر الـ SDK داخل ملف الـ app/build.gradle الأصلي
           sed -i 's/compileSdk.*/compileSdk = 36/g' android/app/build.gradle
           sed -i 's/targetSdk.*/targetSdk = 36/g' android/app/build.gradle
           sed -i 's/minSdk.*/minSdk = 21/g' android/app/build.gradle
