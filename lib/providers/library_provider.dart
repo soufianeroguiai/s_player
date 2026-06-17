@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:permission_handler/permission_handler.dart';  // ✅ أضفنا الاستيراد
 import '../models/video_item.dart';
 
 class LibraryProvider extends ChangeNotifier {
@@ -29,38 +28,33 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // ✅ طلب الصلاحيات المناسبة حسب إصدار أندرويد
-      bool granted = false;
-      if (await _requestMediaPermissions()) {
-        // نطلب صلاحية photo_manager (للكشف عن الفيديوهات)
-        final pmResult = await PhotoManager.requestPermissionExtend();
-        granted = pmResult.isAuth;
-      }
-
-      if (!granted) {
+      // طلب الصلاحية من photo_manager (تتعامل مع Android 13+ تلقائياً)
+      final ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth && !ps.hasAccess) {
         _error = 'لم يتم منح الإذن للوصول إلى الوسائط.\nالرجاء منح الصلاحية من إعدادات التطبيق.';
         _loading = false;
         notifyListeners();
         return;
       }
 
+      // جلب ألبومات الفيديو فقط
       final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
-      final Set<String> seen = {};
-      final List<VideoItem> result2 = [];
+      final List<VideoItem> result = [];
 
       for (final album in albums) {
         final count = await album.assetCountAsync;
-        final assets = await album.getAssetListRange(start: 0, end: count);
+        // استخدام getAssetListPaged لتحميل تدريجي (أحدث وأكفأ)
+        final assets = await album.getAssetListPaged(page: 0, size: count);
         for (final asset in assets) {
-          if (seen.contains(asset.id)) continue;
-          seen.add(asset.id);
-          final file = await asset.file;
-          if (file == null) continue;
-          result2.add(VideoItem(
+          // استخدام getMediaUrl للحصول على مسار يمكن قراءته (content://)
+          final mediaUrl = await asset.getMediaUrl();
+          if (mediaUrl == null) continue;
+
+          result.add(VideoItem(
             id: asset.id,
-            path: file.path,
-            name: asset.title ?? file.path.split('/').last,
-            size: file.lengthSync(),
+            path: mediaUrl,
+            name: asset.title ?? 'فيديو ${asset.id}',
+            size: asset.size,
             modified: asset.modifiedDateTime,
             folder: album.name,
             duration: asset.videoDuration,
@@ -68,10 +62,10 @@ class LibraryProvider extends ChangeNotifier {
         }
       }
 
-      result2.sort((a, b) => b.modified.compareTo(a.modified));
-      _videos = result2;
+      result.sort((a, b) => b.modified.compareTo(a.modified));
+      _videos = result;
     } catch (e) {
-      _error = 'فشل المسح: ${e.toString()}';
+      _error = 'فشل المسح: $e';
     }
 
     _loading = false;
@@ -79,41 +73,17 @@ class LibraryProvider extends ChangeNotifier {
     _loadThumbnails();
   }
 
-  /// طلب الصلاحيات المطلوبة حسب إصدار أندرويد
-  Future<bool> _requestMediaPermissions() async {
-    // Android 13+ (API 33) يحتاج صلاحيات وسائط مفصلة
-    if (await Permission.videos.isGranted) return true;
-
-    // طلب الصلاحية مع إظهار مربع الحوار
-    final status = await Permission.videos.request();
-    if (status.isGranted) return true;
-
-    // إذا رفض المستخدم، نظهر تنبيهًا
-    if (status.isPermanentlyDenied) {
-      // يمكن توجيه المستخدم للإعدادات
-      // openAppSettings();
-      return false;
-    }
-    return false;
-  }
-
   Future<void> _loadThumbnails() async {
     final videosToProcess = List<VideoItem>.from(_videos);
     try {
-      final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
-      if (albums.isEmpty) return;
-
-      for (final album in albums) {
+      for (final album in await PhotoManager.getAssetPathList(type: RequestType.video)) {
         final count = await album.assetCountAsync;
-        final assets = await album.getAssetListRange(start: 0, end: count);
-
+        final assets = await album.getAssetListPaged(page: 0, size: count);
         for (final video in videosToProcess) {
           if (!_videos.contains(video)) continue;
           try {
             final asset = assets.firstWhere((a) => a.id == video.id,
-                orElse: () => assets.isNotEmpty ? assets.first : null as dynamic);
-            if (asset == null) continue;
-
+                orElse: () => assets.first);
             final thumb = await asset.thumbnailDataWithSize(
               const ThumbnailSize(180, 120),
               quality: 75,
