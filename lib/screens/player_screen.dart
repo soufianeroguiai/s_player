@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:volume_controller/volume_controller.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
@@ -46,19 +47,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
 
-  double _volume = 0.8; // قيمة مسموعة
+  double _volume = 0.8;
   double _brightness = 0.7;
+  double? _originalSystemBrightness;
 
-  bool _showBrightnessIndicator = false;
-  bool _showVolumeIndicator = false;
-  Timer? _indicatorTimer;
-
+  // التحكم بالإيماءات
   String? _dragAxis;
   bool _dragIsLeftSide = false;
   Offset _dragStartGlobal = Offset.zero;
   Duration _dragStartPosition = Duration.zero;
   Duration _seekPreview = Duration.zero;
   bool _showSeekIndicator = false;
+
+  // المؤشرات الجانبية (تظهر عند السحب العمودي)
+  bool _showBrightnessIndicator = false;
+  bool _showVolumeIndicator = false;
+  Timer? _indicatorTimer;
 
   bool _isLandscape = true;
 
@@ -72,8 +76,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final settings = context.read<SettingsProvider>();
     _showSubtitles = settings.showSubtitlesByDefault;
     _speed = settings.defaultSpeed;
-    _volume = settings.defaultVolume > 0 ? settings.defaultVolume : 0.8;
-    _brightness = settings.defaultBrightness > 0 ? settings.defaultBrightness : 0.7;
 
     _player = Player();
     _controller = VideoController(_player);
@@ -115,7 +117,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       await _player.open(Media(widget.video.path), play: settings.autoPlay);
       _player.setRate(_speed);
-      _player.setVolume(_volume); // ✅ فرض الصوت فوراً
 
       if (settings.rememberPosition) {
         try {
@@ -148,8 +149,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       });
 
+      // صوت النظام
       try {
-        await ScreenBrightness.instance.setApplicationScreenBrightness(_brightness);
+        _volume = await VolumeController.instance.getVolume();
+      } catch (_) {
+        _volume = 0.8;
+      }
+      VolumeController.instance.addListener((vol) {
+        if (mounted) setState(() => _volume = vol);
+      });
+
+      // سطوع النظام مع حفظ الأصلي
+      try {
+        _originalSystemBrightness = await ScreenBrightness.instance.system;
+        await ScreenBrightness.instance.setSystemScreenBrightness(_brightness);
       } catch (_) {}
 
       setState(() => _initialized = true);
@@ -222,54 +235,209 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       final target = _position - seekAmount;
       _player.seek(target < Duration.zero ? Duration.zero : target);
     }
-    _showSeekFeedback(isRight);
   }
 
-  void _showSeekFeedback(bool forward) {
-    setState(() {
-      _showSeekIndicator = true;
-      _seekPreview = forward ? _position + const Duration(seconds: 10) : _position - const Duration(seconds: 10);
-      if (_seekPreview < Duration.zero) _seekPreview = Duration.zero;
-      if (_seekPreview > _duration) _seekPreview = _duration;
-    });
-    Timer(const Duration(seconds: 1), () {
-      if (mounted) setState(() => _showSeekIndicator = false);
-    });
-  }
-
-  // ── أشرطة الصوت والسطوع ────────────────────
-  Widget _buildVerticalSlider(String label, double value, Color color, Function(double) onChanged) {
-    return SizedBox(
-      width: 50,
-      height: MediaQuery.of(context).size.height * 0.4,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-          Expanded(
-            child: RotatedBox(
-              quarterTurns: -1,
-              child: Slider(
-                value: value,
-                onChanged: (v) => onChanged(v),
-                activeColor: color,
-                inactiveColor: Colors.white24,
-                min: 0.0,
-                max: 1.0,
+  // ── بناء المؤشر العمودي الزجاجي (صوت/سطوع) ─────
+  Widget _buildFloatingIndicator({
+    required IconData icon,
+    required double value,
+    required Color color,
+  }) {
+    return AnimatedOpacity(
+      opacity: 1.0, // سيتم التحكم بالظهور/الإخفاء عبر AnimatedOpacity في مكان الاستدعاء
+      duration: const Duration(milliseconds: 200),
+      child: Container(
+        width: 52,
+        height: 180,
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(26),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withOpacity(0.15),
+                    Colors.white.withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: Colors.white, size: 22),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: RotatedBox(
+                      quarterTurns: -1,
+                      child: SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 3,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          activeTrackColor: color,
+                          inactiveTrackColor: Colors.white24,
+                          thumbColor: Colors.white,
+                          overlayColor: color.withOpacity(0.2),
+                        ),
+                        child: Slider(
+                          value: value,
+                          onChanged: (v) {}, // لا نستخدمه هنا، التغيير يكون عبر الإيماءة
+                          min: 0,
+                          max: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${(value * 100).round()}%',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          Text('${(value * 100).round()}%', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-        ],
+        ),
       ),
     );
   }
 
-  String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  // ── الإيماءات ────────────────────────────────
+  void _onPanStart(DragStartDetails details) {
+    if (_isLocked) return;
+    _hideTimer?.cancel(); // إلغاء إخفاء أدوات التحكم
+    _indicatorTimer?.cancel(); // إلغاء إخفاء المؤشرات
+    _dragAxis = null;
+    _dragStartGlobal = details.globalPosition;
+    _dragStartPosition = _position;
+    _dragIsLeftSide = details.localPosition.dx < MediaQuery.of(context).size.width / 2;
+  }
+
+  void _onPanUpdate(DragUpdateDetails details, double screenWidth) {
+    if (_isLocked) return;
+    final totalDx = details.globalPosition.dx - _dragStartGlobal.dx;
+    final totalDy = details.globalPosition.dy - _dragStartGlobal.dy;
+
+    _dragAxis ??= (totalDx.abs() > 12 || totalDy.abs() > 12)
+        ? (totalDx.abs() > totalDy.abs() ? 'h' : 'v')
+        : null;
+    if (_dragAxis == null) return;
+
+    if (_dragAxis == 'h') {
+      final seekSeconds = (totalDx / screenWidth) * 90;
+      var target = _dragStartPosition + Duration(seconds: seekSeconds.round());
+      if (target < Duration.zero) target = Duration.zero;
+      if (_duration > Duration.zero && target > _duration) target = _duration;
+      setState(() {
+        _seekPreview = target;
+        _showSeekIndicator = true;
+        _showBrightnessIndicator = false;
+        _showVolumeIndicator = false;
+      });
+    } else {
+      _handleVerticalGesture(details.delta.dy);
+    }
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    if (_dragAxis == 'h') {
+      _player.seek(_seekPreview);
+      setState(() => _showSeekIndicator = false);
+    } else if (_dragAxis == 'v') {
+      // بدء مؤقت لإخفاء المؤشرات بعد فترة
+      _indicatorTimer?.cancel();
+      _indicatorTimer = Timer(const Duration(seconds: 1), () {
+        if (mounted) {
+          setState(() {
+            _showBrightnessIndicator = false;
+            _showVolumeIndicator = false;
+          });
+        }
+      });
+    }
+    _dragAxis = null;
+    _scheduleHide(); // إعادة جدولة إخفاء أدوات التحكم
+  }
+
+  void _handleVerticalGesture(double dy) {
+    final delta = -dy / 200;
+
+    if (_dragIsLeftSide) {
+      // سطوع
+      final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
+      try {
+        ScreenBrightness.instance.setSystemScreenBrightness(newBrightness);
+        setState(() {
+          _brightness = newBrightness;
+          _showBrightnessIndicator = true;
+          _showVolumeIndicator = false;
+        });
+      } catch (_) {}
+    } else {
+      // صوت
+      final newVolume = (_volume + delta).clamp(0.0, 1.0);
+      VolumeController.instance.setVolume(newVolume);
+      setState(() {
+        _volume = newVolume;
+        _showVolumeIndicator = true;
+        _showBrightnessIndicator = false;
+      });
+    }
+    // إعادة ضبط مؤقت الإخفاء
+    _indicatorTimer?.cancel();
+    _indicatorTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _showBrightnessIndicator = false;
+          _showVolumeIndicator = false;
+        });
+      }
+    });
+  }
+
+  void _showSpeedSheet() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(context: context, builder: (_) => Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Padding(padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+          child: Text('سرعة التشغيل', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+        const Divider(height: 1),
+        ..._speeds.map((sp) => ListTile(
+          title: Text('${sp}x'),
+          trailing: _speed == sp ? Icon(Symbols.check_rounded, color: cs.primary) : null,
+          selected: _speed == sp,
+          onTap: () {
+            setState(() => _speed = sp);
+            _player.setRate(sp);
+            Navigator.pop(context);
+          },
+        )),
+      ]),
+    ));
   }
 
   // ── قائمة الترجمة المنسدلة ──────────────────
@@ -329,7 +497,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  // ── قائمة الصوت المنسدلة ──────────────────
   Future<void> _showAudioMenu() async {
     final cs = Theme.of(context).colorScheme;
     final renderBox = context.findRenderObject() as RenderBox;
@@ -394,6 +561,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
+  String _fmt(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -405,12 +579,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
 
     return PopScope(
-      canPop: !_isLocked, // يسمح بالخروج إذا لم يكن مقفلاً
+      canPop: !_isLocked,
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop && !_isLocked) await _enterPip();
-        if (_isLocked) {
-          setState(() => _isLocked = false); // فتح القفل تلقائياً عند العودة
-        }
+        if (_isLocked) setState(() => _isLocked = false);
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -422,6 +594,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   GestureDetector(
                     onTap: _toggleControls,
                     onDoubleTapDown: _isLocked ? null : _onDoubleTapDown,
+                    onPanStart: _onPanStart,
+                    onPanUpdate: (details) => _onPanUpdate(details, screenWidth),
+                    onPanEnd: _onPanEnd,
                     child: Video(
                       controller: _controller,
                       controls: NoVideoControls,
@@ -439,36 +614,59 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
 
-                  // شريط الصوت (أيمن)
-                  if (!_isLocked)
+                  // مؤشر الصوت العائم (يمين)
+                  if (_showVolumeIndicator)
                     Positioned(
-                      right: 8,
-                      top: MediaQuery.of(context).size.height * 0.2,
-                      child: _buildVerticalSlider('صوت', _volume, cs.primary, (v) {
-                        setState(() => _volume = v);
-                        _player.setVolume(v);
-                      }),
+                      right: 24,
+                      top: MediaQuery.of(context).size.height * 0.3,
+                      child: _buildFloatingIndicator(
+                        icon: Icons.volume_up,
+                        value: _volume,
+                        color: cs.primary,
+                      ),
                     ),
 
-                  // شريط السطوع (أيسر)
-                  if (!_isLocked)
+                  // مؤشر السطوع العائم (يسار)
+                  if (_showBrightnessIndicator)
                     Positioned(
-                      left: 8,
-                      top: MediaQuery.of(context).size.height * 0.2,
-                      child: _buildVerticalSlider('سطوع', _brightness, cs.secondary, (v) {
-                        setState(() => _brightness = v);
-                        try {
-                          ScreenBrightness.instance.setApplicationScreenBrightness(v);
-                        } catch (_) {}
-                      }),
+                      left: 24,
+                      top: MediaQuery.of(context).size.height * 0.3,
+                      child: _buildFloatingIndicator(
+                        icon: Icons.brightness_6,
+                        value: _brightness,
+                        color: cs.secondary,
+                      ),
                     ),
 
-                  // مؤشر القفل
+                  // مؤشر التقديم/التأخير (كما كان)
+                  if (_showSeekIndicator)
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(
+                            _seekPreview >= _position ? Symbols.fast_forward_rounded : Symbols.fast_rewind_rounded,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _fmt(_seekPreview),
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ]),
+                      ),
+                    ),
+
                   if (_isLocked)
                     const Center(child: Icon(Icons.lock_outline, color: Colors.white38, size: 48)),
 
-                  // عناصر التحكم
                   if (_showControls && !_isLocked) ...[
+                    // شريط العنوان
                     Positioned(
                       top: 0, left: 0, right: 0,
                       child: Container(
@@ -486,6 +684,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         ),
                       ),
                     ),
+                    // أزرار التحكم وشريط التقدم
                     Positioned(
                       bottom: 0, left: 0, right: 0,
                       child: Container(
@@ -538,6 +737,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
     _indicatorTimer?.cancel();
+    VolumeController.instance.removeListener();
+    if (_originalSystemBrightness != null) {
+      try {
+        ScreenBrightness.instance.setSystemScreenBrightness(_originalSystemBrightness!);
+      } catch (_) {}
+    }
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
