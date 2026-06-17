@@ -32,18 +32,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _initLibrary() async {
-    final lib = context.read<LibraryProvider>();
-    try {
-      await lib.scan();
-      await lib.loadRecent();
-    } catch (e) {
-      // نعرض رسالة الخطأ من خلال الموفر نفسه
-      if (mounted) {
-        lib.error = 'فشل تحميل المكتبة:\n$e';
-        lib.loading = false;
-        lib.notifyListeners();
-      }
-    }
+    // LibraryProvider يتولى إدارة الأخطاء والتحميل
+    await context.read<LibraryProvider>().scan();
+    await context.read<LibraryProvider>().loadRecent();
   }
 
   @override
@@ -67,16 +58,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _pickFile() async {
-    try {
-      final result = await FilePicker.pickFiles(type: FileType.video);
-      if (result?.files.single.path != null) await _openByPath(result!.files.single.path!);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر فتح الملف: $e'), backgroundColor: Theme.of(context).colorScheme.error),
-        );
-      }
-    }
+    final result = await FilePicker.pickFiles(type: FileType.video);
+    if (result?.files.single.path != null) await _openByPath(result!.files.single.path!);
   }
 
   List<VideoItem> _sorted(List<VideoItem> list) {
@@ -128,10 +111,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         if (lib.error != null) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(Symbols.error_rounded, size: 56, color: cs.error),
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
-          ),
+          Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
           const SizedBox(height: 16),
           FilledButton.icon(onPressed: () => _initLibrary(), icon: const Icon(Symbols.refresh_rounded), label: const Text('إعادة المحاولة')),
         ]));
@@ -205,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     child: Icon(icon, color: fg, size: 22));
 }
 
-// ── Tabs (بدون تغيير) ─────────────────────────────────────────────
+// ── Tabs ─────────────────────────────────────────────────────────────
 
 class _AllTab extends StatelessWidget {
   final List<VideoItem> videos;
