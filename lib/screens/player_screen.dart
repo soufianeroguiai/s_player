@@ -49,6 +49,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showBrightnessIndicator = false;
   bool _showVolumeIndicator = false;
   Timer? _indicatorTimer;
+  StreamSubscription? _brightnessSubscription;
 
   @override
   void initState() {
@@ -117,12 +118,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         if (mounted) setState(() => _volume = vol);
       });
 
-      // ☀️ السطوع (API الإصدار 2.x)
+      // ☀️ السطوع (API 2.1.11)
       try {
-        _brightness = await ScreenBrightness().system;   // ← تغير هنا
+        _brightness = await ScreenBrightness.instance.systemScreenBrightness;
       } catch (_) {
         _brightness = 1.0;
       }
+      // الاستماع لتغيرات السطوع من النظام
+      _brightnessSubscription = ScreenBrightness
+          .instance.onSystemScreenBrightnessChanged
+          .listen((newBrightness) {
+        if (mounted) setState(() => _brightness = newBrightness);
+      });
 
       setState(() => _initialized = true);
       _scheduleHide();
@@ -193,9 +200,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final delta = -details.delta.dy / 200;
 
     if (isLeft) {
-      // ☀️ سطوع (API 2.x)
+      // ☀️ سطوع
       final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
-      ScreenBrightness().setSystemScreenBrightness(newBrightness);  // ← تغير هنا
+      ScreenBrightness.instance.setSystemScreenBrightness(newBrightness);
       setState(() {
         _brightness = newBrightness;
         _showBrightnessIndicator = true;
@@ -393,7 +400,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ],
                     )),
 
-                    // شريط التقدم
                     Positioned(
                       bottom: 0, left: 0, right: 0,
                       child: Container(
@@ -466,6 +472,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _hideTimer?.cancel();
     _indicatorTimer?.cancel();
     VolumeController.instance.removeListener();
+    _brightnessSubscription?.cancel();
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
