@@ -5,7 +5,7 @@ buildscript {
     }
 
     dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.0")   // 👈 تم التحديث إلى 2.2.0
     }
 }
 
@@ -16,12 +16,7 @@ allprojects {
     }
 }
 
-// 🔥 FORCE Kotlin 2.0 everywhere (حل مشكل 2.2)
-configurations.all {
-    resolutionStrategy {
-        force("org.jetbrains.kotlin:kotlin-stdlib:2.0.0")
-    }
-}
+// ❌ تم حذف قسم resolutionStrategy بالكامل - لم يعد ضرورياً ويسبب التعارض
 
 tasks.register<Delete>("clean") {
     delete(rootProject.buildDir)

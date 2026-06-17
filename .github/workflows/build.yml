@@ -22,14 +22,14 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.35.5"
+          flutter-version: "3.22.5"   # 👈 إصدار مستقر ومتوافق
           channel: stable
           cache: true
 
       - name: Fix permissions
         run: chmod +x android/gradlew
 
-      - name: Clean EVERYTHING (important)
+      - name: Clean EVERYTHING
         run: |
           flutter clean
           rm -rf ~/.gradle/caches
@@ -39,8 +39,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Accept licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+      - name: Accept licenses (Android SDK)
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Build APK
         run: flutter build apk --release
