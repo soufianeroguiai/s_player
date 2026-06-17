@@ -14,7 +14,7 @@ dependencies:
   # 🎬 Stable Video Stack
   media_kit: ^1.2.6
   media_kit_video: ^1.2.0
-  media_kit_libs_video: ^1.2.1
+  media_kit_libs_video: ^1.0.7
 
   # 📁 File & Media
   file_picker: ^8.3.7
