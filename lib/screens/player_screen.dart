@@ -37,7 +37,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   List<SubtitleEntry> _subtitles = [];
   SubtitleEntry? _currentSub;
   bool _showSubtitles = true;
-  Timer? _subTimer;
 
   // Speed
   double _speed = 1.0;
@@ -54,6 +53,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showBrightnessIndicator = false;
   bool _showVolumeIndicator = false;
   Timer? _indicatorTimer;
+  StreamSubscription? _volumeSubscription;
 
   @override
   void initState() {
@@ -114,9 +114,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         if (mounted) setState(() => _isPlaying = playing);
       });
 
-      // تهيئة الصوت والسطوع الحاليين
-      _volume = await VolumeController().getVolume() / await VolumeController().getMaxVolume();
-      _brightness = await ScreenBrightness().current;
+      // تهيئة الصوت والسطوع
+      try {
+        _volume = await VolumeController().getVolume();
+      } catch (_) {
+        _volume = 1.0;
+      }
+      try {
+        _brightness = await ScreenBrightness().current;
+      } catch (_) {
+        _brightness = 1.0;
+      }
+
+      // الاستماع لتغييرات الصوت من أزرار الجهاز
+      _volumeSubscription = VolumeController().listener.listen((volume) {
+        if (mounted) setState(() => _volume = volume);
+      });
 
       setState(() => _initialized = true);
       _scheduleHide();
@@ -182,13 +195,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   // ── الإيماءات ──────────────────────────────────────
-  void _onVerticalDragStart(DragStartDetails details, double screenWidth) {
-    // نحدد نصف الشاشة
-  }
-
   void _onVerticalDragUpdate(DragUpdateDetails details, double screenWidth) {
     final isLeft = details.localPosition.dx < screenWidth / 2;
-    final delta = -details.delta.dy / 200; // مقدار التغيير
+    final delta = -details.delta.dy / 200;
 
     if (isLeft) {
       // تغيير السطوع
@@ -199,24 +208,25 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _showBrightnessIndicator = true;
         _showVolumeIndicator = false;
       });
-      _indicatorTimer?.cancel();
-      _indicatorTimer = Timer(const Duration(seconds: 1), () {
-        setState(() => _showBrightnessIndicator = false);
-      });
     } else {
       // تغيير الصوت
       final newVolume = (_volume + delta).clamp(0.0, 1.0);
-      VolumeController().setVolume((newVolume * 100).round());
+      VolumeController().setVolume(newVolume);
       setState(() {
         _volume = newVolume;
         _showVolumeIndicator = true;
         _showBrightnessIndicator = false;
       });
-      _indicatorTimer?.cancel();
-      _indicatorTimer = Timer(const Duration(seconds: 1), () {
-        setState(() => _showVolumeIndicator = false);
-      });
     }
+    _indicatorTimer?.cancel();
+    _indicatorTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _showBrightnessIndicator = false;
+          _showVolumeIndicator = false;
+        });
+      }
+    });
   }
 
   void _showSpeedSheet() {
@@ -315,12 +325,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 onTap: _toggleControls,
                 onVerticalDragUpdate: (details) => _onVerticalDragUpdate(details, screenWidth),
                 child: Stack(children: [
-                  Video(
-                    controller: _controller,
-                    controls: NoVideoControls,
-                  ),
+                  Video(controller: _controller, controls: NoVideoControls),
 
-                  // الترجمة
                   if (_showSubtitles && _currentSub != null)
                     Positioned(
                       bottom: 72, left: 20, right: 20,
@@ -341,19 +347,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ),
                     ),
 
-                  // مؤشر السطوع
                   if (_showBrightnessIndicator)
                     Positioned(
-                      left: 20,
-                      bottom: 120,
+                      left: 20, bottom: 120,
                       child: _buildIndicator(Icons.brightness_6, '${(_brightness * 100).round()}%', cs.primary),
                     ),
 
-                  // مؤشر الصوت
                   if (_showVolumeIndicator)
                     Positioned(
-                      right: 20,
-                      bottom: 120,
+                      right: 20, bottom: 120,
                       child: _buildIndicator(Icons.volume_up, '${(_volume * 100).round()}%', cs.primary),
                     ),
 
@@ -410,8 +412,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                             child: Row(children: [
-                              Text(_fmt(_position),
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text(_fmt(_position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
                               Expanded(
                                 child: SliderTheme(
                                   data: SliderThemeData(
@@ -432,8 +433,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                   ),
                                 ),
                               ),
-                              Text(_fmt(_duration),
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text(_fmt(_duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
                             ]),
                           ),
                         ),
@@ -470,6 +470,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _hideTimer?.cancel();
     _subTimer?.cancel();
     _indicatorTimer?.cancel();
+    _volumeSubscription?.cancel();
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -478,7 +479,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 }
 
-// ── TopBar (تم تعديلها لإضافة زر الترجمة المدمجة) ─────
+// ── TopBar ─────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final String name;
   final double speed;
@@ -506,19 +507,13 @@ class _TopBar extends StatelessWidget {
         ),
         child: SafeArea(
           child: Row(children: [
-            IconButton(
-              icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white),
-              onPressed: onBack,
-            ),
+            IconButton(icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white), onPressed: onBack),
             Expanded(
               child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
             ),
-            IconButton(
-              icon: const Icon(Symbols.picture_in_picture_rounded, color: Colors.white70),
-              onPressed: onPip,
-              tooltip: 'نافذة عائمة',
-            ),
+            IconButton(icon: const Icon(Symbols.picture_in_picture_rounded, color: Colors.white70),
+                onPressed: onPip, tooltip: 'نافذة عائمة'),
             GestureDetector(
               onTap: onSpeed,
               child: Container(
@@ -532,28 +527,17 @@ class _TopBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            // زر الترجمة المدمجة
+            IconButton(icon: const Icon(Symbols.subtitles_rounded, color: Colors.white70),
+                onPressed: onEmbeddedSubs, tooltip: 'اختيار الترجمة المدمجة'),
             IconButton(
-              icon: const Icon(Symbols.subtitles_rounded, color: Colors.white70),
-              onPressed: onEmbeddedSubs,
-              tooltip: 'اختيار الترجمة المدمجة',
-            ),
-            IconButton(
-              icon: Icon(
-                subtitlesOn ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
-                color: subtitlesOn ? Colors.lightBlue : Colors.white54,
-              ),
+              icon: Icon(subtitlesOn ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
+                  color: subtitlesOn ? Colors.lightBlue : Colors.white54),
               onPressed: onSubToggle,
             ),
-            IconButton(
-              icon: const Icon(Symbols.upload_file_rounded, color: Colors.white54),
-              onPressed: onSubLoad,
-              tooltip: 'تحميل ترجمة SRT',
-            ),
-            IconButton(
-              icon: const Icon(Symbols.info_rounded, color: Colors.white54),
-              onPressed: onInfo,
-            ),
+            IconButton(icon: const Icon(Symbols.upload_file_rounded, color: Colors.white54),
+                onPressed: onSubLoad, tooltip: 'تحميل ترجمة SRT'),
+            IconButton(icon: const Icon(Symbols.info_rounded, color: Colors.white54),
+                onPressed: onInfo),
           ]),
         ),
       ),
