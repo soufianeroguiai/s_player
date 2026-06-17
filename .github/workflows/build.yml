@@ -3,8 +3,6 @@ name: Build SR Player APK (Stable)
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -28,24 +26,23 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Clean ALL caches (important fix)
+      - name: Fix permissions
+        run: chmod +x android/gradlew
+
+      - name: Clean EVERYTHING (important)
         run: |
+          flutter clean
           rm -rf ~/.gradle/caches
           rm -rf ~/.gradle/wrapper
           rm -rf android/.gradle
-          flutter clean
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Accept Android licenses
+      - name: Accept licenses
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-      - name: Analyze (optional)
-        run: flutter analyze
-        continue-on-error: true
-
-      - name: Build APK (Release)
+      - name: Build APK
         run: flutter build apk --release
 
       - name: Upload APK
@@ -53,4 +50,3 @@ jobs:
         with:
           name: sr-player-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 30
