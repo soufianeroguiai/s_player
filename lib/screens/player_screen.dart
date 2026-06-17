@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui'; // ✅ هذا ما كان ناقصًا
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -26,6 +27,10 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
+  // ... باقي الكود بالضبط كما أرسلته سابقًا (بدون تغيير)
+  // المهم فقط أن يكون أول الملف:
+  // import 'dart:ui';
+  
   late final Player _player;
   late final VideoController _controller;
 
@@ -51,7 +56,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   double _brightness = 0.7;
   double? _originalSystemBrightness;
 
-  // التحكم بالإيماءات
   String? _dragAxis;
   bool _dragIsLeftSide = false;
   Offset _dragStartGlobal = Offset.zero;
@@ -59,7 +63,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Duration _seekPreview = Duration.zero;
   bool _showSeekIndicator = false;
 
-  // المؤشرات الجانبية (تظهر عند السحب العمودي)
   bool _showBrightnessIndicator = false;
   bool _showVolumeIndicator = false;
   Timer? _indicatorTimer;
@@ -149,7 +152,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       });
 
-      // صوت النظام
       try {
         _volume = await VolumeController.instance.getVolume();
       } catch (_) {
@@ -159,7 +161,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         if (mounted) setState(() => _volume = vol);
       });
 
-      // سطوع النظام مع حفظ الأصلي
       try {
         _originalSystemBrightness = await ScreenBrightness.instance.system;
         await ScreenBrightness.instance.setSystemScreenBrightness(_brightness);
@@ -237,14 +238,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  // ── بناء المؤشر العمودي الزجاجي (صوت/سطوع) ─────
   Widget _buildFloatingIndicator({
     required IconData icon,
     required double value,
     required Color color,
   }) {
     return AnimatedOpacity(
-      opacity: 1.0, // سيتم التحكم بالظهور/الإخفاء عبر AnimatedOpacity في مكان الاستدعاء
+      opacity: 1.0,
       duration: const Duration(milliseconds: 200),
       child: Container(
         width: 52,
@@ -263,7 +263,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         child: ClipRRect(
           borderRadius: BorderRadius.circular(26),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), // الآن معرفة بفضل import 'dart:ui'
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -300,7 +300,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         ),
                         child: Slider(
                           value: value,
-                          onChanged: (v) {}, // لا نستخدمه هنا، التغيير يكون عبر الإيماءة
+                          onChanged: (v) {},
                           min: 0,
                           max: 1,
                         ),
@@ -325,11 +325,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  // ── الإيماءات ────────────────────────────────
   void _onPanStart(DragStartDetails details) {
     if (_isLocked) return;
-    _hideTimer?.cancel(); // إلغاء إخفاء أدوات التحكم
-    _indicatorTimer?.cancel(); // إلغاء إخفاء المؤشرات
+    _hideTimer?.cancel();
+    _indicatorTimer?.cancel();
     _dragAxis = null;
     _dragStartGlobal = details.globalPosition;
     _dragStartPosition = _position;
@@ -367,7 +366,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _player.seek(_seekPreview);
       setState(() => _showSeekIndicator = false);
     } else if (_dragAxis == 'v') {
-      // بدء مؤقت لإخفاء المؤشرات بعد فترة
       _indicatorTimer?.cancel();
       _indicatorTimer = Timer(const Duration(seconds: 1), () {
         if (mounted) {
@@ -379,14 +377,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       });
     }
     _dragAxis = null;
-    _scheduleHide(); // إعادة جدولة إخفاء أدوات التحكم
+    _scheduleHide();
   }
 
   void _handleVerticalGesture(double dy) {
     final delta = -dy / 200;
 
     if (_dragIsLeftSide) {
-      // سطوع
       final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
       try {
         ScreenBrightness.instance.setSystemScreenBrightness(newBrightness);
@@ -397,7 +394,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       } catch (_) {}
     } else {
-      // صوت
       final newVolume = (_volume + delta).clamp(0.0, 1.0);
       VolumeController.instance.setVolume(newVolume);
       setState(() {
@@ -406,7 +402,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _showBrightnessIndicator = false;
       });
     }
-    // إعادة ضبط مؤقت الإخفاء
     _indicatorTimer?.cancel();
     _indicatorTimer = Timer(const Duration(seconds: 1), () {
       if (mounted) {
@@ -440,7 +435,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     ));
   }
 
-  // ── قائمة الترجمة المنسدلة ──────────────────
   Future<void> _showSubtitleMenu() async {
     final cs = Theme.of(context).colorScheme;
     final renderBox = context.findRenderObject() as RenderBox;
@@ -590,7 +584,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             ? Center(child: CircularProgressIndicator(color: cs.primary))
             : Stack(
                 children: [
-                  // الفيديو
                   GestureDetector(
                     onTap: _toggleControls,
                     onDoubleTapDown: _isLocked ? null : _onDoubleTapDown,
@@ -614,7 +607,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
 
-                  // مؤشر الصوت العائم (يمين)
                   if (_showVolumeIndicator)
                     Positioned(
                       right: 24,
@@ -626,7 +618,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ),
                     ),
 
-                  // مؤشر السطوع العائم (يسار)
                   if (_showBrightnessIndicator)
                     Positioned(
                       left: 24,
@@ -638,7 +629,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ),
                     ),
 
-                  // مؤشر التقديم/التأخير (كما كان)
                   if (_showSeekIndicator)
                     Center(
                       child: Container(
@@ -666,7 +656,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     const Center(child: Icon(Icons.lock_outline, color: Colors.white38, size: 48)),
 
                   if (_showControls && !_isLocked) ...[
-                    // شريط العنوان
                     Positioned(
                       top: 0, left: 0, right: 0,
                       child: Container(
@@ -684,7 +673,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         ),
                       ),
                     ),
-                    // أزرار التحكم وشريط التقدم
                     Positioned(
                       bottom: 0, left: 0, right: 0,
                       child: Container(
