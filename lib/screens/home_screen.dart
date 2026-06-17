@@ -26,20 +26,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initLibrary();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initLibrary());
   }
 
   Future<void> _initLibrary() async {
     final lib = context.read<LibraryProvider>();
-    await lib.loadCachedVideos(); // تحميل فوري من الذاكرة
+    await lib.loadCachedVideos();
     if (!mounted) return;
-    await lib.scan();               // تحديث كامل في الخلفية
+    await lib.scan();
     await lib.loadRecent();
   }
 
-  /// إعادة تحميل المكتبة بالكامل (للسحب للتحديث)
   Future<void> _refreshLibrary() async {
     await context.read<LibraryProvider>().scan();
     await context.read<LibraryProvider>().loadRecent();
@@ -115,7 +112,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
       body: Consumer<LibraryProvider>(builder: (_, lib, __) {
         if (lib.loading && lib.videos.isEmpty) {
-          // تحميل أولي فقط
           return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircularProgressIndicator(color: cs.primary),
             const SizedBox(height: 16),
@@ -133,13 +129,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ]));
         }
 
-        // المحتوى الرئيسي مع دعم السحب للتحديث
-        return RefreshIndicator(
-          onRefresh: _refreshLibrary,
-          color: cs.primary,
-          backgroundColor: cs.surface,
-          child: TabBarView(controller: _tabs, children: [
-            _AllTab(
+        return TabBarView(controller: _tabs, children: [
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: _AllTab(
               videos: _sorted(lib.videos),
               selectedFolder: _selectedFolder,
               folders: lib.byFolder.keys.toSet(),
@@ -149,13 +142,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               gridView: settings.gridView,
               loading: lib.loading,
             ),
-            _RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
-            _FoldersTab(byFolder: lib.byFolder, onTap: (f) {
-              setState(() => _selectedFolder = f);
-              _tabs.animateTo(0);
-            }),
-          ]),
-        );
+          ),
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: _RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
+          ),
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: _FoldersTab(byFolder: lib.byFolder, onTap: (f) { setState(() => _selectedFolder = f); _tabs.animateTo(0); }),
+          ),
+        ]);
       }),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _pickFile,
@@ -218,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     child: Icon(icon, color: fg, size: 22));
 }
 
-// ── All Tab (يدعم مؤشر التحميل) ──────────────────
+// ── All Tab ────────────────────────────────────
 class _AllTab extends StatelessWidget {
   final List<VideoItem> videos;
   final String? selectedFolder;
@@ -242,7 +238,6 @@ class _AllTab extends StatelessWidget {
     final list = filtered;
     return Column(children: [
       if (folders.isNotEmpty) _Chips(folders: folders, selected: selectedFolder, onChanged: onFolderChanged),
-      // مؤشر تحميل صغير عند التحديث في الخلفية
       if (loading && videos.isNotEmpty)
         LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
       Expanded(
@@ -252,26 +247,19 @@ class _AllTab extends StatelessWidget {
                 ? GridView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2, childAspectRatio: 0.78,
-                      crossAxisSpacing: 10, mainAxisSpacing: 10),
+                      crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
                     itemCount: list.length,
-                    itemBuilder: (_, i) => VideoGridCard(
-                        video: list[i],
-                        onTap: () => onOpen(list[i]),
-                        onMoreTap: () => onMore(list[i])))
+                    itemBuilder: (_, i) => VideoGridCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i])))
                 : ListView.builder(
                     padding: const EdgeInsets.only(top: 4, bottom: 90),
                     itemCount: list.length,
-                    itemBuilder: (_, i) => VideoCard(
-                        video: list[i],
-                        onTap: () => onOpen(list[i]),
-                        onMoreTap: () => onMore(list[i]))),
+                    itemBuilder: (_, i) => VideoCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i]))),
       ),
     ]);
   }
 }
 
-// باقي الـ Widgets بدون تغيير ( _Chips, _RecentTab, _FoldersTab, _Empty, _SearchDelegate )
+// ── بقية الـ Widgets (كما هي) ─────────────────
 class _Chips extends StatelessWidget {
   final Set<String> folders;
   final String? selected;
