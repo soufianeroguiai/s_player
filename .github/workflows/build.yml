@@ -1,7 +1,9 @@
-name: Build SR Player APK Stable
+name: Build SR Player APK (Stable)
 
 on:
   push:
+    branches: [ main, master ]
+  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
@@ -10,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Java 17
@@ -26,23 +28,39 @@ jobs:
           channel: stable
           cache: true
 
-      # 🔥 مهم جدًا: قتل كاش Kotlin 2.2.0
-      - name: HARD CLEAN GRADLE CACHE
-        run: |
-          flutter clean
-          rm -rf ~/.gradle/caches
-          rm -rf ~/.gradle/daemon
-          rm -rf ~/.gradle/wrapper
-          rm -rf .dart_tool
+      - name: Fix permissions
+        run: chmod +x android/gradlew
 
-      - name: Install dependencies
-        run: flutter pub get --verbose
+      - name: Clean project
+        run: flutter clean
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Clean Gradle cache (IMPORTANT)
+        run: |
+          rm -rf ~/.gradle/caches
+          rm -rf android/.gradle
+
+      - name: Accept Android licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Flutter doctor
         run: flutter doctor -v
 
-      - name: Build APK
+      - name: Analyze project
+        run: flutter analyze
+        continue-on-error: true
+
+      - name: Build APK (Release)
         run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sr-player-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
 
       - name: Get version
         id: version
@@ -50,17 +68,18 @@ jobs:
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: SR-Player-v${{ steps.version.outputs.version }}
-          path: build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Create Release
+      - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: SR Player v${{ steps.version.outputs.version }}
+          body: |
+            🚀 SR Player Stable Build
+            ✔ Kotlin 2.1 Compatible
+            ✔ Flutter Stable Build
+            ✔ Android 14 Ready
+            ✔ media_kit supported
+          files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

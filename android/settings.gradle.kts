@@ -19,11 +19,8 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-
-    // 🔥 FIX: تثبيت Kotlin على 2.0.0 (لا 2.2.0)
-    id("org.jetbrains.kotlin.android") version "2.0.0" apply false
-
     id("com.android.application") version "8.7.3" apply false
+    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
 }
 
 include(":app")
