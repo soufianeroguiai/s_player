@@ -37,7 +37,7 @@ flutter {
     source = "../.."
 }
 
-// ✅ نسخ APK الناتج إلى المسار الذي يتوقعه Flutter بعد اكتمال التجميع
+// ✅ نسخ APK الناتج إلى جذر المشروع (حيث يبحث Flutter)
 gradle.projectsEvaluated {
     tasks.matching { it.name == "assembleRelease" }.all {
         doLast {
