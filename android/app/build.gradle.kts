@@ -37,12 +37,14 @@ flutter {
     source = "../.."
 }
 
-// ✅ نسخ APK الناتج إلى جذر المشروع (حيث يبحث Flutter)
+// ✅ نسخ APK إلى جذر مشروع Flutter (حيث يتوقعه أمر `flutter build`)
 gradle.projectsEvaluated {
     tasks.matching { it.name == "assembleRelease" }.all {
         doLast {
             val src = file("${buildDir}/outputs/apk/release/app-release.apk")
-            val dest = file("${rootProject.projectDir}/build/app/outputs/flutter-apk/app-release.apk")
+            // الخروج من android/ إلى جذر المشروع
+            val rootFlutterDir = file("${rootProject.projectDir}/..")
+            val dest = file("${rootFlutterDir}/build/app/outputs/flutter-apk/app-release.apk")
             if (src.exists()) {
                 dest.parentFile.mkdirs()
                 src.copyTo(dest, overwrite = true)
