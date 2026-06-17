@@ -17,7 +17,7 @@ dependencies:
   media_kit_libs_video: ^1.0.7
 
   # 📁 File & Media
-  file_picker: ^11.0.2
+  file_picker: ^12.0.0-beta.5
   photo_manager: ^3.9.0
   path_provider: ^2.1.6
 
@@ -32,8 +32,8 @@ dependencies:
   material_symbols_icons: ^4.2951.0
 
   # ⚙️ Utilities
-  share_plus: ^10.1.0
-  wakelock_plus: ^1.5.2
+  share_plus: ^13.1.0
+  wakelock_plus: ^1.6.1
   volume_controller: ^3.6.0
 
 dev_dependencies:
