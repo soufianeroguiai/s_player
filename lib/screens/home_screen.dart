@@ -32,13 +32,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _initLibrary() async {
-    // LibraryProvider يتولى إدارة الأخطاء والتحميل
+    final lib = context.read<LibraryProvider>();
+    await lib.loadCachedVideos(); // تحميل فوري من الذاكرة
+    if (!mounted) return;
+    await lib.scan();               // تحديث كامل في الخلفية
+    await lib.loadRecent();
+  }
+
+  /// إعادة تحميل المكتبة بالكامل (للسحب للتحديث)
+  Future<void> _refreshLibrary() async {
     await context.read<LibraryProvider>().scan();
     await context.read<LibraryProvider>().loadRecent();
   }
 
   @override
-  void dispose() { _tabs.dispose(); super.dispose(); }
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   Future<void> _openPlayer(VideoItem video) async {
     await context.read<LibraryProvider>().addRecent(video.path);
@@ -103,26 +114,48 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ],
       ),
       body: Consumer<LibraryProvider>(builder: (_, lib, __) {
-        if (lib.loading) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          CircularProgressIndicator(color: cs.primary),
-          const SizedBox(height: 16),
-          Text('جاري البحث...', style: TextStyle(color: cs.onSurfaceVariant)),
-        ]));
-        if (lib.error != null) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Symbols.error_rounded, size: 56, color: cs.error),
-          const SizedBox(height: 12),
-          Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton.icon(onPressed: () => _initLibrary(), icon: const Icon(Symbols.refresh_rounded), label: const Text('إعادة المحاولة')),
-        ]));
-        return TabBarView(controller: _tabs, children: [
-          _AllTab(videos: _sorted(lib.videos), selectedFolder: _selectedFolder,
-            folders: lib.byFolder.keys.toSet(),
-            onFolderChanged: (f) => setState(() => _selectedFolder = f),
-            onOpen: _openPlayer, onMore: (v) => _menu(v), gridView: settings.gridView),
-          _RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
-          _FoldersTab(byFolder: lib.byFolder, onTap: (f) { setState(() => _selectedFolder = f); _tabs.animateTo(0); }),
-        ]);
+        if (lib.loading && lib.videos.isEmpty) {
+          // تحميل أولي فقط
+          return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            CircularProgressIndicator(color: cs.primary),
+            const SizedBox(height: 16),
+            Text('جاري البحث...', style: TextStyle(color: cs.onSurfaceVariant)),
+          ]));
+        }
+        if (lib.error != null && lib.videos.isEmpty) {
+          return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Symbols.error_rounded, size: 56, color: cs.error),
+            const SizedBox(height: 12),
+            Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(onPressed: () => _initLibrary(),
+              icon: const Icon(Symbols.refresh_rounded), label: const Text('إعادة المحاولة')),
+          ]));
+        }
+
+        // المحتوى الرئيسي مع دعم السحب للتحديث
+        return RefreshIndicator(
+          onRefresh: _refreshLibrary,
+          color: cs.primary,
+          backgroundColor: cs.surface,
+          child: TabBarView(controller: _tabs, children: [
+            _AllTab(
+              videos: _sorted(lib.videos),
+              selectedFolder: _selectedFolder,
+              folders: lib.byFolder.keys.toSet(),
+              onFolderChanged: (f) => setState(() => _selectedFolder = f),
+              onOpen: _openPlayer,
+              onMore: (v) => _menu(v),
+              gridView: settings.gridView,
+              loading: lib.loading,
+            ),
+            _RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
+            _FoldersTab(byFolder: lib.byFolder, onTap: (f) {
+              setState(() => _selectedFolder = f);
+              _tabs.animateTo(0);
+            }),
+          ]),
+        );
       }),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _pickFile,
@@ -185,8 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     child: Icon(icon, color: fg, size: 22));
 }
 
-// ── Tabs ─────────────────────────────────────────────────────────────
-
+// ── All Tab (يدعم مؤشر التحميل) ──────────────────
 class _AllTab extends StatelessWidget {
   final List<VideoItem> videos;
   final String? selectedFolder;
@@ -195,33 +227,51 @@ class _AllTab extends StatelessWidget {
   final void Function(VideoItem) onOpen;
   final void Function(VideoItem) onMore;
   final bool gridView;
-  const _AllTab({required this.videos, required this.selectedFolder, required this.folders,
-    required this.onFolderChanged, required this.onOpen, required this.onMore, required this.gridView});
+  final bool loading;
+  const _AllTab({
+    required this.videos, required this.selectedFolder, required this.folders,
+    required this.onFolderChanged, required this.onOpen, required this.onMore,
+    required this.gridView, this.loading = false,
+  });
 
-  List<VideoItem> get filtered => selectedFolder == null ? videos : videos.where((v) => v.folder == selectedFolder).toList();
+  List<VideoItem> get filtered =>
+      selectedFolder == null ? videos : videos.where((v) => v.folder == selectedFolder).toList();
 
   @override
   Widget build(BuildContext context) {
     final list = filtered;
     return Column(children: [
       if (folders.isNotEmpty) _Chips(folders: folders, selected: selectedFolder, onChanged: onFolderChanged),
-      Expanded(child: list.isEmpty
-        ? _Empty('ما لقينا فيديوهات', Symbols.video_library_rounded)
-        : gridView
-          ? GridView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
-              itemCount: list.length,
-              itemBuilder: (_, i) => VideoGridCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i])))
-          : ListView.builder(
-              padding: const EdgeInsets.only(top: 4, bottom: 90),
-              itemCount: list.length,
-              itemBuilder: (_, i) => VideoCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i])))),
+      // مؤشر تحميل صغير عند التحديث في الخلفية
+      if (loading && videos.isNotEmpty)
+        LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
+      Expanded(
+        child: list.isEmpty && !loading
+            ? _Empty('ما لقينا فيديوهات', Symbols.video_library_rounded)
+            : gridView
+                ? GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2, childAspectRatio: 0.78,
+                      crossAxisSpacing: 10, mainAxisSpacing: 10),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) => VideoGridCard(
+                        video: list[i],
+                        onTap: () => onOpen(list[i]),
+                        onMoreTap: () => onMore(list[i])))
+                : ListView.builder(
+                    padding: const EdgeInsets.only(top: 4, bottom: 90),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) => VideoCard(
+                        video: list[i],
+                        onTap: () => onOpen(list[i]),
+                        onMoreTap: () => onMore(list[i]))),
+      ),
     ]);
   }
 }
 
+// باقي الـ Widgets بدون تغيير ( _Chips, _RecentTab, _FoldersTab, _Empty, _SearchDelegate )
 class _Chips extends StatelessWidget {
   final Set<String> folders;
   final String? selected;

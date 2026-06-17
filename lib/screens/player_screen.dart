@@ -6,7 +6,6 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:volume_controller/volume_controller.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
@@ -35,29 +34,28 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _isLocked = false;
   Timer? _hideTimer;
 
-  // Subtitle
   bool _showSubtitles = true;
   List<SubtitleTrack> _subtitleTracks = [];
   List<AudioTrack> _audioTracks = [];
   double _audioBoost = 100.0;
 
-  // Speed
   double _speed = 1.0;
   final _speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
-  // Progress
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
 
-  // Volume & brightness
+  // صوت داخلي (تطبيق فقط)
   double _volume = 1.0;
+
+  // سطوع التطبيق (تطبيق فقط)
   double _brightness = 1.0;
+
   bool _showBrightnessIndicator = false;
   bool _showVolumeIndicator = false;
   Timer? _indicatorTimer;
 
-  // Gesture
   String? _dragAxis;
   bool _dragIsLeftSide = false;
   Offset _dragStartGlobal = Offset.zero;
@@ -65,7 +63,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Duration _seekPreview = Duration.zero;
   bool _showSeekIndicator = false;
 
-  // Orientation
   bool _isLandscape = true;
 
   @override
@@ -78,6 +75,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final settings = context.read<SettingsProvider>();
     _showSubtitles = settings.showSubtitlesByDefault;
     _speed = settings.defaultSpeed;
+    _volume = settings.defaultVolume;
+    _brightness = settings.defaultBrightness;
 
     _player = Player();
     _controller = VideoController(_player);
@@ -162,22 +161,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       });
 
-      // 🔊 الصوت
-      try {
-        _volume = await VolumeController.instance.getVolume();
-      } catch (_) {
-        _volume = 1.0;
-      }
-      VolumeController.instance.addListener((vol) {
-        if (mounted) setState(() => _volume = vol);
-      });
+      // تطبيق الصوت الداخلي مباشرة
+      _player.setVolume(_volume);
 
-      // ☀️ السطوع الأولي
+      // تطبيق سطوع التطبيق مباشرة
       try {
-        _brightness = await ScreenBrightness.instance.system;
-      } catch (_) {
-        _brightness = 1.0;
-      }
+        await ScreenBrightness.instance.setApplicationScreenBrightness(_brightness);
+      } catch (_) {}
 
       setState(() => _initialized = true);
       _scheduleHide();
@@ -243,24 +233,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     } catch (_) {}
   }
 
-  // ── النقر المزدوج (تقديم/تأخير) ──────────────
+  // النقر المزدوج للتقديم/التأخير
   void _onDoubleTapDown(TapDownDetails details) {
     if (_isLocked) return;
     final screenWidth = MediaQuery.of(context).size.width;
     final isRight = details.localPosition.dx > screenWidth / 2;
     final seekAmount = const Duration(seconds: 10);
-
     if (isRight) {
-      // تقديم للأمام
       final target = _position + seekAmount;
-      final newPos = target > _duration ? _duration : target;
-      _player.seek(newPos);
+      _player.seek(target > _duration ? _duration : target);
       _showSeekFeedback(true);
     } else {
-      // تأخير للخلف
       final target = _position - seekAmount;
-      final newPos = target < Duration.zero ? Duration.zero : target;
-      _player.seek(newPos);
+      _player.seek(target < Duration.zero ? Duration.zero : target);
       _showSeekFeedback(false);
     }
   }
@@ -268,7 +253,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _showSeekFeedback(bool forward) {
     setState(() {
       _showSeekIndicator = true;
-      // نستخدم seekPreview لعرض المقدار
       _seekPreview = forward ? _position + const Duration(seconds: 10) : _position - const Duration(seconds: 10);
       if (_seekPreview < Duration.zero) _seekPreview = Duration.zero;
       if (_seekPreview > _duration) _seekPreview = _duration;
@@ -278,7 +262,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
   }
 
-  // ── الإيماءات ────────────────────────────────
+  // الإيماءات
   void _onPanStart(DragStartDetails details) {
     if (_isLocked) return;
     _dragAxis = null;
@@ -291,7 +275,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (_isLocked) return;
     final totalDx = details.globalPosition.dx - _dragStartGlobal.dx;
     final totalDy = details.globalPosition.dy - _dragStartGlobal.dy;
-
     _dragAxis ??= (totalDx.abs() > 12 || totalDy.abs() > 12)
         ? (totalDx.abs() > totalDy.abs() ? 'h' : 'v')
         : null;
@@ -323,29 +306,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final delta = -dy / 200;
 
     if (_dragIsLeftSide) {
-      // ☀️ سطوع
+      // سطوع التطبيق
       final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
       try {
-        ScreenBrightness.instance.setSystemScreenBrightness(newBrightness);
+        ScreenBrightness.instance.setApplicationScreenBrightness(newBrightness);
         setState(() {
           _brightness = newBrightness;
           _showBrightnessIndicator = true;
           _showVolumeIndicator = false;
         });
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('يجب منح صلاحية "تعديل إعدادات النظام" لتغيير السطوع'),
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-      }
+      } catch (_) {}
     } else {
-      // 🔊 صوت
+      // صوت المشغل الداخلي
       final newVolume = (_volume + delta).clamp(0.0, 1.0);
-      VolumeController.instance.setVolume(newVolume);
+      _player.setVolume(newVolume);
       setState(() {
         _volume = newVolume;
         _showVolumeIndicator = true;
@@ -367,8 +341,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Padding(padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-          child: Text('سرعة التشغيل', style: TextStyle(
-              color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+          child: Text('سرعة التشغيل', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
         const Divider(height: 1),
         ..._speeds.map((sp) => ListTile(
           title: Text('${sp}x'),
@@ -384,7 +357,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     ));
   }
 
-  // ── قائمة الترجمة الموحدة ─────────────────────
+  // قائمة الترجمة الموحدة
   Future<void> _showSubtitleMenu() async {
     final cs = Theme.of(context).colorScheme;
     final hasEmbedded = _subtitleTracks.isNotEmpty;
@@ -393,15 +366,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Padding(padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-          child: Text('الترجمة', style: TextStyle(
-              color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+          child: Text('الترجمة', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
         const Divider(height: 1),
-
         SwitchListTile(
-          secondary: Icon(
-            _showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
-            color: _showSubtitles ? Colors.lightBlue : cs.onSurfaceVariant,
-          ),
+          secondary: Icon(_showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
+              color: _showSubtitles ? Colors.lightBlue : cs.onSurfaceVariant),
           title: Text(_showSubtitles ? 'إيقاف الترجمة' : 'تشغيل الترجمة'),
           value: _showSubtitles,
           onChanged: (v) {
@@ -410,7 +379,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             Navigator.pop(context);
           },
         ),
-
         if (hasEmbedded) ...[
           const Divider(height: 1),
           ..._subtitleTracks.map((track) {
@@ -422,11 +390,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             }
             return ListTile(
               title: Text(displayName),
-              subtitle: track.language != null && track.language!.isNotEmpty
-                  ? Text(_languageName(track.language!))
-                  : null,
-              trailing: _player.state.track.subtitle == track
-                  ? Icon(Symbols.check_rounded, color: cs.primary) : null,
+              subtitle: track.language != null && track.language!.isNotEmpty ? Text(_languageName(track.language!)) : null,
+              trailing: _player.state.track.subtitle == track ? Icon(Symbols.check_rounded, color: cs.primary) : null,
               onTap: () {
                 _player.setSubtitleTrack(track);
                 setState(() => _showSubtitles = true);
@@ -437,31 +402,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ] else
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-            child: Text('ماكاينة أي ترجمة مدمجة فهاد الفيديو.',
+            child: Text('لا توجد ترجمة مدمجة في هذا الفيديو.',
                 style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
           ),
-
         const Divider(height: 1),
         ListTile(
           leading: const Icon(Symbols.upload_file_rounded),
           title: const Text('تحميل ترجمة من ملف...'),
-          onTap: () {
-            Navigator.pop(context);
-            _pickSubtitle();
-          },
+          onTap: () { Navigator.pop(context); _pickSubtitle(); },
         ),
-
         const Divider(height: 1),
         ListTile(
           leading: const Icon(Symbols.format_size_rounded),
           title: const Text('تخصيص مظهر الترجمة'),
           subtitle: const Text('الحجم، اللون، الخلفية'),
-          onTap: () {
-            Navigator.pop(context);
-            _showSubtitleStyleSheet();
-          },
+          onTap: () { Navigator.pop(context); _showSubtitleStyleSheet(); },
         ),
-
         if (hasEmbedded)
           ListTile(
             leading: const Icon(Icons.clear),
@@ -563,7 +519,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ] else
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-            child: Text('هاد الفيديو فيه مسار صوت واحد فقط.', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+            child: Text('هذا الفيديو يحتوي على مسار صوت واحد فقط.', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
           ),
         ListTile(
           leading: const Icon(Symbols.graphic_eq_rounded),
@@ -589,7 +545,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             label: '${_audioBoost.round()}%',
             onChanged: (v) { setSheetState(() {}); setState(() => _audioBoost = v); _player.setVolume(v); },
           ),
-          Text('تجاوز 100% كيكبر الصوت داخليا، وقد يسبب تشويش فبعض الفيديوهات.',
+          Text('تجاوز 100% قد يسبب تشويشاً في بعض الفيديوهات.',
               style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11.5), textAlign: TextAlign.center),
         ]),
       ),
@@ -627,7 +583,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             ? Center(child: CircularProgressIndicator(color: cs.primary))
             : GestureDetector(
                 onTap: _toggleControls,
-                onDoubleTapDown: _onDoubleTapDown,      // ✅ النقر المزدوج
+                onDoubleTapDown: _onDoubleTapDown,
                 onPanStart: _onPanStart,
                 onPanUpdate: (details) => _onPanUpdate(details, screenWidth),
                 onPanEnd: _onPanEnd,
@@ -748,7 +704,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
     _indicatorTimer?.cancel();
-    VolumeController.instance.removeListener();
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -757,7 +712,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 }
 
-// ── TopBar ────────────────────────────────────────
+// شريط التحكم العلوي
 class _TopBar extends StatelessWidget {
   final String name;
   final double speed;

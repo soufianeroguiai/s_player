@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
 class LibraryProvider extends ChangeNotifier {
@@ -21,6 +24,36 @@ class LibraryProvider extends ChangeNotifier {
       map.putIfAbsent(v.folder, () => []).add(v);
     }
     return map;
+  }
+
+  /// تحميل الفيديوهات المخزنة سابقاً (سريع جداً)
+  Future<void> loadCachedVideos() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final List<dynamic> jsonList = json.decode(jsonString);
+        _videos = jsonList
+            .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('فشل تحميل الذاكرة المؤقتة: $e');
+    }
+  }
+
+  /// حفظ الفيديوهات الحالية إلى ملف مؤقت
+  Future<void> _saveVideosToCache() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      final jsonList = _videos.map((v) => v.toJson()).toList();
+      await file.writeAsString(json.encode(jsonList));
+    } catch (e) {
+      debugPrint('فشل حفظ الذاكرة المؤقتة: $e');
+    }
   }
 
   Future<VideoItem?> _buildVideoItem(AssetEntity asset, String albumName) async {
@@ -83,13 +116,14 @@ class LibraryProvider extends ChangeNotifier {
 
       result.sort((a, b) => b.modified.compareTo(a.modified));
       _videos = result;
+      await _saveVideosToCache(); // حفظ القائمة بعد المسح الناجح
     } catch (e) {
       _error = 'فشل المسح: $e';
     }
 
     _loading = false;
     notifyListeners();
-    _loadThumbnails(); // تحميل الصور المصغرة
+    _loadThumbnails();
   }
 
   Future<void> _loadThumbnails() async {
@@ -97,7 +131,6 @@ class LibraryProvider extends ChangeNotifier {
     if (videosToProcess.isEmpty) return;
 
     try {
-      // نحصل على أصول الفيديوهات مرة واحدة فقط
       final assetMap = <String, AssetEntity>{};
       final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
       for (final album in albums) {
@@ -108,19 +141,16 @@ class LibraryProvider extends ChangeNotifier {
         }
       }
 
-      // نعالج كل فيديو على حدة
       for (final video in videosToProcess) {
         if (!_videos.contains(video)) continue;
 
         final asset = assetMap[video.id];
         if (asset == null) {
-          // إذا لم نجد الأصل، نستخدم MediaKit كخطة بديلة
           await _generateThumbnailFromVideo(video);
           continue;
         }
 
         try {
-          // محاولة جلب صورة مصغرة من photo_manager
           final thumb = await asset.thumbnailDataWithSize(
             const ThumbnailSize(180, 120),
             quality: 75,
@@ -130,32 +160,23 @@ class LibraryProvider extends ChangeNotifier {
             notifyListeners();
             continue;
           }
-        } catch (_) {
-          // فشل photo_manager، نجرب MediaKit
-        }
+        } catch (_) {}
 
-        // Fallback: استخراج صورة من الفيديو مباشرة
         await _generateThumbnailFromVideo(video);
       }
     } catch (_) {}
   }
 
-  /// يستخدم MediaKit لالتقاط إطار من الفيديو كصورة مصغرة
   Future<void> _generateThumbnailFromVideo(VideoItem video) async {
     try {
       final player = Player();
       await player.open(Media(video.path), play: false);
-
-      // ننتظر قليلاً حتى يتم تحميل الفيديو
       await Future.delayed(const Duration(milliseconds: 500));
-
-      // نلتقط لقطة شاشة
       final screenshot = await player.screenshot(format: 'image/jpeg');
       if (screenshot != null && screenshot.isNotEmpty) {
         video.thumbnail = screenshot.toList();
         notifyListeners();
       }
-
       await player.dispose();
     } catch (e) {
       debugPrint('فشل استخراج صورة مصغرة بالفيديو: $e');

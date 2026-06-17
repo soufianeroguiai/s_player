@@ -37,4 +37,32 @@ class VideoItem {
   String get formattedDate {
     return '${modified.year}-${modified.month.toString().padLeft(2,'0')}-${modified.day.toString().padLeft(2,'0')}';
   }
+
+  // ✅ تحويل الكائن إلى JSON (لحفظه في ملف cache)
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'path': path,
+      'name': name,
+      'size': size,
+      'modified': modified.millisecondsSinceEpoch,
+      'folder': folder,
+      'duration': duration.inMilliseconds,
+      // لا نخزّن الصورة المصغرة (thumbnail) لأنها بيانات ثنائية كبيرة
+    };
+  }
+
+  // ✅ إنشاء كائن من JSON (لاسترجاعه من ملف cache)
+  factory VideoItem.fromJson(Map<String, dynamic> json) {
+    return VideoItem(
+      id: json['id'] as String,
+      path: json['path'] as String,
+      name: json['name'] as String,
+      size: json['size'] as int,
+      modified: DateTime.fromMillisecondsSinceEpoch(json['modified'] as int),
+      folder: json['folder'] as String,
+      duration: Duration(milliseconds: json['duration'] as int),
+      // thumbnail سيتم تحميله لاحقاً عند الحاجة
+    );
+  }
 }
