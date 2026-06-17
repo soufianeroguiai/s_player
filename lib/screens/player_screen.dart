@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui'; // ✅ هذا ما كان ناقصًا
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:volume_controller/volume_controller.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
@@ -27,10 +26,6 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
-  // ... باقي الكود بالضبط كما أرسلته سابقًا (بدون تغيير)
-  // المهم فقط أن يكون أول الملف:
-  // import 'dart:ui';
-  
   late final Player _player;
   late final VideoController _controller;
 
@@ -52,7 +47,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
 
-  double _volume = 0.8;
+  double _volume = 0.8;                // 0.0 - 1.0 (للواجهة)
   double _brightness = 0.7;
   double? _originalSystemBrightness;
 
@@ -79,6 +74,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final settings = context.read<SettingsProvider>();
     _showSubtitles = settings.showSubtitlesByDefault;
     _speed = settings.defaultSpeed;
+    // لا نقرأ من system volume بعد الآن
 
     _player = Player();
     _controller = VideoController(_player);
@@ -120,6 +116,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       await _player.open(Media(widget.video.path), play: settings.autoPlay);
       _player.setRate(_speed);
+      _player.setVolume(_volume * 100);   // صوت داخلي (0-100)
 
       if (settings.rememberPosition) {
         try {
@@ -152,18 +149,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       });
 
-      try {
-        _volume = await VolumeController.instance.getVolume();
-      } catch (_) {
-        _volume = 0.8;
-      }
-      VolumeController.instance.addListener((vol) {
-        if (mounted) setState(() => _volume = vol);
-      });
-
+      // السطوع: نستخدم ApplicationScreenBrightness (لا يحتاج صلاحيات)
       try {
         _originalSystemBrightness = await ScreenBrightness.instance.system;
-        await ScreenBrightness.instance.setSystemScreenBrightness(_brightness);
+        await ScreenBrightness.instance.setApplicationScreenBrightness(_brightness);
       } catch (_) {}
 
       setState(() => _initialized = true);
@@ -238,6 +227,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  // مؤشر عائم زجاجي (صوت/سطوع)
   Widget _buildFloatingIndicator({
     required IconData icon,
     required double value,
@@ -263,7 +253,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         child: ClipRRect(
           borderRadius: BorderRadius.circular(26),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), // الآن معرفة بفضل import 'dart:ui'
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -325,6 +315,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
+  // ── الإيماءات ────────────────────────────────
   void _onPanStart(DragStartDetails details) {
     if (_isLocked) return;
     _hideTimer?.cancel();
@@ -384,9 +375,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final delta = -dy / 200;
 
     if (_dragIsLeftSide) {
+      // سطوع التطبيق (لا يؤثر على النظام)
       final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
       try {
-        ScreenBrightness.instance.setSystemScreenBrightness(newBrightness);
+        ScreenBrightness.instance.setApplicationScreenBrightness(newBrightness);
         setState(() {
           _brightness = newBrightness;
           _showBrightnessIndicator = true;
@@ -394,8 +386,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       } catch (_) {}
     } else {
+      // صوت المشغل الداخلي (0-100)
       final newVolume = (_volume + delta).clamp(0.0, 1.0);
-      VolumeController.instance.setVolume(newVolume);
+      _player.setVolume(newVolume * 100);
       setState(() {
         _volume = newVolume;
         _showVolumeIndicator = true;
@@ -435,11 +428,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     ));
   }
 
+  // ── قائمة الترجمة (بدون تكرار وبدون إغلاق المشغل) ──
   Future<void> _showSubtitleMenu() async {
     final cs = Theme.of(context).colorScheme;
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
     final buttonPosition = RelativeRect.fromLTRB(size.width - 160, 80, size.width - 60, 130);
+
+    // إزالة التكرار باستخدام Set حسب اللغة أو title
+    final seen = <String>{};
+    final uniqueTracks = <SubtitleTrack>[];
+    for (final track in _subtitleTracks) {
+      final key = track.title ?? track.language ?? 'unknown';
+      if (!seen.contains(key)) {
+        seen.add(key);
+        uniqueTracks.add(track);
+      }
+    }
 
     showMenu<String>(
       context: context,
@@ -448,7 +453,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       elevation: 10,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       items: [
-        PopupMenuItem(
+        PopupMenuItem<String>(
           enabled: false,
           child: SwitchListTile(
             dense: true,
@@ -462,25 +467,30 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             },
           ),
         ),
-        ..._subtitleTracks.map((track) {
-          String name = track.title ?? track.language ?? 'غير معروف';
-          return PopupMenuItem(
+        ...uniqueTracks.map((track) {
+          String name = track.title ?? track.language ?? 'ترجمة';
+          String? lang = track.language;
+          return PopupMenuItem<String>(
+            value: track.id, // أي قيمة فريدة
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
               title: Text(name, style: const TextStyle(color: Colors.white)),
-              subtitle: track.language != null ? Text(track.language!, style: const TextStyle(color: Colors.white54)) : null,
+              subtitle: lang != null ? Text(lang, style: const TextStyle(color: Colors.white54)) : null,
               trailing: _player.state.track.subtitle == track ? Icon(Icons.check, color: cs.primary) : null,
             ),
             onTap: () {
               _player.setSubtitleTrack(track);
               setState(() => _showSubtitles = true);
+              // لا نستخدم Navigator.pop هنا، القائمة ستغلق تلقائياً عند الضغط على أيقونة أخرى
+              // لكن showMenu لا يغلق إلا إذا استدعينا Navigator.pop، لذلك نستدعيه
               Navigator.pop(context);
             },
           );
         }),
         const PopupMenuDivider(),
-        PopupMenuItem(
+        PopupMenuItem<String>(
+          value: 'load',
           child: const ListTile(leading: Icon(Icons.upload, color: Colors.white), title: Text('تحميل ترجمة', style: TextStyle(color: Colors.white))),
           onTap: () {
             Navigator.pop(context);
@@ -491,11 +501,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
+  // ── قائمة الصوت (بدون تكرار وبدون إغلاق المشغل) ──
   Future<void> _showAudioMenu() async {
     final cs = Theme.of(context).colorScheme;
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
     final buttonPosition = RelativeRect.fromLTRB(size.width - 220, 80, size.width - 120, 130);
+
+    // إزالة التكرار
+    final seen = <String>{};
+    final uniqueAudio = <AudioTrack>[];
+    for (final track in _audioTracks) {
+      final key = track.title ?? track.language ?? 'unknown';
+      if (!seen.contains(key)) {
+        seen.add(key);
+        uniqueAudio.add(track);
+      }
+    }
 
     showMenu<String>(
       context: context,
@@ -504,14 +526,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       elevation: 10,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       items: [
-        ..._audioTracks.map((track) {
+        ...uniqueAudio.map((track) {
           String name = track.title ?? track.language ?? 'مسار صوتي';
-          return PopupMenuItem(
+          String? lang = track.language;
+          return PopupMenuItem<String>(
+            value: track.id,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
               title: Text(name, style: const TextStyle(color: Colors.white)),
-              subtitle: track.language != null ? Text(track.language!, style: const TextStyle(color: Colors.white54)) : null,
+              subtitle: lang != null ? Text(lang, style: const TextStyle(color: Colors.white54)) : null,
               trailing: _player.state.track.audio == track ? Icon(Icons.check, color: cs.primary) : null,
             ),
             onTap: () {
@@ -521,7 +545,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           );
         }),
         const PopupMenuDivider(),
-        PopupMenuItem(
+        PopupMenuItem<String>(
+          value: 'boost',
           child: ListTile(
             leading: const Icon(Icons.volume_up, color: Colors.white),
             title: const Text('رفع الصوت (Boost)', style: TextStyle(color: Colors.white)),
@@ -725,7 +750,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
     _indicatorTimer?.cancel();
-    VolumeController.instance.removeListener();
     if (_originalSystemBrightness != null) {
       try {
         ScreenBrightness.instance.setSystemScreenBrightness(_originalSystemBrightness!);
