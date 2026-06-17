@@ -29,14 +29,29 @@ jobs:
       - name: Fix permissions
         run: chmod +x android/gradlew
 
-      - name: Clean EVERYTHING
+      - name: Clean project
         run: |
           flutter clean
-          rm -rf ~/.gradle/caches
-          rm -rf ~/.gradle/wrapper
           rm -rf android/.gradle
 
-      - name: Get dependencies
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Read version from pubspec.yaml
+        id: version
+        run: |
+          VER=$(grep '^version:' pubspec.yaml | sed 's/version: //')
+          echo "APP_VERSION=$VER" >> $GITHUB_ENV
+          echo "📱 App version: $VER"
+
+      - name: Get Flutter dependencies
         run: flutter pub get
 
       - name: Accept licenses (Android SDK)
@@ -46,15 +61,16 @@ jobs:
       - name: Build APK
         run: flutter build apk --release --no-shrink --android-skip-build-dependency-validation
 
-      - name: Locate APK
-        if: always()
+      - name: Copy APK to Flutter expected path
         run: |
-          echo "=== البحث عن ملف APK ==="
-          find . -name "*.apk" -type f
-          echo "=== نهاية البحث ==="
+          mkdir -p build/app/outputs/flutter-apk
+          cp android/app/build/outputs/apk/release/app-release.apk build/app/outputs/flutter-apk/app-release.apk
+          echo "✅ تم نسخ APK إلى المسار الذي يتوقعه Flutter"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: sr-player-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: sr-player-apk-v${{ env.APP_VERSION }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            android/app/build/outputs/apk/release/app-release.apk
