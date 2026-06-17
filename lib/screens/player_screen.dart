@@ -5,8 +5,6 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
-
-
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import '../models/video_item.dart';
@@ -33,17 +31,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _isPip = false;
   Timer? _hideTimer;
 
-  // Subtitle
   List<SubtitleEntry> _subtitles = [];
   SubtitleEntry? _currentSub;
   bool _showSubtitles = true;
   Timer? _subTimer;
 
-  // Speed
   double _speed = 1.0;
   final _speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
-  // Progress
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
@@ -77,46 +72,66 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Future<void> _initPlayer() async {
     final settings = context.read<SettingsProvider>();
 
-    // تحميل الفيديو
-    await _player.open(Media(widget.video.path), play: settings.autoPlay);
-    _player.setRate(_speed);
+    try {
+      // فتح الفيديو
+      await _player.open(Media(widget.video.path), play: settings.autoPlay);
+      _player.setRate(_speed);
 
-    // استعادة الموضع المحفوظ
-    if (settings.rememberPosition) {
-      final saved = await context.read<LibraryProvider>().getPosition(widget.video.path);
-      if (saved != null && saved.inSeconds > 0) {
-        await _player.seek(saved);
+      // استعادة الموضع المحفوظ
+      if (settings.rememberPosition) {
+        try {
+          final saved = await context.read<LibraryProvider>().getPosition(widget.video.path);
+          if (saved != null && saved.inSeconds > 0) {
+            await _player.seek(saved);
+          }
+        } catch (_) {
+          // تجاهل أي خطأ في استعادة الموضع
+        }
+      }
+
+      // Listeners
+      _player.stream.position.listen((pos) {
+        if (!mounted) return;
+        setState(() => _position = pos);
+        if (pos.inSeconds % 5 == 0 && settings.rememberPosition) {
+          context.read<LibraryProvider>().savePosition(widget.video.path, pos);
+        }
+        _updateSubtitle(pos);
+      }, onError: (e) {
+        debugPrint('Player position error: $e');
+      });
+
+      _player.stream.duration.listen((dur) {
+        if (mounted) setState(() => _duration = dur);
+      }, onError: (e) {
+        debugPrint('Player duration error: $e');
+      });
+
+      _player.stream.playing.listen((playing) {
+        if (mounted) setState(() => _isPlaying = playing);
+      }, onError: (e) {
+        debugPrint('Player playing error: $e');
+      });
+
+      setState(() => _initialized = true);
+      _scheduleHide();
+
+      // Auto-load SRT
+      final srtPath = SubtitleService.findSrt(widget.video.path);
+      if (srtPath != null) await _loadSrtFile(srtPath);
+
+    } catch (e) {
+      // فشل تشغيل الفيديو – عرض رسالة والعودة
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر تشغيل الملف: $e')),
+        );
+        Navigator.pop(context);
       }
     }
-
-    // Listeners
-    _player.stream.position.listen((pos) {
-      if (!mounted) return;
-      setState(() => _position = pos);
-      // حفظ الموضع كل 5 ثواني
-      if (pos.inSeconds % 5 == 0 && settings.rememberPosition) {
-        context.read<LibraryProvider>().savePosition(widget.video.path, pos);
-      }
-      // تحديث الترجمة
-      _updateSubtitle(pos);
-    });
-
-    _player.stream.duration.listen((dur) {
-      if (mounted) setState(() => _duration = dur);
-    });
-
-    _player.stream.playing.listen((playing) {
-      if (mounted) setState(() => _isPlaying = playing);
-    });
-
-    setState(() => _initialized = true);
-    _scheduleHide();
-
-    // Auto-load SRT
-    final srtPath = SubtitleService.findSrt(widget.video.path);
-    if (srtPath != null) await _loadSrtFile(srtPath);
   }
 
+  // باقي الدوال بدون تغيير (نفس الكود السابق)
   void _updateSubtitle(Duration pos) {
     if (_subtitles.isEmpty) return;
     SubtitleEntry? found;
@@ -158,7 +173,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (_showControls) _scheduleHide();
   }
 
-  // ── PiP ───────────────────────────────────────────────────────────
   Future<void> _enterPip() async {
     try {
       await PipService.enter();
@@ -168,7 +182,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive) {
-      // عند الخروج → ندخل PiP تلقائياً
       _enterPip();
     }
   }
@@ -208,7 +221,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final cs = Theme.of(context).colorScheme;
 
     if (_isPip) {
-      // في وضع PiP نعرض فقط الفيديو
       return Scaffold(
         backgroundColor: Colors.black,
         body: Video(controller: _controller),
@@ -216,7 +228,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
 
     return PopScope(
-      // عند الضغط على Back → ندخل PiP بدل الإغلاق
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) {
           await _enterPip();
@@ -230,13 +241,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             : GestureDetector(
                 onTap: _toggleControls,
                 child: Stack(children: [
-                  // ── الفيديو ──────────────────────────────────────
                   Video(
                     controller: _controller,
-                    controls: NoVideoControls, // نستخدم controls مخصصة
+                    controls: NoVideoControls,
                   ),
 
-                  // ── الترجمة ──────────────────────────────────────
                   if (_showSubtitles && _currentSub != null)
                     Positioned(
                       bottom: 72, left: 20, right: 20,
@@ -257,9 +266,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ),
                     ),
 
-                  // ── Controls ─────────────────────────────────────
                   if (_showControls) ...[
-                    // Top bar
                     _TopBar(
                       name: widget.video.name,
                       speed: _speed,
@@ -273,7 +280,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         builder: (_) => InfoScreen(video: widget.video))),
                     ),
 
-                    // Center controls
                     Center(child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -298,7 +304,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ],
                     )),
 
-                    // Bottom bar
                     Positioned(
                       bottom: 0, left: 0, right: 0,
                       child: Container(
@@ -362,7 +367,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 }
 
-// ── Widgets مساعدة ───────────────────────────────────────────────────
+// ── Widgets مساعدة (بدون تغيير) ────────────────────────────────
 
 class _TopBar extends StatelessWidget {
   final String name;
@@ -399,13 +404,11 @@ class _TopBar extends StatelessWidget {
               child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
             ),
-            // PiP button
             IconButton(
               icon: const Icon(Symbols.picture_in_picture_rounded, color: Colors.white70),
               onPressed: onPip,
               tooltip: 'نافذة عائمة',
             ),
-            // Speed
             GestureDetector(
               onTap: onSpeed,
               child: Container(
@@ -419,7 +422,6 @@ class _TopBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            // Subtitle toggle
             IconButton(
               icon: Icon(
                 subtitlesOn ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
@@ -427,13 +429,11 @@ class _TopBar extends StatelessWidget {
               ),
               onPressed: onSubToggle,
             ),
-            // Load subtitle
             IconButton(
               icon: const Icon(Symbols.upload_file_rounded, color: Colors.white54),
               onPressed: onSubLoad,
               tooltip: 'تحميل ترجمة SRT',
             ),
-            // Info
             IconButton(
               icon: const Icon(Symbols.info_rounded, color: Colors.white54),
               onPressed: onInfo,

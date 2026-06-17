@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,8 +11,22 @@ import 'screens/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── تهيئة media_kit (مطلوب قبل أي شيء) ──
-  MediaKit.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('❌ خطأ غير معالج: $error');
+    runApp(ErrorApp(error.toString()));
+    return true;
+  };
+
+  // تهيئة MediaKit
+  try {
+    MediaKit.ensureInitialized();
+  } catch (e) {
+    runApp(ErrorApp('فشل تهيئة MediaKit:\n$e'));
+    return;
+  }
 
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -19,8 +34,15 @@ void main() async {
     statusBarIconBrightness: Brightness.light,
   ));
 
-  final settings = SettingsProvider();
-  await settings.load();
+  // تحميل الإعدادات بشكل آمن
+  SettingsProvider settings;
+  try {
+    settings = SettingsProvider();
+    await settings.load();
+  } catch (e) {
+    runApp(ErrorApp('فشل تحميل الإعدادات:\n$e'));
+    return;
+  }
 
   runApp(MultiProvider(
     providers: [
@@ -38,12 +60,56 @@ class SPlayerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     return MaterialApp(
-      title: 'S-Player',
+      title: 'SR Player',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,
       home: const HomeScreen(),
+    );
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  final String message;
+  const ErrorApp(this.message, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const SizedBox(height: 24),
+                const Text(
+                  'عذراً، حدث خطأ',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.5),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton.icon(
+                  onPressed: () => main(),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('إعادة المحاولة'),
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

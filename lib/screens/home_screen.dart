@@ -27,8 +27,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<LibraryProvider>()..scan()..loadRecent();
+      _initLibrary();
     });
+  }
+
+  Future<void> _initLibrary() async {
+    final lib = context.read<LibraryProvider>();
+    try {
+      await lib.scan();
+      await lib.loadRecent();
+    } catch (e) {
+      // نعرض رسالة الخطأ من خلال الموفر نفسه
+      if (mounted) {
+        lib.error = 'فشل تحميل المكتبة:\n$e';
+        lib.loading = false;
+        lib.notifyListeners();
+      }
+    }
   }
 
   @override
@@ -52,8 +67,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.pickFiles(type: FileType.video);
-    if (result?.files.single.path != null) await _openByPath(result!.files.single.path!);
+    try {
+      final result = await FilePicker.pickFiles(type: FileType.video);
+      if (result?.files.single.path != null) await _openByPath(result!.files.single.path!);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر فتح الملف: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    }
   }
 
   List<VideoItem> _sorted(List<VideoItem> list) {
@@ -79,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
             child: Icon(Symbols.play_arrow_rounded, color: cs.onPrimaryContainer, size: 22)),
           const SizedBox(width: 10),
-          const Text('S-Player'),
+          const Text('SR Player'),
         ]),
         bottom: TabBar(controller: _tabs, tabs: const [
           Tab(text: 'الكل'), Tab(text: 'الأخيرة'), Tab(text: 'المجلدات'),
@@ -105,9 +128,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         if (lib.error != null) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(Symbols.error_rounded, size: 56, color: cs.error),
           const SizedBox(height: 12),
-          Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+          ),
           const SizedBox(height: 16),
-          FilledButton.icon(onPressed: lib.scan, icon: const Icon(Symbols.refresh_rounded), label: const Text('إعادة المحاولة')),
+          FilledButton.icon(onPressed: () => _initLibrary(), icon: const Icon(Symbols.refresh_rounded), label: const Text('إعادة المحاولة')),
         ]));
         return TabBarView(controller: _tabs, children: [
           _AllTab(videos: _sorted(lib.videos), selectedFolder: _selectedFolder,
@@ -179,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     child: Icon(icon, color: fg, size: 22));
 }
 
-// ── Tabs ─────────────────────────────────────────────────────────────
+// ── Tabs (بدون تغيير) ─────────────────────────────────────────────
 
 class _AllTab extends StatelessWidget {
   final List<VideoItem> videos;

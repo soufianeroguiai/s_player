@@ -27,16 +27,27 @@ class SettingsProvider extends ChangeNotifier {
   bool get sortDesc => _sortDesc;
 
   Future<void> load() async {
-    final p = await SharedPreferences.getInstance();
-    _themeMode = ThemeMode.values[p.getInt('themeMode') ?? 1];
-    _rememberPosition = p.getBool('rememberPosition') ?? true;
-    _autoPlay = p.getBool('autoPlay') ?? true;
-    _defaultSpeed = p.getDouble('defaultSpeed') ?? 1.0;
-    _showSubtitlesByDefault = p.getBool('showSubtitles') ?? true;
-    _gridView = p.getBool('gridView') ?? false;
-    _sortBy = p.getString('sortBy') ?? 'date';
-    _sortDesc = p.getBool('sortDesc') ?? true;
-    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+
+      // قراءة آمنة للـ themeMode مع ضمان أنه ضمن القيم المسموحة
+      final themeIndex = p.getInt('themeMode') ?? 1;
+      _themeMode = themeIndex >= 0 && themeIndex < ThemeMode.values.length
+          ? ThemeMode.values[themeIndex]
+          : ThemeMode.dark;
+
+      _rememberPosition = p.getBool('rememberPosition') ?? true;
+      _autoPlay = p.getBool('autoPlay') ?? true;
+      _defaultSpeed = p.getDouble('defaultSpeed') ?? 1.0;
+      _showSubtitlesByDefault = p.getBool('showSubtitles') ?? true;
+      _gridView = p.getBool('gridView') ?? false;
+      _sortBy = p.getString('sortBy') ?? 'date';
+      _sortDesc = p.getBool('sortDesc') ?? true;
+      notifyListeners();
+    } catch (e) {
+      // في حال فشل القراءة، نبقى على الإعدادات الافتراضية
+      debugPrint('Settings load error: $e');
+    }
   }
 
   Future<void> _save() async {

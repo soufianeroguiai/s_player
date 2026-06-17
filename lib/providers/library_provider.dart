@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,28 +63,54 @@ class LibraryProvider extends ChangeNotifier {
       result2.sort((a, b) => b.modified.compareTo(a.modified));
       _videos = result2;
     } catch (e) {
-      _error = e.toString();
+      _error = 'فشل المسح: ${e.toString()}';
     }
 
     _loading = false;
     notifyListeners();
+
+    // تحميل الصور المصغرة في الخلفية (محسّنة)
     _loadThumbnails();
   }
 
   Future<void> _loadThumbnails() async {
-    for (final video in _videos) {
-      try {
-        final assets = await PhotoManager.getAssetPathList(type: RequestType.video);
-        if (assets.isEmpty) continue;
-        final count = await assets.first.assetCountAsync;
-        final all = await assets.first.getAssetListRange(start: 0, end: count);
-        final asset = all.firstWhere((a) => a.id == video.id, orElse: () => all.first);
-        final thumb = await asset.thumbnailDataWithSize(const ThumbnailSize(180, 120), quality: 75);
-        if (thumb != null) {
-          video.thumbnail = thumb.toList();
-          notifyListeners();
+    // نأخذ نسخة من القائمة الحالية لتجنب التعديل أثناء التكرار
+    final videosToProcess = List<VideoItem>.from(_videos);
+    try {
+      // نحصل على قائمة الألبومات مرة واحدة
+      final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
+      if (albums.isEmpty) return;
+
+      // نجلب كل الأصول من الألبوم الأول (أو كل الألبومات إذا أردت)
+      for (final album in albums) {
+        final count = await album.assetCountAsync;
+        final assets = await album.getAssetListRange(start: 0, end: count);
+
+        for (final video in videosToProcess) {
+          // إذا كان الفيديو لم يعد موجودًا (أُزيل أثناء التحميل) نتخطاه
+          if (!_videos.contains(video)) continue;
+
+          try {
+            // البحث عن الأصل المطابق للفيديو
+            final asset = assets.firstWhere((a) => a.id == video.id,
+                orElse: () => assets.isNotEmpty ? assets.first : null as dynamic);
+            if (asset == null) continue;
+
+            final thumb = await asset.thumbnailDataWithSize(
+              const ThumbnailSize(180, 120),
+              quality: 75,
+            );
+            if (thumb != null) {
+              video.thumbnail = thumb.toList();
+              notifyListeners();
+            }
+          } catch (_) {
+            // فشل تحميل هذه الصورة المصغرة – تجاهل وتابع
+          }
         }
-      } catch (_) {}
+      }
+    } catch (_) {
+      // فشل عام في تحميل الصور المصغرة – لا نعرض خطأ للمستخدم
     }
   }
 
