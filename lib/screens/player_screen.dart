@@ -51,7 +51,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   double _volume = 0.8;
   double _brightness = 0.7;
-  double? _originalSystemBrightness;
 
   String? _dragAxis;
   bool _dragIsLeftSide = false;
@@ -158,9 +157,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         if (mounted) setState(() => _volume = vol);
       });
 
+      // تعديل السطوع على مستوى التطبيق بدلاً من النظام لتفادي أخطاء الصلاحيات
       try {
-        _originalSystemBrightness = await ScreenBrightness.instance.system;
-        await ScreenBrightness.instance.setSystemScreenBrightness(_brightness);
+        await ScreenBrightness.instance.setScreenBrightness(_brightness);
       } catch (_) {}
 
       setState(() => _initialized = true);
@@ -198,7 +197,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Future<void> _pickSubtitle() async {
-    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'SRT']);
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'SRT']);
     if (result?.files.single.path != null) {
       await _loadSrtFile(result!.files.single.path!);
     }
@@ -316,8 +315,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _onPanEnd(DragEndDetails details) {
     if (_dragAxis == 'h') { _player.seek(_seekPreview); setState(() => _showSeekIndicator = false); }
     else if (_dragAxis == 'v') {
-      _indicatorTimer?.cancel();
-      _indicatorTimer = Timer(const Duration(seconds: 1), () => setState(() { _showBrightnessIndicator = false; _showVolumeIndicator = false; }));
+      _resetIndicatorTimer();
     }
     _dragAxis = null;
     _scheduleHide();
@@ -327,12 +325,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final delta = -dy / 200;
     if (_dragIsLeftSide) {
       final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
-      try { ScreenBrightness.instance.setSystemScreenBrightness(newBrightness); setState(() { _brightness = newBrightness; _showBrightnessIndicator = true; _showVolumeIndicator = false; }); } catch (_) {}
+      try { 
+        ScreenBrightness.instance.setScreenBrightness(newBrightness); 
+        setState(() { _brightness = newBrightness; _showBrightnessIndicator = true; _showVolumeIndicator = false; }); 
+      } catch (_) {}
     } else {
       final newVolume = (_volume + delta).clamp(0.0, 1.0);
-      VolumeController.instance.setVolume(newVolume);
+      // 🔥 تعديل: إخفاء بار صوت النظام عند السحب على الشاشة
+      VolumeController.instance.setVolume(newVolume, showSystemUI: false);
       setState(() { _volume = newVolume; _showVolumeIndicator = true; _showBrightnessIndicator = false; });
     }
+    _resetIndicatorTimer();
+  }
+
+  void _resetIndicatorTimer() {
     _indicatorTimer?.cancel();
     _indicatorTimer = Timer(const Duration(seconds: 1), () => setState(() { _showBrightnessIndicator = false; _showVolumeIndicator = false; }));
   }
@@ -398,7 +404,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             onTap: () {
               _player.setSubtitleTrack(track);
               setState(() => _showSubtitles = true);
-              Navigator.pop(context);
+              // 🔥 تم حذف Navigator.pop لقفل القائمة بشكل طبيعي دون إغلاق الفيديو
             },
           );
         }),
@@ -407,7 +413,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           value: 'load',
           child: const ListTile(leading: Icon(Icons.upload, color: Colors.white), title: Text('تحميل ترجمة', style: TextStyle(color: Colors.white))),
           onTap: () {
-            Navigator.pop(context);
+            Navigator.pop(context); // هنا مسموح للإغلاق لفتح منتقي الملفات
             _pickSubtitle();
           },
         ),
@@ -448,7 +454,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             ),
             onTap: () {
               _player.setAudioTrack(track);
-              Navigator.pop(context);
+              // 🔥 تم حذف Navigator.pop لمنع إغلاق الشاشة بالخطأ
             },
           );
         }),
@@ -475,7 +481,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('تكبير الصوت', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
-        Slider(value: _audioBoost, min: 50, max: 200, onChanged: (v) { setSheetState(() {}); setState(() => _audioBoost = v); _player.setVolume(v); }),
+        Slider(value: _audioBoost, min: 50, max: 200, onChanged: (v) { 
+          setSheetState(() {}); 
+          setState(() => _audioBoost = v); 
+          // 🔥 تعديل: تحويل الصوت لنسبة مئوية وإخفاء واجهة النظام
+          VolumeController.instance.setVolume(v / 100, showSystemUI: false); 
+        }),
       ]),
     )));
   }
@@ -548,41 +559,81 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
     if (_isPip) return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
 
-    return PopScope(canPop: !_isLocked, onPopInvokedWithResult: (didPop, result) async {
-      if (!didPop && !_isLocked) await _enterPip();
-      if (_isLocked) setState(() => _isLocked = false);
-    }, child: Scaffold(backgroundColor: Colors.black, body: !_initialized ? Center(child: CircularProgressIndicator(color: cs.primary)) : Stack(children: [
-      GestureDetector(onTap: _toggleControls, onDoubleTapDown: _isLocked ? null : _onDoubleTapDown, onPanStart: _onPanStart, onPanUpdate: (d) => _onPanUpdate(d, screenWidth), onPanEnd: _onPanEnd, child: Video(
-        controller: _controller, controls: NoVideoControls,
-        subtitleViewConfiguration: SubtitleViewConfiguration(style: TextStyle(fontSize: s.subtitleFontSize, color: s.subtitleColor, fontWeight: FontWeight.normal, backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity)), textAlign: TextAlign.center, padding: const EdgeInsets.fromLTRB(20, 0, 20, 56)),
-      )),
-      if (_showVolumeIndicator) Positioned(right: 24, top: MediaQuery.of(context).size.height * 0.3, child: _buildFloatingIndicator(icon: Icons.volume_up, value: _volume, color: cs.primary)),
-      if (_showBrightnessIndicator) Positioned(left: 24, top: MediaQuery.of(context).size.height * 0.3, child: _buildFloatingIndicator(icon: Icons.brightness_6, value: _brightness, color: cs.secondary)),
-      if (_showControls && !_isLocked) ...[
-        Positioned(top: 0, left: 0, right: 0, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])), child: SafeArea(child: Row(children: [
-          IconButton(icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white), onPressed: () => Navigator.pop(context)),
-          Expanded(child: Text(widget.video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500))),
-          IconButton(icon: Icon(_isLocked ? Symbols.lock_rounded : Symbols.lock_open_rounded, color: _isLocked ? Colors.orange : Colors.white54), onPressed: _toggleLock),
-          IconButton(icon: Icon(_isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded, color: Colors.white70), onPressed: _toggleOrientation),
-          IconButton(icon: const Icon(Symbols.picture_in_picture_rounded, color: Colors.white70), onPressed: _enterPip),
-          IconButton(icon: const Icon(Symbols.graphic_eq_rounded, color: Colors.white70), onPressed: _showAudioMenu),
-          IconButton(icon: Icon(_showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded, color: _showSubtitles ? Colors.lightBlue : Colors.white54), onPressed: _showSubtitleMenu),
-          IconButton(icon: const Icon(Icons.subtitles, color: Colors.white70), onPressed: _showSubtitleSettingsSheet),
-        ])))),
-        Positioned(bottom: 0, left: 0, right: 0, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.85), Colors.transparent])), child: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 8), child: Row(children: [
-          Text(_fmt(_position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          Expanded(child: SliderTheme(data: SliderThemeData(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), activeTrackColor: cs.primary, inactiveTrackColor: Colors.white24, thumbColor: cs.primary, overlayColor: cs.primary.withOpacity(0.2)), child: Slider(value: _duration.inMilliseconds > 0 ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0) : 0.0, onChanged: (v) => _player.seek(Duration(milliseconds: (v * _duration.inMilliseconds).toInt()))))),
-          Text(_fmt(_duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        ]))))),
-        Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          _CtrlBtn(Symbols.replay_10_rounded, () => _player.seek(_position - const Duration(seconds: 10))),
-          const SizedBox(width: 28),
-          GestureDetector(onTap: () => _isPlaying ? _player.pause() : _player.play(), child: Container(width: 68, height: 68, decoration: BoxDecoration(color: cs.primaryContainer.withOpacity(0.9), shape: BoxShape.circle), child: Icon(_isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded, color: cs.onPrimaryContainer, size: 38))),
-          const SizedBox(width: 28),
-          _CtrlBtn(Symbols.forward_10_rounded, () => _player.seek(_position + const Duration(seconds: 10))),
-        ])),
-      ],
-    ])));
+    // 🔥 تعديل: تغليف الواجهة بـ KeyboardListener لـ صامت التقاط نقرات أزرار الهاتف الجانبية وحجب البار المزعج
+    return KeyboardListener(
+      focusNode: FocusNode(),
+      autofocus: true,
+      onKeyEvent: (KeyEvent event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.audioVolumeUp) {
+            final newVolume = (_volume + 0.05).clamp(0.0, 1.0);
+            VolumeController.instance.setVolume(newVolume, showSystemUI: false);
+            setState(() { _volume = newVolume; _showVolumeIndicator = true; _showBrightnessIndicator = false; });
+            _resetIndicatorTimer();
+          } else if (event.logicalKey == LogicalKeyboardKey.audioVolumeDown) {
+            final newVolume = (_volume - 0.05).clamp(0.0, 1.0);
+            VolumeController.instance.setVolume(newVolume, showSystemUI: false);
+            setState(() { _volume = newVolume; _showVolumeIndicator = true; _showBrightnessIndicator = false; });
+            _resetIndicatorTimer();
+          }
+        }
+      },
+      child: PopScope(
+        canPop: !_isLocked, 
+        onPopInvokedWithResult: (didPop, result) async {
+          if (!didPop && !_isLocked) await _enterPip();
+          if (_isLocked) setState(() => _isLocked = false);
+        }, 
+        child: Scaffold(
+          backgroundColor: Colors.black, 
+          body: !_initialized 
+              ? Center(child: CircularProgressIndicator(color: cs.primary)) 
+              : Stack(children: [
+          GestureDetector(
+            onTap: _toggleControls, 
+            onDoubleTapDown: _isLocked ? null : _onDoubleTapDown, 
+            onPanStart: _onPanStart, 
+            onPanUpdate: (d) => _onPanUpdate(d, screenWidth), 
+            onPanEnd: _onPanEnd, 
+            child: Video(
+              controller: _controller, 
+              controls: NoVideoControls,
+              subtitleViewConfiguration: SubtitleViewConfiguration(
+                style: TextStyle(fontSize: s.subtitleFontSize, color: s.subtitleColor, fontWeight: FontWeight.normal, backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity)), 
+                textAlign: TextAlign.center, 
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 56)
+              ),
+            )
+          ),
+          if (_showVolumeIndicator) Positioned(right: 24, top: MediaQuery.of(context).size.height * 0.3, child: _buildFloatingIndicator(icon: Icons.volume_up, value: _volume, color: cs.primary)),
+          if (_showBrightnessIndicator) Positioned(left: 24, top: MediaQuery.of(context).size.height * 0.3, child: _buildFloatingIndicator(icon: Icons.brightness_6, value: _brightness, color: cs.secondary)),
+          if (_showControls && !_isLocked) ...[
+            Positioned(top: 0, left: 0, right: 0, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])), child: SafeArea(child: Row(children: [
+              IconButton(icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white), onPressed: () => Navigator.pop(context)),
+              Expanded(child: Text(widget.video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500))),
+              IconButton(icon: Icon(_isLocked ? Symbols.lock_rounded : Symbols.lock_open_rounded, color: _isLocked ? Colors.orange : Colors.white54), onPressed: _toggleLock),
+              IconButton(icon: Icon(_isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded, color: Colors.white70), onPressed: _toggleOrientation),
+              IconButton(icon: const Icon(Symbols.picture_in_picture_rounded, color: Colors.white70), onPressed: _enterPip),
+              IconButton(icon: const Icon(Symbols.graphic_eq_rounded, color: Colors.white70), onPressed: _showAudioMenu),
+              IconButton(icon: Icon(_showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded, color: _showSubtitles ? Colors.lightBlue : Colors.white54), onPressed: _showSubtitleMenu),
+              IconButton(icon: const Icon(Icons.subtitles, color: Colors.white70), onPressed: _showSubtitleSettingsSheet),
+            ])))),
+            Positioned(bottom: 0, left: 0, right: 0, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.85), Colors.transparent])), child: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 8), child: Row(children: [
+              Text(_fmt(_position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Expanded(child: SliderTheme(data: SliderThemeData(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), activeTrackColor: cs.primary, inactiveTrackColor: Colors.white24, thumbColor: cs.primary, overlayColor: cs.primary.withOpacity(0.2)), child: Slider(value: _duration.inMilliseconds > 0 ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0) : 0.0, onChanged: (v) => _player.seek(Duration(milliseconds: (v * _duration.inMilliseconds).toInt()))))),
+              Text(_fmt(_duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ]))))),
+            Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _CtrlBtn(Symbols.replay_10_rounded, () => _player.seek(_position - const Duration(seconds: 10))),
+              const SizedBox(width: 28),
+              GestureDetector(onTap: () => _isPlaying ? _player.pause() : _player.play(), child: Container(width: 68, height: 68, decoration: BoxDecoration(color: cs.primaryContainer.withOpacity(0.9), shape: BoxShape.circle), child: Icon(_isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded, color: cs.onPrimaryContainer, size: 38))),
+              const SizedBox(width: 28),
+              _CtrlBtn(Symbols.forward_10_rounded, () => _player.seek(_position + const Duration(seconds: 10))),
+            ])),
+          ],
+        ]))
+      ),
+    );
   }
 
   @override
@@ -591,7 +642,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _hideTimer?.cancel();
     _indicatorTimer?.cancel();
     VolumeController.instance.removeListener();
-    if (_originalSystemBrightness != null) try { ScreenBrightness.instance.setSystemScreenBrightness(_originalSystemBrightness!); } catch (_) {}
+    // 🔥 إعادة ضبط سطوع الشاشة لـ الوضع الطبيعي عند الخروج بصيغة آمنة
+    try { ScreenBrightness.instance.resetScreenBrightness(); } catch (_) {}
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
