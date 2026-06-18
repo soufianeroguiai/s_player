@@ -19,7 +19,6 @@ import '../services/subtitle_service.dart';
 import '../services/pip_service.dart';
 import 'info_screen.dart';
 
-// أوضاع ملء الشاشة
 enum VideoFitMode { contain, cover, fill }
 
 BoxFit getBoxFit(VideoFitMode mode) {
@@ -102,10 +101,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   String? _fitOverlayText;
   Timer? _fitOverlayTimer;
 
-  // تم تفعيلها من الإعدادات
   double _subtitleSync = 0.0;
   double _subtitleSpeed = 1.0;
-  bool _autoSubtitleSelected = false; // لتطبيق اللغة المفضلة مرة واحدة
+  bool _autoSubtitleSelected = false;
 
   @override
   void initState() {
@@ -182,9 +180,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       await _player.open(Media(widget.video.path), play: settings.autoPlay);
       _player.setRate(_speed);
-      _player.setVolume(_audioBoost); // تضخيم الصوت الافتراضي
+      _player.setVolume(_audioBoost);
 
-      // إعدادات الصوت من SettingsProvider
       _applyAudioSettings(settings);
 
       if (settings.rememberPosition) {
@@ -221,7 +218,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           _subtitleTracks = tracks.subtitle;
           _audioTracks = tracks.audio;
         });
-        // تطبيق لغة الترجمة المفضلة تلقائياً عند ظهور المسارات
         _applyPreferredSubtitleLanguage(settings);
       });
 
@@ -235,7 +231,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       setState(() => _initialized = true);
       _scheduleHide();
 
-      // تحميل ترجمة خارجية من المجلد المفضل
       await _loadSubtitleFromPreferredFolder(settings);
 
     } catch (e) {
@@ -248,7 +243,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  // 🔊 تطبيق إعدادات الصوت
   void _applyAudioSettings(SettingsProvider s) {
     try {
       if (s.audioOutput != 'auto') {
@@ -269,28 +263,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           _player.setVolume(_audioBoost);
         });
       }
-    } catch (_) {
-      // تجاهل أي خطأ من الخصائص غير المدعومة
-    }
+    } catch (_) {}
   }
 
-  // 📝 تحميل ترجمة من المجلد المفضل
   Future<void> _loadSubtitleFromPreferredFolder(SettingsProvider s) async {
     if (s.subtitleFolder.isEmpty) {
-      // البحث بجانب الفيديو كالمعتاد
       final srtPath = SubtitleService.findSrt(widget.video.path);
       if (srtPath != null) await _loadSrtFile(srtPath, s.subtitleEncoding);
       return;
     }
 
-    // البحث في المجلد المفضل
     final videoName = widget.video.path.split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '');
     final folder = Directory(s.subtitleFolder);
     if (await folder.exists()) {
       await for (final file in folder.list()) {
         if (file is File) {
           final fileName = file.path.split('/').last;
-          if (fileName.startsWith(videoName) && (fileName.endsWith('.srt') || fileName.endsWith('.SRT'))) {
+          if (fileName.startsWith(videoName) && (fileName.endsWith('.srt') || fileName.endsWith('.SRT') || fileName.endsWith('.ssa') || fileName.endsWith('.ass'))) {
             await _loadSrtFile(file.path, s.subtitleEncoding);
             return;
           }
@@ -298,16 +287,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       }
     }
 
-    // إذا لم نجد، نبحث بجانب الفيديو كخطة بديلة
     final srtPath = SubtitleService.findSrt(widget.video.path);
     if (srtPath != null) await _loadSrtFile(srtPath, s.subtitleEncoding);
   }
 
-  // 🎯 تطبيق لغة الترجمة المفضلة تلقائياً
   void _applyPreferredSubtitleLanguage(SettingsProvider s) {
     if (_autoSubtitleSelected || _subtitleTracks.isEmpty) return;
     
-    // نبحث عن مسار يطابق اللغة المفضلة
     for (final track in _subtitleTracks) {
       if (track.language == s.preferredSubtitleLanguage) {
         _player.setSubtitleTrack(track);
@@ -317,24 +303,30 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       }
     }
     
-    // إذا لم نجد، نحتفظ بالاختيار الحالي
     _autoSubtitleSelected = true;
   }
 
   Future<void> _loadSrtFile(String path, [String encoding = 'UTF-8']) async {
     try {
-      // استخدام الترميز المحدد
-      final bytes = await File(path).readAsBytes();
-      String content;
-      try {
-        content = String.fromCharCodes(bytes);
-      } catch (_) {
-        content = await File(path).readAsString(); // fallback للترميز الافتراضي
+      final entries = await SubtitleService.load(path);
+      
+      if (entries.isEmpty) return;
+      
+      final srtContent = StringBuffer();
+      for (int i = 0; i < entries.length; i++) {
+        final e = entries[i];
+        final start = _formatSrtTime(e.start);
+        final end = _formatSrtTime(e.end);
+        srtContent.writeln('${i + 1}');
+        srtContent.writeln('$start --> $end');
+        srtContent.writeln(e.text);
+        srtContent.writeln();
       }
       
-      await _player.setSubtitleTrack(SubtitleTrack.data(content, title: 'ترجمة خارجية'));
+      await _player.setSubtitleTrack(
+        SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'),
+      );
       
-      // تطبيق المزامنة الافتراضية
       try {
         await _player.setProperty('sub-delay', _subtitleSync);
       } catch (_) {}
@@ -354,8 +346,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  String _formatSrtTime(Duration d) {
+    final hours = d.inHours.toString().padLeft(2, '0');
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final millis = (d.inMilliseconds.remainder(1000)).toString().padLeft(3, '0');
+    return '$hours:$minutes:$seconds,$millis';
+  }
+
   Future<void> _pickSubtitle() async {
-    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'SRT']);
+    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'SRT', 'ssa', 'ass']);
     if (result?.files.single.path != null) {
       final settings = context.read<SettingsProvider>();
       await _loadSrtFile(result!.files.single.path!, settings.subtitleEncoding);
@@ -511,7 +511,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     ));
   }
 
-  // ── قائمة الترجمة (Dialog آمنة) ──
   void _showSubtitleMenu() {
     final cs = Theme.of(context).colorScheme;
     final seen = <String>{};
@@ -593,7 +592,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  // ── قائمة الصوت (Dialog آمنة) ──
   Future<void> _showAudioMenu() async {
     final cs = Theme.of(context).colorScheme;
     final seen = <String>{};
