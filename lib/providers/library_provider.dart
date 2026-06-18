@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // for compute
 import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
@@ -32,15 +32,21 @@ class LibraryProvider extends ChangeNotifier {
       final file = File('${dir.path}/video_cache.json');
       if (await file.exists()) {
         final jsonString = await file.readAsString();
-        final List<dynamic> jsonList = json.decode(jsonString);
-        _videos = jsonList
-            .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
-            .toList();
+        // نقل التحليل إلى compute
+        final List<VideoItem> parsed = await compute(_parseVideoJson, jsonString);
+        _videos = parsed;
         notifyListeners();
       }
     } catch (e) {
       debugPrint('فشل تحميل الذاكرة المؤقتة: $e');
     }
+  }
+
+  static List<VideoItem> _parseVideoJson(String jsonString) {
+    final List<dynamic> jsonList = json.decode(jsonString);
+    return jsonList
+        .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> _saveVideosToCache() async {
@@ -74,38 +80,57 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
+  // دالة المسح التي ستعمل في isolate
+  static Future<List<VideoItem>> _scanInIsolate(dynamic _) async {
+    final ps = await PhotoManager.requestPermissionExtend();
+    if (!ps.isAuth && !ps.hasAccess) {
+      return [];
+    }
+
+    final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
+    final List<VideoItem> result = [];
+
+    const batchSize = 12;
+    for (final album in albums) {
+      final count = await album.assetCountAsync;
+      final assets = await album.getAssetListRange(start: 0, end: count);
+
+      for (var i = 0; i < assets.length; i += batchSize) {
+        final batch = assets.skip(i).take(batchSize);
+        final items = await Future.wait(
+          batch.map((asset) async {
+            try {
+              final file = await asset.file;
+              if (file == null) return null;
+              return VideoItem(
+                id: asset.id,
+                path: file.path,
+                name: asset.title ?? 'فيديو ${asset.id}',
+                size: file.lengthSync(),
+                modified: asset.modifiedDateTime,
+                folder: album.name,
+                duration: asset.videoDuration,
+              );
+            } catch (e) {
+              return null;
+            }
+          }),
+        );
+        result.addAll(items.whereType<VideoItem>());
+      }
+    }
+
+    result.sort((a, b) => b.modified.compareTo(a.modified));
+    return result;
+  }
+
   Future<void> scan() async {
     _loading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final ps = await PhotoManager.requestPermissionExtend();
-      if (!ps.isAuth && !ps.hasAccess) {
-        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.';
-        _loading = false;
-        notifyListeners();
-        return;
-      }
-
-      final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
-      final List<VideoItem> result = [];
-
-      const batchSize = 12;
-      for (final album in albums) {
-        final count = await album.assetCountAsync;
-        final assets = await album.getAssetListRange(start: 0, end: count);
-
-        for (var i = 0; i < assets.length; i += batchSize) {
-          final batch = assets.skip(i).take(batchSize);
-          final items = await Future.wait(
-            batch.map((asset) => _buildVideoItem(asset, album.name)),
-          );
-          result.addAll(items.whereType<VideoItem>());
-        }
-      }
-
-      result.sort((a, b) => b.modified.compareTo(a.modified));
+      final result = await compute(_scanInIsolate, null);
       _videos = result;
       await _saveVideosToCache();
     } catch (e) {

@@ -62,6 +62,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   late final Player _player;
   late final VideoController _controller;
 
+  // ValueNotifiers for reactive UI
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _durationNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<bool> _playingNotifier = ValueNotifier(false);
+
   bool _initialized = false;
   bool _showControls = true;
   bool _isPip = false;
@@ -72,7 +77,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showSubtitles = true;
   List<SubtitleTrack> _subtitleTracks = [];
   List<AudioTrack> _audioTracks = [];
-  String? _embeddedSubtitleText; // الترجمة المدمجة الحالية
+  String? _embeddedSubtitleText;
 
   double _gestureVolume = 0.8;
   double _audioBoost = 100.0;
@@ -80,10 +85,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   double _speed = 1.0;
   final _speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
-  bool _isPlaying = false;
 
   double _brightness = 0.7;
 
@@ -93,8 +94,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Duration _dragStartPosition = Duration.zero;
   Duration _seekPreview = Duration.zero;
   bool _showSeekIndicator = false;
-
-  // لتخفيف طلبات seek أثناء السحب (منع التهنيج)
   DateTime? _lastSeekTime;
 
   bool _showVolumeIndicator = false;
@@ -197,21 +196,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
       _player.stream.position.listen((pos) {
         if (!mounted) return;
-        setState(() => _position = pos);
+        _positionNotifier.value = pos;
         if (settings.rememberPosition) {
           _saveTimer?.cancel();
           _saveTimer = Timer(const Duration(seconds: 5), () {
-            if (mounted) context.read<LibraryProvider>().savePosition(widget.video.path, _position);
+            if (mounted) context.read<LibraryProvider>().savePosition(widget.video.path, _positionNotifier.value);
           });
         }
       });
 
       _player.stream.duration.listen((dur) {
-        if (mounted) setState(() => _duration = dur);
+        if (!mounted) return;
+        _durationNotifier.value = dur;
       });
 
       _player.stream.playing.listen((playing) {
-        if (mounted) setState(() => _isPlaying = playing);
+        if (!mounted) return;
+        _playingNotifier.value = playing;
       });
 
       _player.stream.tracks.listen((tracks) {
@@ -223,7 +224,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _applyPreferredSubtitleLanguage(settings);
       });
 
-      // التقاط نص الترجمة المدمجة (قد يكون List في 1.2.6)
       _player.stream.subtitle.listen((subtitles) {
         if (!mounted) return;
         if (subtitles.isNotEmpty) {
@@ -347,7 +347,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _scheduleHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isPlaying && !_isLocked) setState(() => _showControls = false);
+      if (mounted && _playingNotifier.value && !_isLocked) setState(() => _showControls = false);
     });
   }
 
@@ -365,9 +365,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (_isLocked) return;
     final isRight = details.localPosition.dx > MediaQuery.of(context).size.width / 2;
     final target = isRight
-        ? (_position + const Duration(seconds: 10))
-        : (_position - const Duration(seconds: 10));
-    _player.seek(target.isNegative ? Duration.zero : (target > _duration ? _duration : target));
+        ? (_positionNotifier.value + const Duration(seconds: 10))
+        : (_positionNotifier.value - const Duration(seconds: 10));
+    _player.seek(target.isNegative ? Duration.zero : (target > _durationNotifier.value ? _durationNotifier.value : target));
   }
 
   void _onPanStart(DragStartDetails details) {
@@ -376,7 +376,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _indicatorTimer?.cancel();
     _dragAxis = null;
     _dragStartGlobal = details.globalPosition;
-    _dragStartPosition = _position;
+    _dragStartPosition = _positionNotifier.value;
     _dragIsLeftSide = details.localPosition.dx < MediaQuery.of(context).size.width / 2;
   }
 
@@ -394,9 +394,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       final seekSeconds = (totalDx / screenWidth) * 90;
       var target = _dragStartPosition + Duration(seconds: seekSeconds.round());
       if (target < Duration.zero) target = Duration.zero;
-      if (_duration > Duration.zero && target > _duration) target = _duration;
+      if (_durationNotifier.value > Duration.zero && target > _durationNotifier.value) target = _durationNotifier.value;
 
-      // تحديث المؤشر فوراً
       setState(() {
         _seekPreview = target;
         _showSeekIndicator = true;
@@ -404,7 +403,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _showVolumeIndicator = false;
       });
 
-      // لا نطلب seek أكثر من مرة كل 150ms لتجنب التقطيع
       final now = DateTime.now();
       if (_lastSeekTime == null || now.difference(_lastSeekTime!) > const Duration(milliseconds: 150)) {
         _player.seek(target);
@@ -417,7 +415,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _onPanEnd(DragEndDetails details) {
     if (_dragAxis == 'h') {
-      // تأكد من أن seek النهائي دقيق
       _player.seek(_seekPreview);
       setState(() => _showSeekIndicator = false);
     } else if (_dragAxis == 'v') {
@@ -476,7 +473,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           borderRadius: BorderRadius.circular(26),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 16,
               offset: const Offset(0, 4),
             ),
@@ -492,12 +489,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.white.withValues(alpha: 0.18),
-                    Colors.white.withValues(alpha: 0.06),
+                    Colors.white.withOpacity(0.18),
+                    Colors.white.withOpacity(0.06),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(26),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+                border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
               ),
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
               child: Column(
@@ -513,9 +510,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           trackHeight: 3,
                           thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
                           activeTrackColor: color,
-                          inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
+                          inactiveTrackColor: Colors.white.withOpacity(0.2),
                           thumbColor: Colors.white,
-                          overlayColor: color.withValues(alpha: 0.2),
+                          overlayColor: color.withOpacity(0.2),
                         ),
                         child: Slider(
                           value: displayValue.clamp(0.0, 1.0),
@@ -530,7 +527,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   Text(
                     labelText,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
+                      color: Colors.white.withOpacity(0.9),
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
@@ -770,7 +767,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.25),
+          color: color.withOpacity(0.25),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: color, width: 1),
         ),
@@ -916,17 +913,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
     if (_isPip) return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
 
-    // إخفاء الترجمة المدمجة الأصلية عند وجود ترجمتنا المخصصة
     final hasCustomSubtitle = _showSubtitles && _embeddedSubtitleText != null && _embeddedSubtitleText!.isNotEmpty;
     final builtInSubtitleStyle = hasCustomSubtitle
-        ? const TextStyle(fontSize: 0, color: Colors.transparent) // إخفاء الترجمة المدمجة
+        ? const TextStyle(fontSize: 0, color: Colors.transparent)
         : TextStyle(
             fontSize: s.subtitleFontSize,
             color: s.subtitleColor,
             fontWeight: _getFontWeight(s.fontWeightIndex),
             fontFamily: s.fontFamily,
             fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
-            backgroundColor: s.subtitleBgColor.withValues(alpha: s.subtitleBgOpacity),
+            backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
             shadows: s.shadowEnabled
                 ? [Shadow(color: s.shadowColor, blurRadius: s.shadowBlurRadius,
                     offset: Offset(s.shadowOffsetX, s.shadowOffsetY))]
@@ -945,25 +941,26 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             ? Center(child: CircularProgressIndicator(color: cs.primary))
             : Stack(children: [
 
-          GestureDetector(
-            onTap: _toggleControls,
-            onDoubleTapDown: _isLocked ? null : _onDoubleTapDown,
-            onPanStart: _onPanStart,
-            onPanUpdate: (d) => _onPanUpdate(d, screenWidth),
-            onPanEnd: _onPanEnd,
-            child: Video(
-              controller: _controller,
-              fit: getBoxFit(_fitMode),
-              controls: NoVideoControls,
-              subtitleViewConfiguration: SubtitleViewConfiguration(
-                style: builtInSubtitleStyle,
-                textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
-                padding: EdgeInsets.fromLTRB(s.horizontalMargin, 0, s.horizontalMargin, s.bottomPadding),
+          RepaintBoundary(
+            child: GestureDetector(
+              onTap: _toggleControls,
+              onDoubleTapDown: _isLocked ? null : _onDoubleTapDown,
+              onPanStart: _onPanStart,
+              onPanUpdate: (d) => _onPanUpdate(d, screenWidth),
+              onPanEnd: _onPanEnd,
+              child: Video(
+                controller: _controller,
+                fit: getBoxFit(_fitMode),
+                controls: NoVideoControls,
+                subtitleViewConfiguration: SubtitleViewConfiguration(
+                  style: builtInSubtitleStyle,
+                  textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
+                  padding: EdgeInsets.fromLTRB(s.horizontalMargin, 0, s.horizontalMargin, s.bottomPadding),
+                ),
               ),
             ),
           ),
 
-          // ترجمتنا المخصصة (فوق الفيديو)
           if (hasCustomSubtitle)
             Positioned(
               bottom: s.bottomPadding,
@@ -1008,7 +1005,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               child: Center(child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
+                  color: Colors.black.withOpacity(0.55),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(_fitOverlayText!,
@@ -1019,12 +1016,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             Center(child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.65),
+                color: Colors.black.withOpacity(0.65),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Text(
-                _fmt(_seekPreview),
-                style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+              child: ValueListenableBuilder<Duration>(
+                valueListenable: _positionNotifier,
+                builder: (_, pos, __) => Text(
+                  _fmt(_seekPreview),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                ),
               ),
             )),
 
@@ -1061,7 +1061,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.85),
+                    color: Colors.orange.withOpacity(0.85),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Symbols.lock_rounded, color: Colors.white, size: 22),
@@ -1078,7 +1078,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
                   ),
                 ),
                 child: SafeArea(
@@ -1122,34 +1122,45 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
-                    colors: [Colors.black.withValues(alpha: 0.85), Colors.transparent],
+                    colors: [Colors.black.withOpacity(0.85), Colors.transparent],
                   ),
                 ),
                 child: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                     child: Row(children: [
-                      Text(_fmt(_position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _positionNotifier,
+                        builder: (_, pos, __) => Text(_fmt(pos), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      ),
                       Expanded(
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                            activeTrackColor: cs.primary,
-                            inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-                            thumbColor: cs.primary,
-                            overlayColor: cs.primary.withValues(alpha: 0.2),
-                          ),
-                          child: Slider(
-                            value: _duration.inMilliseconds > 0
-                                ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
-                                : 0.0,
-                            onChanged: (v) => _player.seek(
-                                Duration(milliseconds: (v * _duration.inMilliseconds).toInt())),
-                          ),
+                        child: ValueListenableBuilder<Duration>(
+                          valueListenable: _durationNotifier,
+                          builder: (_, dur, __) {
+                            return SliderTheme(
+                              data: SliderThemeData(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                activeTrackColor: cs.primary,
+                                inactiveTrackColor: Colors.white.withOpacity(0.2),
+                                thumbColor: cs.primary,
+                                overlayColor: cs.primary.withOpacity(0.2),
+                              ),
+                              child: Slider(
+                                value: dur.inMilliseconds > 0
+                                    ? (_positionNotifier.value.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
+                                    : 0.0,
+                                onChanged: (v) => _player.seek(
+                                    Duration(milliseconds: (v * dur.inMilliseconds).toInt())),
+                              ),
+                            );
+                          },
                         ),
                       ),
-                      Text(_fmt(_duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _durationNotifier,
+                        builder: (_, dur, __) => Text(_fmt(dur), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      ),
                     ]),
                   ),
                 ),
@@ -1158,23 +1169,27 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
             Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               _CtrlBtn(Symbols.replay_10_rounded,
-                  () => _player.seek(_position - const Duration(seconds: 10))),
+                  () => _player.seek(_positionNotifier.value - const Duration(seconds: 10))),
               const SizedBox(width: 28),
               GestureDetector(
-                onTap: () => _isPlaying ? _player.pause() : _player.play(),
+                onTap: () => _playingNotifier.value ? _player.pause() : _player.play(),
                 child: Container(
                   width: 68, height: 68,
                   decoration: BoxDecoration(
-                    color: cs.primaryContainer.withValues(alpha: 0.9),
+                    color: cs.primaryContainer.withOpacity(0.9),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(_isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _playingNotifier,
+                    builder: (_, playing, __) => Icon(
+                      playing ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
                       color: cs.onPrimaryContainer, size: 38),
+                  ),
                 ),
               ),
               const SizedBox(width: 28),
               _CtrlBtn(Symbols.forward_10_rounded,
-                  () => _player.seek(_position + const Duration(seconds: 10))),
+                  () => _player.seek(_positionNotifier.value + const Duration(seconds: 10))),
             ])),
 
           ],
@@ -1185,6 +1200,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
+    _positionNotifier.dispose();
+    _durationNotifier.dispose();
+    _playingNotifier.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
     _saveTimer?.cancel();
@@ -1199,7 +1217,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 }
 
-// ═══════════════ _AudioBoostSection (بدون تغيير) ═══════════════
+// ═══════════════ _AudioBoostSection ═══════════════
 class _AudioBoostSection extends StatefulWidget {
   final double boost;
   final ValueChanged<double> onChanged;
@@ -1246,7 +1264,7 @@ class _AudioBoostSectionState extends State<_AudioBoostSection> {
           activeTrackColor: color,
           inactiveTrackColor: Colors.white12,
           thumbColor: color,
-          overlayColor: color.withValues(alpha: 0.2),
+          overlayColor: color.withOpacity(0.2),
           tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 2),
           activeTickMarkColor: Colors.white30,
           inactiveTickMarkColor: Colors.white12,
@@ -1278,7 +1296,7 @@ class _QuickBtn extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: active ? color.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.07),
+          color: active ? color.withOpacity(0.25) : Colors.white.withOpacity(0.07),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: active ? color : Colors.white24),
         ),
@@ -1296,7 +1314,7 @@ class _CtrlBtn extends StatelessWidget {
         onTap: onTap,
         child: Container(
           width: 50, height: 50,
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), shape: BoxShape.circle),
+          decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), shape: BoxShape.circle),
           child: Icon(icon, color: Colors.white, size: 28),
         ),
       );

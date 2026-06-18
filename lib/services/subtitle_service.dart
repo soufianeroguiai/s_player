@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class SubtitleEntry {
   final Duration start;
@@ -22,14 +23,24 @@ class SubtitleService {
     try {
       final content = await File(path).readAsString();
       final ext = path.split('.').last.toLowerCase();
-      
-      if (ext == 'ssa' || ext == 'ass') {
-        return _parseSsa(content);
-      } else {
-        return _parseSrt(content);
-      }
+      // استخدم compute لتحليل المحتوى
+      final List<SubtitleEntry> entries = await compute(_parseContent, {
+        'content': content,
+        'ext': ext,
+      });
+      return entries;
     } catch (_) {
       return [];
+    }
+  }
+
+  static List<SubtitleEntry> _parseContent(Map<String, String> params) {
+    final content = params['content']!;
+    final ext = params['ext']!;
+    if (ext == 'ssa' || ext == 'ass') {
+      return _parseSsa(content);
+    } else {
+      return _parseSrt(content);
     }
   }
 
@@ -60,7 +71,7 @@ class SubtitleService {
     return entries;
   }
 
-  // --- SSA/ASS Parser (جديد) ---
+  // --- SSA/ASS Parser ---
   static List<SubtitleEntry> _parseSsa(String content) {
     final entries = <SubtitleEntry>[];
     bool inEvents = false;

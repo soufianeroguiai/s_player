@@ -32,7 +32,6 @@ class SettingsProvider extends ChangeNotifier {
   int _subtitleColorValue = 0xFFFFFFFF;
   Color get subtitleColor => Color(_subtitleColorValue);
 
-  // 👈 تم تغييرها إلى 0.0 (بلا خلفية)
   double _subtitleBgOpacity = 0.0;
   double get subtitleBgOpacity => _subtitleBgOpacity;
 
@@ -93,7 +92,6 @@ class SettingsProvider extends ChangeNotifier {
   bool _subtitleItalic = false;
   bool get subtitleItalic => _subtitleItalic;
 
-  // 👈 تم تغييرها إلى false (محاذاة وسط)
   bool _subtitleRTL = false;
   bool get subtitleRTL => _subtitleRTL;
 
@@ -133,7 +131,7 @@ class SettingsProvider extends ChangeNotifier {
   double _audioRate = 1.0;
   double get audioRate => _audioRate;
 
-  // --- Load & Save (بدون تغيير) ---
+  // --- Load & Save ---
   Future<void> load() async {
     try {
       final p = await SharedPreferences.getInstance();
@@ -150,7 +148,7 @@ class SettingsProvider extends ChangeNotifier {
       _sortDesc = p.getBool('sortDesc') ?? true;
       _subtitleFontSize = p.getDouble('subtitleFontSize') ?? 30.0;
       _subtitleColorValue = p.getInt('subtitleColorValue') ?? 0xFFFFFFFF;
-      _subtitleBgOpacity = p.getDouble('subtitleBgOpacity') ?? 0.0;          // 0.0
+      _subtitleBgOpacity = p.getDouble('subtitleBgOpacity') ?? 0.0;
       _subtitleBgColor = Color(p.getInt('subtitleBgColor') ?? 0xFF000000);
       _outlineColor = Color(p.getInt('outlineColor') ?? 0xFF000000);
       _outlineWidth = p.getDouble('outlineWidth') ?? 2.0;
@@ -170,7 +168,7 @@ class SettingsProvider extends ChangeNotifier {
       _subtitleHwAcceleration = p.getBool('subtitleHwAcceleration') ?? false;
       _subtitleFontsFolder = p.getString('subtitleFontsFolder') ?? '';
       _subtitleItalic = p.getBool('subtitleItalic') ?? false;
-      _subtitleRTL = p.getBool('subtitleRTL') ?? false;                       // false
+      _subtitleRTL = p.getBool('subtitleRTL') ?? false;
       _audioPlayerEngine = p.getString('audioPlayerEngine') ?? 'media_kit';
       _audioOutput = p.getString('audioOutput') ?? 'auto';
       _defaultAudioBoost = p.getDouble('defaultAudioBoost') ?? 100.0;
@@ -189,7 +187,7 @@ class SettingsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _save() async {
+  Future<void> save() async {
     final p = await SharedPreferences.getInstance();
     await p.setInt('themeMode', _themeMode.index);
     await p.setBool('rememberPosition', _rememberPosition);
@@ -236,46 +234,46 @@ class SettingsProvider extends ChangeNotifier {
     await p.setDouble('audioRate', _audioRate);
   }
 
-  // Setters (بدون تغيير) ...
-  void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
-  void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
-  void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
-  void setDefaultSpeed(double v) { _defaultSpeed = v; notifyListeners(); _save(); }
-  void setShowSubtitlesByDefault(bool v) { _showSubtitlesByDefault = v; notifyListeners(); _save(); }
-  void setGridView(bool v) { _gridView = v; notifyListeners(); _save(); }
-  void setSortBy(String v) { _sortBy = v; notifyListeners(); _save(); }
-  void setSortDesc(bool v) { _sortDesc = v; notifyListeners(); _save(); }
-  void setSubtitleFontSize(double v) { _subtitleFontSize = v; notifyListeners(); _save(); }
-  void setSubtitleColor(Color c) { _subtitleColorValue = c.value; notifyListeners(); _save(); }
-  void setSubtitleBgOpacity(double v) { _subtitleBgOpacity = v; notifyListeners(); _save(); }
-  void setSubtitleBgColor(Color c) { _subtitleBgColor = c; notifyListeners(); _save(); }
-  void setOutlineColor(Color c) { _outlineColor = c; notifyListeners(); _save(); }
-  void setOutlineWidth(double v) { _outlineWidth = v; notifyListeners(); _save(); }
-  void setShadowEnabled(bool v) { _shadowEnabled = v; notifyListeners(); _save(); }
-  void setShadowColor(Color c) { _shadowColor = c; notifyListeners(); _save(); }
-  void setShadowBlurRadius(double v) { _shadowBlurRadius = v; notifyListeners(); _save(); }
-  void setFontWeightIndex(int v) { _fontWeightIndex = v; notifyListeners(); _save(); }
-  void setBottomPadding(double v) { _bottomPadding = v; notifyListeners(); _save(); }
-  void setHorizontalMargin(double v) { _horizontalMargin = v; notifyListeners(); _save(); }
-  void setFontFamily(String v) { _fontFamily = v; notifyListeners(); _save(); }
-  void setSubtitleFolder(String v) { _subtitleFolder = v; notifyListeners(); _save(); }
-  void setSubtitleEncoding(String v) { _subtitleEncoding = v; notifyListeners(); _save(); }
-  void setPreferredSubtitleLanguage(String v) { _preferredSubtitleLanguage = v; notifyListeners(); _save(); }
-  void setDefaultSubtitleSync(double v) { _defaultSubtitleSync = v; notifyListeners(); _save(); }
-  void setSubtitleHwAcceleration(bool v) { _subtitleHwAcceleration = v; notifyListeners(); _save(); }
-  void setSubtitleFontsFolder(String v) { _subtitleFontsFolder = v; notifyListeners(); _save(); }
-  void setSubtitleItalic(bool v) { _subtitleItalic = v; notifyListeners(); _save(); }
-  void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); _save(); }
-  void setAudioPlayerEngine(String v) { _audioPlayerEngine = v; notifyListeners(); _save(); }
-  void setAudioOutput(String v) { _audioOutput = v; notifyListeners(); _save(); }
-  void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); _save(); }
-  void setDefaultVolume(double v) { _defaultVolume = v; notifyListeners(); _save(); }
-  void setShowVolumePanel(bool v) { _showVolumePanel = v; notifyListeners(); _save(); }
-  void setPauseOnHeadphonesDisconnect(bool v) { _pauseOnHeadphonesDisconnect = v; notifyListeners(); _save(); }
-  void setFadeInStart(bool v) { _fadeInStart = v; notifyListeners(); _save(); }
-  void setFadeInSeek(bool v) { _fadeInSeek = v; notifyListeners(); _save(); }
-  void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); _save(); }
-  void setBluetoothAudioDelayMs(double v) { _bluetoothAudioDelayMs = v; notifyListeners(); _save(); }
-  void setAudioPassthrough(bool v) { _audioPassthrough = v; notifyListeners(); _save(); }
-  void setAudioRate(double v) { _audioRate = v; notifyListeners(); _save(); }
+  // Setters (بدون حفظ فوري)
+  void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); }
+  void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); }
+  void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); }
+  void setDefaultSpeed(double v) { _defaultSpeed = v; notifyListeners(); }
+  void setShowSubtitlesByDefault(bool v) { _showSubtitlesByDefault = v; notifyListeners(); }
+  void setGridView(bool v) { _gridView = v; notifyListeners(); }
+  void setSortBy(String v) { _sortBy = v; notifyListeners(); }
+  void setSortDesc(bool v) { _sortDesc = v; notifyListeners(); }
+  void setSubtitleFontSize(double v) { _subtitleFontSize = v; notifyListeners(); }
+  void setSubtitleColor(Color c) { _subtitleColorValue = c.value; notifyListeners(); }
+  void setSubtitleBgOpacity(double v) { _subtitleBgOpacity = v; notifyListeners(); }
+  void setSubtitleBgColor(Color c) { _subtitleBgColor = c; notifyListeners(); }
+  void setOutlineColor(Color c) { _outlineColor = c; notifyListeners(); }
+  void setOutlineWidth(double v) { _outlineWidth = v; notifyListeners(); }
+  void setShadowEnabled(bool v) { _shadowEnabled = v; notifyListeners(); }
+  void setShadowColor(Color c) { _shadowColor = c; notifyListeners(); }
+  void setShadowBlurRadius(double v) { _shadowBlurRadius = v; notifyListeners(); }
+  void setFontWeightIndex(int v) { _fontWeightIndex = v; notifyListeners(); }
+  void setBottomPadding(double v) { _bottomPadding = v; notifyListeners(); }
+  void setHorizontalMargin(double v) { _horizontalMargin = v; notifyListeners(); }
+  void setFontFamily(String v) { _fontFamily = v; notifyListeners(); }
+  void setSubtitleFolder(String v) { _subtitleFolder = v; notifyListeners(); }
+  void setSubtitleEncoding(String v) { _subtitleEncoding = v; notifyListeners(); }
+  void setPreferredSubtitleLanguage(String v) { _preferredSubtitleLanguage = v; notifyListeners(); }
+  void setDefaultSubtitleSync(double v) { _defaultSubtitleSync = v; notifyListeners(); }
+  void setSubtitleHwAcceleration(bool v) { _subtitleHwAcceleration = v; notifyListeners(); }
+  void setSubtitleFontsFolder(String v) { _subtitleFontsFolder = v; notifyListeners(); }
+  void setSubtitleItalic(bool v) { _subtitleItalic = v; notifyListeners(); }
+  void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); }
+  void setAudioPlayerEngine(String v) { _audioPlayerEngine = v; notifyListeners(); }
+  void setAudioOutput(String v) { _audioOutput = v; notifyListeners(); }
+  void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); }
+  void setDefaultVolume(double v) { _defaultVolume = v; notifyListeners(); }
+  void setShowVolumePanel(bool v) { _showVolumePanel = v; notifyListeners(); }
+  void setPauseOnHeadphonesDisconnect(bool v) { _pauseOnHeadphonesDisconnect = v; notifyListeners(); }
+  void setFadeInStart(bool v) { _fadeInStart = v; notifyListeners(); }
+  void setFadeInSeek(bool v) { _fadeInSeek = v; notifyListeners(); }
+  void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); }
+  void setBluetoothAudioDelayMs(double v) { _bluetoothAudioDelayMs = v; notifyListeners(); }
+  void setAudioPassthrough(bool v) { _audioPassthrough = v; notifyListeners(); }
+  void setAudioRate(double v) { _audioRate = v; notifyListeners(); }
 }

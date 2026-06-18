@@ -4,8 +4,20 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../providers/settings_provider.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  void dispose() {
+    // حفظ الإعدادات عند الخروج من الشاشة
+    context.read<SettingsProvider>().save();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
