@@ -220,10 +220,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _applyPreferredSubtitleLanguage(settings);
       });
 
-      _player.stream.subtitle.listen((subtitle) {
-        if (!mounted) return;
-        setState(() => _embeddedSubtitleText = subtitle);
-      });
+      _player.stream.subtitle.listen((subtitles) {
+  if (!mounted) return;
+  // media_kit 1.2.6 returns List<String>, take the first entry
+  if (subtitles.isNotEmpty) {
+    setState(() => _embeddedSubtitleText = subtitles.first);
+  } else {
+    setState(() => _embeddedSubtitleText = null);
+  }
+});
 
       try {
         _brightness = await ScreenBrightness.instance.application;
