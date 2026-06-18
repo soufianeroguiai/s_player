@@ -105,11 +105,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   String? _fitOverlayText;
   Timer? _fitOverlayTimer;
 
-  // ──────────────────────────────────────────────────────────
-  // 🎛️ إعدادات إضافية للترجمة
-  // ──────────────────────────────────────────────────────────
-  double _subtitleSync = 0.0; // الإزاحة الزمنية بالثواني (تأخير / تقديم)
-  double _subtitleSpeed = 1.0; // سرعة الترجمة (0.5x - 2.0x)
+  // 🎛️ إعدادات الترجمة (مزامنة، سرعة)
+  double _subtitleSync = 0.0;
+  double _subtitleSpeed = 1.0;
 
   @override
   void initState() {
@@ -186,9 +184,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _player.setRate(_speed);
       _player.setVolume(200.0);
 
-      // تطبيق إعدادات الترجمة على المحرك (إن أمكن)
-      _applySubtitleEngineSettings();
-
       if (settings.rememberPosition) {
         try {
           final saved = await context.read<LibraryProvider>().getPosition(widget.video.path);
@@ -244,18 +239,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         );
         Navigator.pop(context);
       }
-    }
-  }
-
-  /// يطبق إعدادات المزامنة والسرعة على المحرك (mpv)
-  Future<void> _applySubtitleEngineSettings() async {
-    try {
-      // التأخير/التقديم (sub-delay)
-      await _player.setProperty('sub-delay', _subtitleSync);
-      // سرعة الترجمة (sub-speed)
-      await _player.setProperty('sub-speed', _subtitleSpeed);
-    } catch (_) {
-      // تجاهل الأخطاء إذا كانت الخاصية غير مدعومة
     }
   }
 
@@ -435,7 +418,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   // ──────────────────────────────────────────────────────────
-  // 🧩 قائمة الترجمة الرئيسية (بتصميم الحاويات المنفصلة)
+  // 🎛️ قائمة الترجمة الرئيسية (الحاويات المنفصلة)
   // ──────────────────────────────────────────────────────────
   void _showSubtitleMenu() {
     showDialog(
@@ -449,7 +432,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── الحاوية 1: تحميل ترجمة من ملف ──
+              // الحاوية 1: تحميل ترجمة من ملف
               _buildPillContainer(
                 icon: Icons.upload_file,
                 title: 'تحميل ترجمة من ملف...',
@@ -462,7 +445,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
               const SizedBox(height: 12),
 
-              // ── الحاوية 2: الترجمات المدمجة ──
+              // الحاوية 2: الترجمات المدمجة
               if (_subtitleTracks.isNotEmpty) ...[
                 _buildPillContainer(
                   icon: Icons.translate,
@@ -489,7 +472,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 const SizedBox(height: 12),
               ],
 
-              // ── الحاوية 3: إعدادات الترجمة (مزامنة، سرعة، لوحة) ──
+              // الحاوية 3: إعدادات الترجمة (مزامنة، سرعة، لوحة)
               _buildPillContainer(
                 icon: Icons.settings,
                 title: 'إعدادات الترجمة',
@@ -502,7 +485,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
               const SizedBox(height: 12),
 
-              // ── الحاوية 4: تخصيص الترجمة (الخط، الخلفية...) ──
+              // الحاوية 4: تخصيص الترجمة (الخط، اللون، الخلفية)
               _buildPillContainer(
                 icon: Icons.palette,
                 title: 'تخصيص الترجمة',
@@ -519,7 +502,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  /// بناء حاوية على شكل حبة (Pill) شفافة
+  /// حاوية شفافة بشكل حبة دواء
   Widget _buildPillContainer({
     required IconData icon,
     required String title,
@@ -575,7 +558,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   // ──────────────────────────────────────────────────────────
-  // 🎛️ صفحة المزامنة والسرعة واللوحة
+  // 🎛️ المزامنة والسرعة واللوحة
   // ──────────────────────────────────────────────────────────
   void _showSyncSpeedPaletteSheet() {
     showDialog(
@@ -601,10 +584,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   max: 5.0,
                   divisions: 100,
                   label: '${_subtitleSync.toStringAsFixed(1)}s',
-                  onChanged: (v) {
-                    setState(() => _subtitleSync = v);
-                    _applySubtitleEngineSettings();
-                  },
+                  onChanged: (v) => setState(() => _subtitleSync = v),
                   activeColor: Theme.of(context).colorScheme.primary,
                 ),
               ),
@@ -618,15 +598,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   max: 2.0,
                   divisions: 15,
                   label: '${_subtitleSpeed}x',
-                  onChanged: (v) {
-                    setState(() => _subtitleSpeed = v);
-                    _applySubtitleEngineSettings();
-                  },
+                  onChanged: (v) => setState(() => _subtitleSpeed = v),
                   activeColor: Theme.of(context).colorScheme.primary,
                 ),
               ),
               const Divider(color: Colors.white24),
-              // اللوحة (ألوان سريعة)
               const Text('اللوحة السريعة', style: TextStyle(color: Colors.white70, fontSize: 13)),
               const SizedBox(height: 10),
               Wrap(
@@ -656,7 +632,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     return GestureDetector(
       onTap: () {
         context.read<SettingsProvider>().setSubtitleColor(color);
-        // إغلاق النافذة الحالية
         Navigator.pop(context);
       },
       child: Container(
@@ -672,7 +647,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   // ──────────────────────────────────────────────────────────
-  // 🎨 صفحة تخصيص الترجمة (الخط، الخلفية، الظلال، الهوامش)
+  // 🎨 تخصيص الترجمة (الخط، الخلفية، الظلال)
   // ──────────────────────────────────────────────────────────
   void _showSubtitleSettingsSheet() {
     showDialog(
@@ -748,6 +723,70 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       content: ColorPicker(color: tempColor, onColorChanged: (c) => tempColor = c),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')), ElevatedButton(onPressed: () { onSave(tempColor); Navigator.pop(context); }, child: const Text('موافق'))],
     ));
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // 🔊 قائمة الصوت (المفقودة سابقاً)
+  // ──────────────────────────────────────────────────────────
+  Future<void> _showAudioMenu() async {
+    final cs = Theme.of(context).colorScheme;
+    final seen = <String>{}; 
+    final uniqueAudio = <AudioTrack>[];
+    for (final t in _audioTracks) {
+      final k = t.title ?? t.language ?? 'unknown';
+      if (!seen.contains(k)) { seen.add(k); uniqueAudio.add(t); }
+    }
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: EdgeInsets.zero,
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ...uniqueAudio.map((track) {
+              String name = track.title ?? track.language ?? 'مسار صوتي';
+              return ListTile(
+                title: Text(name, style: const TextStyle(color: Colors.white)),
+                subtitle: track.language != null ? Text(track.language!, style: const TextStyle(color: Colors.white54)) : null,
+                trailing: _player.state.track.audio == track ? Icon(Icons.check, color: cs.primary) : null,
+                onTap: () {
+                  _player.setAudioTrack(track);
+                  Navigator.pop(ctx);
+                },
+              );
+            }),
+            const Divider(color: Colors.white24),
+            ListTile(
+              leading: const Icon(Icons.volume_up, color: Colors.white),
+              title: const Text('رفع الصوت (Boost)', style: TextStyle(color: Colors.white)),
+              subtitle: Text('${_audioBoost.round()}%', style: const TextStyle(color: Colors.white54)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showAudioBoostSheet();
+              },
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _showAudioBoostSheet() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(context: context, builder: (_) => StatefulBuilder(builder: (ctx, setSheetState) => Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('تكبير الصوت', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
+        Slider(value: _audioBoost, min: 50, max: 200, onChanged: (v) { 
+          setSheetState(() {}); 
+          setState(() => _audioBoost = v); 
+          _player.setVolume(v);
+        }),
+      ]),
+    )));
   }
 
   String _fmt(Duration d) {
@@ -827,13 +866,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               IconButton(icon: Icon(_isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded, color: Colors.white70), onPressed: _toggleOrientation),
               IconButton(icon: const Icon(Symbols.picture_in_picture_rounded, color: Colors.white70), onPressed: _enterPip),
               IconButton(icon: const Icon(Symbols.graphic_eq_rounded, color: Colors.white70), onPressed: _showAudioMenu),
-              // ── أيقونة الترجمة الوحيدة ──
-              IconButton(
-                icon: Icon(_showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
-                    color: _showSubtitles ? Colors.lightBlue : Colors.white54),
-                onPressed: _showSubtitleMenu,
-                tooltip: 'الترجمة',
-              ),
+              IconButton(icon: Icon(_showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded, color: _showSubtitles ? Colors.lightBlue : Colors.white54), onPressed: _showSubtitleMenu),
             ])))),
             Positioned(bottom: 0, left: 0, right: 0, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.85), Colors.transparent])), child: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 8), child: Row(children: [
               Text(_fmt(_position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
