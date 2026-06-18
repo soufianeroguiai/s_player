@@ -68,9 +68,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   bool _isLandscape = true;
 
+  // وضع ملء الشاشة (Fit / Crop / Stretch)
   int _fitIndex = 0;
   final _fits = [BoxFit.contain, BoxFit.cover, BoxFit.fill];
-  final _fitIcons = [Symbols.fit_screen_rounded, Symbols.crop_rounded, Symbols.stretch_rounded];
+  final _fitIcons = [Symbols.fit_screen_rounded, Symbols.crop_rounded, Symbols.aspect_ratio_rounded];
   final _fitLabels = ['ملاءمة', 'قص', 'تمديد'];
 
   @override
@@ -121,7 +122,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _toggleFit() {
     setState(() {
       _fitIndex = (_fitIndex + 1) % _fits.length;
-      _controller.setFit(_fits[_fitIndex]);
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -600,7 +600,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             onPanUpdate: (d) => _onPanUpdate(d, screenWidth), 
             onPanEnd: _onPanEnd, 
             child: Video(
-              controller: _controller, 
+              controller: _controller,
+              fit: _fits[_fitIndex],
               controls: NoVideoControls,
               subtitleViewConfiguration: SubtitleViewConfiguration(
                 style: TextStyle(fontSize: s.subtitleFontSize, color: s.subtitleColor, fontWeight: FontWeight.normal, backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity)), 
