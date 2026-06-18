@@ -26,6 +26,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _sortDesc = true;
   bool get sortDesc => _sortDesc;
 
+  // إعدادات الترجمة الحالية
   double _subtitleFontSize = 20.0;
   double get subtitleFontSize => _subtitleFontSize;
 
@@ -74,9 +75,33 @@ class SettingsProvider extends ChangeNotifier {
   double _horizontalMargin = 24.0;
   double get horizontalMargin => _horizontalMargin;
 
-  // 🆕 نوع الخط
   String _fontFamily = 'Roboto';
   String get fontFamily => _fontFamily;
+
+  // 🆕 الإعدادات الجديدة للترجمة
+  String _subtitleFolder = '';
+  String get subtitleFolder => _subtitleFolder;
+
+  String _subtitleEncoding = 'UTF-8';
+  String get subtitleEncoding => _subtitleEncoding;
+
+  String _preferredSubtitleLanguage = 'ara';
+  String get preferredSubtitleLanguage => _preferredSubtitleLanguage;
+
+  double _defaultSubtitleSync = 0.0; // مزامنة افتراضية
+  double get defaultSubtitleSync => _defaultSubtitleSync;
+
+  bool _subtitleHwAcceleration = false;
+  bool get subtitleHwAcceleration => _subtitleHwAcceleration;
+
+  String _subtitleFontsFolder = '';
+  String get subtitleFontsFolder => _subtitleFontsFolder;
+
+  bool _subtitleItalic = false;
+  bool get subtitleItalic => _subtitleItalic;
+
+  bool _subtitleRTL = true; // افتراضي RTL للعربية
+  bool get subtitleRTL => _subtitleRTL;
 
   // --- Load ---
   Future<void> load() async {
@@ -100,7 +125,6 @@ class SettingsProvider extends ChangeNotifier {
       _subtitleBgOpacity = p.getDouble('subtitleBgOpacity') ?? 0.4;
       _defaultVolume = p.getDouble('defaultVolume') ?? 1.0;
       _defaultBrightness = p.getDouble('defaultBrightness') ?? 0.7;
-
       _subtitleBgColor = Color(p.getInt('subtitleBgColor') ?? 0xFF000000);
       _outlineColor = Color(p.getInt('outlineColor') ?? 0xFF000000);
       _outlineWidth = p.getDouble('outlineWidth') ?? 2.0;
@@ -113,6 +137,16 @@ class SettingsProvider extends ChangeNotifier {
       _bottomPadding = p.getDouble('bottomPadding') ?? 48.0;
       _horizontalMargin = p.getDouble('horizontalMargin') ?? 24.0;
       _fontFamily = p.getString('fontFamily') ?? 'Roboto';
+
+      // الجديدة
+      _subtitleFolder = p.getString('subtitleFolder') ?? '';
+      _subtitleEncoding = p.getString('subtitleEncoding') ?? 'UTF-8';
+      _preferredSubtitleLanguage = p.getString('preferredSubtitleLanguage') ?? 'ara';
+      _defaultSubtitleSync = p.getDouble('defaultSubtitleSync') ?? 0.0;
+      _subtitleHwAcceleration = p.getBool('subtitleHwAcceleration') ?? false;
+      _subtitleFontsFolder = p.getString('subtitleFontsFolder') ?? '';
+      _subtitleItalic = p.getBool('subtitleItalic') ?? false;
+      _subtitleRTL = p.getBool('subtitleRTL') ?? true;
 
       notifyListeners();
     } catch (e) {
@@ -148,9 +182,18 @@ class SettingsProvider extends ChangeNotifier {
     await p.setDouble('bottomPadding', _bottomPadding);
     await p.setDouble('horizontalMargin', _horizontalMargin);
     await p.setString('fontFamily', _fontFamily);
+    // الجديدة
+    await p.setString('subtitleFolder', _subtitleFolder);
+    await p.setString('subtitleEncoding', _subtitleEncoding);
+    await p.setString('preferredSubtitleLanguage', _preferredSubtitleLanguage);
+    await p.setDouble('defaultSubtitleSync', _defaultSubtitleSync);
+    await p.setBool('subtitleHwAcceleration', _subtitleHwAcceleration);
+    await p.setString('subtitleFontsFolder', _subtitleFontsFolder);
+    await p.setBool('subtitleItalic', _subtitleItalic);
+    await p.setBool('subtitleRTL', _subtitleRTL);
   }
 
-  // Setters
+  // Setters القديمة + الجديدة
   void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
   void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
   void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
@@ -174,4 +217,14 @@ class SettingsProvider extends ChangeNotifier {
   void setBottomPadding(double v) { _bottomPadding = v; notifyListeners(); _save(); }
   void setHorizontalMargin(double v) { _horizontalMargin = v; notifyListeners(); _save(); }
   void setFontFamily(String v) { _fontFamily = v; notifyListeners(); _save(); }
+
+  // جديد
+  void setSubtitleFolder(String v) { _subtitleFolder = v; notifyListeners(); _save(); }
+  void setSubtitleEncoding(String v) { _subtitleEncoding = v; notifyListeners(); _save(); }
+  void setPreferredSubtitleLanguage(String v) { _preferredSubtitleLanguage = v; notifyListeners(); _save(); }
+  void setDefaultSubtitleSync(double v) { _defaultSubtitleSync = v; notifyListeners(); _save(); }
+  void setSubtitleHwAcceleration(bool v) { _subtitleHwAcceleration = v; notifyListeners(); _save(); }
+  void setSubtitleFontsFolder(String v) { _subtitleFontsFolder = v; notifyListeners(); _save(); }
+  void setSubtitleItalic(bool v) { _subtitleItalic = v; notifyListeners(); _save(); }
+  void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); _save(); }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../providers/settings_provider.dart';
 
@@ -33,10 +34,51 @@ class SettingsScreen extends StatelessWidget {
               subtitle: '${s.defaultSpeed}x', onTap: () => _speedPicker(context, s)),
         ]),
         const SizedBox(height: 20),
+        // 📝 قسم الترجمة الموسع
         _header(context, 'الترجمة', Symbols.subtitles_rounded),
         _card(context, [
           _switch(context, icon: Symbols.subtitles_rounded, title: 'إظهار الترجمة تلقائياً',
               subtitle: 'تفعيل عند بدء التشغيل', value: s.showSubtitlesByDefault, onChanged: s.setShowSubtitlesByDefault),
+          _divider(),
+          // مجلد الترجمة
+          _choice(context, icon: Symbols.folder_open_rounded, title: 'مجلد الترجمة',
+              subtitle: s.subtitleFolder.isEmpty ? 'غير محدد' : s.subtitleFolder,
+              onTap: () async {
+                final result = await FilePicker.platform.getDirectoryPath();
+                if (result != null) s.setSubtitleFolder(result);
+              }),
+          _divider(),
+          // ترميز الأحرف
+          _choice(context, icon: Symbols.text_fields_rounded, title: 'ترميز الأحرف',
+              subtitle: s.subtitleEncoding, onTap: () => _encodingPicker(context, s)),
+          _divider(),
+          // لغة الترجمة المفضلة
+          _choice(context, icon: Symbols.language_rounded, title: 'لغة الترجمة المفضلة',
+              subtitle: _languageName(s.preferredSubtitleLanguage), onTap: () => _languagePicker(context, s)),
+          _divider(),
+          // مزامنة افتراضية
+          _choice(context, icon: Symbols.timeline_rounded, title: 'مزامنة افتراضية',
+              subtitle: '${s.defaultSubtitleSync.toStringAsFixed(1)} ثانية', onTap: () => _syncDialog(context, s)),
+          _divider(),
+          // تسريع HW للترجمة
+          _switch(context, icon: Symbols.speed_rounded, title: 'تسريع HW للترجمة',
+              subtitle: 'استخدام عتاد الجهاز لتحسين الترجمة', value: s.subtitleHwAcceleration, onChanged: s.setSubtitleHwAcceleration),
+          _divider(),
+          // مجلد الخطوط
+          _choice(context, icon: Symbols.folder_rounded, title: 'مجلد الخطوط',
+              subtitle: s.subtitleFontsFolder.isEmpty ? 'افتراضي' : s.subtitleFontsFolder,
+              onTap: () async {
+                final result = await FilePicker.platform.getDirectoryPath();
+                if (result != null) s.setSubtitleFontsFolder(result);
+              }),
+          _divider(),
+          // تأثير مائل
+          _switch(context, icon: Symbols.format_italic_rounded, title: 'تأثير مائل',
+              subtitle: 'تفعيل الخط المائل للترجمة', value: s.subtitleItalic, onChanged: s.setSubtitleItalic),
+          _divider(),
+          // الاتجاه RTL
+          _switch(context, icon: Symbols.format_textdirection_r_to_l_rounded, title: 'اتجاه النص',
+              subtitle: s.subtitleRTL ? 'من اليمين إلى اليسار' : 'من اليسار إلى اليمين', value: s.subtitleRTL, onChanged: s.setSubtitleRTL),
         ]),
         const SizedBox(height: 20),
         _header(context, 'المكتبة', Symbols.video_library_rounded),
@@ -58,7 +100,7 @@ class SettingsScreen extends StatelessWidget {
               decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
               child: Icon(Symbols.play_arrow_rounded, color: Theme.of(context).colorScheme.onPrimaryContainer)),
             title: const Text('SR Player', style: TextStyle(fontWeight: FontWeight.w700)),
-subtitle: const Text('الإصدار 1.0.0'),
+            subtitle: const Text('الإصدار 1.0.0'),
           ),
         ]),
         const SizedBox(height: 32),
@@ -66,6 +108,93 @@ subtitle: const Text('الإصدار 1.0.0'),
     );
   }
 
+  // وظائف مساعدة لاختيار الترميز واللغة
+  void _encodingPicker(BuildContext ctx, SettingsProvider s) {
+    final encodings = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
+    showDialog(
+      context: ctx,
+      builder: (context) => AlertDialog(
+        title: const Text('اختر ترميز الأحرف'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: encodings.map((enc) => RadioListTile<String>(
+              title: Text(enc),
+              value: enc,
+              groupValue: s.subtitleEncoding,
+              onChanged: (v) { s.setSubtitleEncoding(v!); Navigator.pop(context); },
+            )).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _languagePicker(BuildContext ctx, SettingsProvider s) {
+    final languages = {
+      'ara': 'العربية',
+      'eng': 'الإنجليزية',
+      'fra': 'الفرنسية',
+      'spa': 'الإسبانية',
+      'deu': 'الألمانية',
+      'ita': 'الإيطالية',
+    };
+    showDialog(
+      context: ctx,
+      builder: (context) => AlertDialog(
+        title: const Text('اختر اللغة المفضلة'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: languages.entries.map((e) => RadioListTile<String>(
+              title: Text(e.value),
+              value: e.key,
+              groupValue: s.preferredSubtitleLanguage,
+              onChanged: (v) { s.setPreferredSubtitleLanguage(v!); Navigator.pop(context); },
+            )).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _syncDialog(BuildContext ctx, SettingsProvider s) {
+    TextEditingController controller = TextEditingController(text: s.defaultSubtitleSync.toStringAsFixed(1));
+    showDialog(
+      context: ctx,
+      builder: (context) => AlertDialog(
+        title: const Text('المزامنة الافتراضية (ثواني)'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(hintText: 'مثال: -0.5 أو 1.0'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () {
+            final value = double.tryParse(controller.text);
+            if (value != null) s.setDefaultSubtitleSync(value);
+            Navigator.pop(context);
+          }, child: const Text('موافق')),
+        ],
+      ),
+    );
+  }
+
+  String _languageName(String code) {
+    const langs = {
+      'ara': 'العربية',
+      'eng': 'الإنجليزية',
+      'fra': 'الفرنسية',
+      'spa': 'الإسبانية',
+      'deu': 'الألمانية',
+      'ita': 'الإيطالية',
+    };
+    return langs[code] ?? code.toUpperCase();
+  }
+
+  // الدوال المساعدة الحالية (مثل _header, _card, _switch, _choice, _themePicker, _speedPicker, _sortPicker, ...)
+  // تبقى كما هي من النسخة السابقة.
   String _themeName(ThemeMode m) => switch(m) {
     ThemeMode.dark => 'داكن', ThemeMode.light => 'فاتح', ThemeMode.system => 'تلقائي',
   };
