@@ -34,13 +34,50 @@ class SettingsScreen extends StatelessWidget {
               subtitle: '${s.defaultSpeed}x', onTap: () => _speedPicker(context, s)),
         ]),
         const SizedBox(height: 20),
-        // 📝 قسم الترجمة الموسع
+        _header(context, 'الصوت', Symbols.graphic_eq_rounded),
+        _card(context, [
+          _choice(context, icon: Symbols.audio_file_rounded, title: 'مشغل الصوت',
+              subtitle: s.audioPlayerEngine, onTap: () {}),
+          _divider(),
+          _choice(context, icon: Symbols.speaker_group_rounded, title: 'مخرج الصوت',
+              subtitle: s.audioOutput, onTap: () => _audioOutputPicker(context, s)),
+          _divider(),
+          _choice(context, icon: Symbols.volume_up_rounded, title: 'تضخيم الصوت الافتراضي',
+              subtitle: '${s.defaultAudioBoost.round()}%', onTap: () => _boostDialog(context, s)),
+          _divider(),
+          _choice(context, icon: Symbols.volume_down_rounded, title: 'مستوى الصوت الافتراضي',
+              subtitle: '${(s.defaultVolume * 100).round()}%', onTap: () => _volumeDialog(context, s)),
+          _divider(),
+          _switch(context, icon: Symbols.picture_in_picture_rounded, title: 'لوحة حجم الصوت',
+              subtitle: 'إظهار مؤشر الصوت أثناء التغيير', value: s.showVolumePanel, onChanged: s.setShowVolumePanel),
+          _divider(),
+          _switch(context, icon: Symbols.headphones_rounded, title: 'إيقاف عند فصل السماعات',
+              subtitle: 'إيقاف التشغيل مؤقتاً عند نزع السماعات', value: s.pauseOnHeadphonesDisconnect, onChanged: s.setPauseOnHeadphonesDisconnect),
+          _divider(),
+          _switch(context, icon: Symbols.waves_rounded, title: 'تلاشي في بداية التشغيل',
+              subtitle: 'تأثير fade-in عند البدء', value: s.fadeInStart, onChanged: s.setFadeInStart),
+          _divider(),
+          _switch(context, icon: Symbols.search_rounded, title: 'تلاشي عند البحث',
+              subtitle: 'تأثير fade-in عند التقديم/التأخير', value: s.fadeInSeek, onChanged: s.setFadeInSeek),
+          _divider(),
+          _choice(context, icon: Symbols.language_rounded, title: 'لغة الصوت المفضلة',
+              subtitle: _langName(s.preferredAudioLanguage), onTap: () => _audioLanguagePicker(context, s)),
+          _divider(),
+          _choice(context, icon: Symbols.bluetooth_connected_rounded, title: 'تأخير صوت البلوتوث',
+              subtitle: '${s.bluetoothAudioDelayMs.round()} ميلي ثانية', onTap: () => _btDelayDialog(context, s)),
+          _divider(),
+          _switch(context, icon: Symbols.cable_rounded, title: 'عبور الصوت (HDMI/USB)',
+              subtitle: 'تمكين خرج الصوت الرقمي', value: s.audioPassthrough, onChanged: s.setAudioPassthrough),
+          _divider(),
+          _choice(context, icon: Symbols.speed_rounded, title: 'معدل الصوت',
+              subtitle: '${s.audioRate}x', onTap: () => _audioRatePicker(context, s)),
+        ]),
+        const SizedBox(height: 20),
         _header(context, 'الترجمة', Symbols.subtitles_rounded),
         _card(context, [
           _switch(context, icon: Symbols.subtitles_rounded, title: 'إظهار الترجمة تلقائياً',
               subtitle: 'تفعيل عند بدء التشغيل', value: s.showSubtitlesByDefault, onChanged: s.setShowSubtitlesByDefault),
           _divider(),
-          // مجلد الترجمة
           _choice(context, icon: Symbols.folder_open_rounded, title: 'مجلد الترجمة',
               subtitle: s.subtitleFolder.isEmpty ? 'غير محدد' : s.subtitleFolder,
               onTap: () async {
@@ -48,23 +85,18 @@ class SettingsScreen extends StatelessWidget {
                 if (result != null) s.setSubtitleFolder(result);
               }),
           _divider(),
-          // ترميز الأحرف
           _choice(context, icon: Symbols.text_fields_rounded, title: 'ترميز الأحرف',
               subtitle: s.subtitleEncoding, onTap: () => _encodingPicker(context, s)),
           _divider(),
-          // لغة الترجمة المفضلة
           _choice(context, icon: Symbols.language_rounded, title: 'لغة الترجمة المفضلة',
-              subtitle: _languageName(s.preferredSubtitleLanguage), onTap: () => _languagePicker(context, s)),
+              subtitle: _langName(s.preferredSubtitleLanguage), onTap: () => _subtitleLanguagePicker(context, s)),
           _divider(),
-          // مزامنة افتراضية
           _choice(context, icon: Symbols.timeline_rounded, title: 'مزامنة افتراضية',
               subtitle: '${s.defaultSubtitleSync.toStringAsFixed(1)} ثانية', onTap: () => _syncDialog(context, s)),
           _divider(),
-          // تسريع HW للترجمة
           _switch(context, icon: Symbols.speed_rounded, title: 'تسريع HW للترجمة',
               subtitle: 'استخدام عتاد الجهاز لتحسين الترجمة', value: s.subtitleHwAcceleration, onChanged: s.setSubtitleHwAcceleration),
           _divider(),
-          // مجلد الخطوط
           _choice(context, icon: Symbols.folder_rounded, title: 'مجلد الخطوط',
               subtitle: s.subtitleFontsFolder.isEmpty ? 'افتراضي' : s.subtitleFontsFolder,
               onTap: () async {
@@ -72,11 +104,9 @@ class SettingsScreen extends StatelessWidget {
                 if (result != null) s.setSubtitleFontsFolder(result);
               }),
           _divider(),
-          // تأثير مائل
           _switch(context, icon: Symbols.format_italic_rounded, title: 'تأثير مائل',
               subtitle: 'تفعيل الخط المائل للترجمة', value: s.subtitleItalic, onChanged: s.setSubtitleItalic),
           _divider(),
-          // الاتجاه RTL
           _switch(context, icon: Symbols.format_textdirection_r_to_l_rounded, title: 'اتجاه النص',
               subtitle: s.subtitleRTL ? 'من اليمين إلى اليسار' : 'من اليسار إلى اليمين', value: s.subtitleRTL, onChanged: s.setSubtitleRTL),
         ]),
@@ -108,52 +138,130 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // وظائف مساعدة لاختيار الترميز واللغة
-  void _encodingPicker(BuildContext ctx, SettingsProvider s) {
-    final encodings = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
+  // --- دوال اختيار القيم (نوافذ منبثقة) ---
+  void _audioOutputPicker(BuildContext ctx, SettingsProvider s) {
+    final outputs = ['auto', 'speaker', 'headphones', 'bluetooth'];
     showDialog(
       context: ctx,
-      builder: (context) => AlertDialog(
-        title: const Text('اختر ترميز الأحرف'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: encodings.map((enc) => RadioListTile<String>(
-              title: Text(enc),
-              value: enc,
-              groupValue: s.subtitleEncoding,
-              onChanged: (v) { s.setSubtitleEncoding(v!); Navigator.pop(context); },
-            )).toList(),
-          ),
-        ),
+      builder: (context) => SimpleDialog(
+        title: const Text('اختر مخرج الصوت'),
+        children: outputs.map((out) => RadioListTile<String>(
+          title: Text(out),
+          value: out,
+          groupValue: s.audioOutput,
+          onChanged: (v) { s.setAudioOutput(v!); Navigator.pop(context); },
+        )).toList(),
       ),
     );
   }
 
-  void _languagePicker(BuildContext ctx, SettingsProvider s) {
-    final languages = {
-      'ara': 'العربية',
-      'eng': 'الإنجليزية',
-      'fra': 'الفرنسية',
-      'spa': 'الإسبانية',
-      'deu': 'الألمانية',
-      'ita': 'الإيطالية',
-    };
+  void _boostDialog(BuildContext ctx, SettingsProvider s) {
     showDialog(
       context: ctx,
       builder: (context) => AlertDialog(
-        title: const Text('اختر اللغة المفضلة'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: languages.entries.map((e) => RadioListTile<String>(
-              title: Text(e.value),
-              value: e.key,
-              groupValue: s.preferredSubtitleLanguage,
-              onChanged: (v) { s.setPreferredSubtitleLanguage(v!); Navigator.pop(context); },
-            )).toList(),
-          ),
+        title: const Text('تضخيم الصوت الافتراضي (%)'),
+        content: Slider(
+          value: s.defaultAudioBoost,
+          min: 50, max: 200, divisions: 30,
+          label: '${s.defaultAudioBoost.round()}%',
+          onChanged: (v) => s.setDefaultAudioBoost(v),
         ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('موافق'))],
+      ),
+    );
+  }
+
+  void _volumeDialog(BuildContext ctx, SettingsProvider s) {
+    showDialog(
+      context: ctx,
+      builder: (context) => AlertDialog(
+        title: const Text('مستوى الصوت الافتراضي (%)'),
+        content: Slider(
+          value: s.defaultVolume * 100,
+          min: 0, max: 100,
+          onChanged: (v) => s.setDefaultVolume(v / 100),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('موافق'))],
+      ),
+    );
+  }
+
+  void _audioLanguagePicker(BuildContext ctx, SettingsProvider s) {
+    final langs = {'ara':'العربية', 'eng':'الإنجليزية', 'fra':'الفرنسية', 'spa':'الإسبانية'};
+    showDialog(
+      context: ctx,
+      builder: (context) => SimpleDialog(
+        title: const Text('اختر لغة الصوت المفضلة'),
+        children: langs.entries.map((e) => RadioListTile<String>(
+          title: Text(e.value),
+          value: e.key,
+          groupValue: s.preferredAudioLanguage,
+          onChanged: (v) { s.setPreferredAudioLanguage(v!); Navigator.pop(context); },
+        )).toList(),
+      ),
+    );
+  }
+
+  void _btDelayDialog(BuildContext ctx, SettingsProvider s) {
+    showDialog(
+      context: ctx,
+      builder: (context) => AlertDialog(
+        title: const Text('تأخير البلوتوث (ميلي ثانية)'),
+        content: Slider(
+          value: s.bluetoothAudioDelayMs,
+          min: 0, max: 500, divisions: 50,
+          label: '${s.bluetoothAudioDelayMs.round()} ms',
+          onChanged: (v) => s.setBluetoothAudioDelayMs(v),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('موافق'))],
+      ),
+    );
+  }
+
+  void _audioRatePicker(BuildContext ctx, SettingsProvider s) {
+    final rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    showDialog(
+      context: ctx,
+      builder: (context) => SimpleDialog(
+        title: const Text('اختر معدل الصوت'),
+        children: rates.map((r) => RadioListTile<double>(
+          title: Text('${r}x'),
+          value: r,
+          groupValue: s.audioRate,
+          onChanged: (v) { s.setAudioRate(v!); Navigator.pop(context); },
+        )).toList(),
+      ),
+    );
+  }
+
+  void _encodingPicker(BuildContext ctx, SettingsProvider s) {
+    final encodings = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
+    showDialog(
+      context: ctx,
+      builder: (context) => SimpleDialog(
+        title: const Text('اختر ترميز الأحرف'),
+        children: encodings.map((enc) => RadioListTile<String>(
+          title: Text(enc),
+          value: enc,
+          groupValue: s.subtitleEncoding,
+          onChanged: (v) { s.setSubtitleEncoding(v!); Navigator.pop(context); },
+        )).toList(),
+      ),
+    );
+  }
+
+  void _subtitleLanguagePicker(BuildContext ctx, SettingsProvider s) {
+    final langs = {'ara':'العربية', 'eng':'الإنجليزية', 'fra':'الفرنسية', 'spa':'الإسبانية', 'deu':'الألمانية', 'ita':'الإيطالية'};
+    showDialog(
+      context: ctx,
+      builder: (context) => SimpleDialog(
+        title: const Text('اختر لغة الترجمة المفضلة'),
+        children: langs.entries.map((e) => RadioListTile<String>(
+          title: Text(e.value),
+          value: e.key,
+          groupValue: s.preferredSubtitleLanguage,
+          onChanged: (v) { s.setPreferredSubtitleLanguage(v!); Navigator.pop(context); },
+        )).toList(),
       ),
     );
   }
@@ -181,20 +289,11 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  String _languageName(String code) {
-    const langs = {
-      'ara': 'العربية',
-      'eng': 'الإنجليزية',
-      'fra': 'الفرنسية',
-      'spa': 'الإسبانية',
-      'deu': 'الألمانية',
-      'ita': 'الإيطالية',
-    };
-    return langs[code] ?? code.toUpperCase();
+  String _langName(String code) {
+    const names = {'ara':'العربية', 'eng':'الإنجليزية', 'fra':'الفرنسية', 'spa':'الإسبانية', 'deu':'الألمانية', 'ita':'الإيطالية'};
+    return names[code] ?? code.toUpperCase();
   }
 
-  // الدوال المساعدة الحالية (مثل _header, _card, _switch, _choice, _themePicker, _speedPicker, _sortPicker, ...)
-  // تبقى كما هي من النسخة السابقة.
   String _themeName(ThemeMode m) => switch(m) {
     ThemeMode.dark => 'داكن', ThemeMode.light => 'فاتح', ThemeMode.system => 'تلقائي',
   };

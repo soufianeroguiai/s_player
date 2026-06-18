@@ -26,7 +26,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _sortDesc = true;
   bool get sortDesc => _sortDesc;
 
-  // إعدادات الترجمة الحالية
+  // 📝 تخصيص الترجمة
   double _subtitleFontSize = 20.0;
   double get subtitleFontSize => _subtitleFontSize;
 
@@ -35,12 +35,6 @@ class SettingsProvider extends ChangeNotifier {
 
   double _subtitleBgOpacity = 0.4;
   double get subtitleBgOpacity => _subtitleBgOpacity;
-
-  double _defaultVolume = 1.0;
-  double get defaultVolume => _defaultVolume;
-
-  double _defaultBrightness = 0.7;
-  double get defaultBrightness => _defaultBrightness;
 
   Color _subtitleBgColor = const Color(0xFF000000);
   Color get subtitleBgColor => _subtitleBgColor;
@@ -78,7 +72,7 @@ class SettingsProvider extends ChangeNotifier {
   String _fontFamily = 'Roboto';
   String get fontFamily => _fontFamily;
 
-  // 🆕 الإعدادات الجديدة للترجمة
+  // 🆕 إعدادات ترجمة متقدمة
   String _subtitleFolder = '';
   String get subtitleFolder => _subtitleFolder;
 
@@ -88,7 +82,7 @@ class SettingsProvider extends ChangeNotifier {
   String _preferredSubtitleLanguage = 'ara';
   String get preferredSubtitleLanguage => _preferredSubtitleLanguage;
 
-  double _defaultSubtitleSync = 0.0; // مزامنة افتراضية
+  double _defaultSubtitleSync = 0.0;
   double get defaultSubtitleSync => _defaultSubtitleSync;
 
   bool _subtitleHwAcceleration = false;
@@ -100,8 +94,45 @@ class SettingsProvider extends ChangeNotifier {
   bool _subtitleItalic = false;
   bool get subtitleItalic => _subtitleItalic;
 
-  bool _subtitleRTL = true; // افتراضي RTL للعربية
+  bool _subtitleRTL = true;
   bool get subtitleRTL => _subtitleRTL;
+
+  // 🔊 إعدادات الصوت
+  String _audioPlayerEngine = 'media_kit';
+  String get audioPlayerEngine => _audioPlayerEngine;
+
+  String _audioOutput = 'auto';
+  String get audioOutput => _audioOutput;
+
+  double _defaultAudioBoost = 100.0;
+  double get defaultAudioBoost => _defaultAudioBoost;
+
+  double _defaultVolume = 1.0;
+  double get defaultVolume => _defaultVolume;
+
+  bool _showVolumePanel = true;
+  bool get showVolumePanel => _showVolumePanel;
+
+  bool _pauseOnHeadphonesDisconnect = false;
+  bool get pauseOnHeadphonesDisconnect => _pauseOnHeadphonesDisconnect;
+
+  bool _fadeInStart = false;
+  bool get fadeInStart => _fadeInStart;
+
+  bool _fadeInSeek = false;
+  bool get fadeInSeek => _fadeInSeek;
+
+  String _preferredAudioLanguage = 'ara';
+  String get preferredAudioLanguage => _preferredAudioLanguage;
+
+  double _bluetoothAudioDelayMs = 0.0;
+  double get bluetoothAudioDelayMs => _bluetoothAudioDelayMs;
+
+  bool _audioPassthrough = false;
+  bool get audioPassthrough => _audioPassthrough;
+
+  double _audioRate = 1.0;
+  double get audioRate => _audioRate;
 
   // --- Load ---
   Future<void> load() async {
@@ -123,8 +154,6 @@ class SettingsProvider extends ChangeNotifier {
       _subtitleFontSize = p.getDouble('subtitleFontSize') ?? 20.0;
       _subtitleColorValue = p.getInt('subtitleColorValue') ?? 0xFFFFFFFF;
       _subtitleBgOpacity = p.getDouble('subtitleBgOpacity') ?? 0.4;
-      _defaultVolume = p.getDouble('defaultVolume') ?? 1.0;
-      _defaultBrightness = p.getDouble('defaultBrightness') ?? 0.7;
       _subtitleBgColor = Color(p.getInt('subtitleBgColor') ?? 0xFF000000);
       _outlineColor = Color(p.getInt('outlineColor') ?? 0xFF000000);
       _outlineWidth = p.getDouble('outlineWidth') ?? 2.0;
@@ -138,7 +167,6 @@ class SettingsProvider extends ChangeNotifier {
       _horizontalMargin = p.getDouble('horizontalMargin') ?? 24.0;
       _fontFamily = p.getString('fontFamily') ?? 'Roboto';
 
-      // الجديدة
       _subtitleFolder = p.getString('subtitleFolder') ?? '';
       _subtitleEncoding = p.getString('subtitleEncoding') ?? 'UTF-8';
       _preferredSubtitleLanguage = p.getString('preferredSubtitleLanguage') ?? 'ara';
@@ -147,6 +175,19 @@ class SettingsProvider extends ChangeNotifier {
       _subtitleFontsFolder = p.getString('subtitleFontsFolder') ?? '';
       _subtitleItalic = p.getBool('subtitleItalic') ?? false;
       _subtitleRTL = p.getBool('subtitleRTL') ?? true;
+
+      _audioPlayerEngine = p.getString('audioPlayerEngine') ?? 'media_kit';
+      _audioOutput = p.getString('audioOutput') ?? 'auto';
+      _defaultAudioBoost = p.getDouble('defaultAudioBoost') ?? 100.0;
+      _defaultVolume = p.getDouble('defaultVolume') ?? 1.0;
+      _showVolumePanel = p.getBool('showVolumePanel') ?? true;
+      _pauseOnHeadphonesDisconnect = p.getBool('pauseOnHeadphonesDisconnect') ?? false;
+      _fadeInStart = p.getBool('fadeInStart') ?? false;
+      _fadeInSeek = p.getBool('fadeInSeek') ?? false;
+      _preferredAudioLanguage = p.getString('preferredAudioLanguage') ?? 'ara';
+      _bluetoothAudioDelayMs = p.getDouble('bluetoothAudioDelayMs') ?? 0.0;
+      _audioPassthrough = p.getBool('audioPassthrough') ?? false;
+      _audioRate = p.getDouble('audioRate') ?? 1.0;
 
       notifyListeners();
     } catch (e) {
@@ -168,8 +209,6 @@ class SettingsProvider extends ChangeNotifier {
     await p.setDouble('subtitleFontSize', _subtitleFontSize);
     await p.setInt('subtitleColorValue', _subtitleColorValue);
     await p.setDouble('subtitleBgOpacity', _subtitleBgOpacity);
-    await p.setDouble('defaultVolume', _defaultVolume);
-    await p.setDouble('defaultBrightness', _defaultBrightness);
     await p.setInt('subtitleBgColor', _subtitleBgColor.value);
     await p.setInt('outlineColor', _outlineColor.value);
     await p.setDouble('outlineWidth', _outlineWidth);
@@ -182,7 +221,7 @@ class SettingsProvider extends ChangeNotifier {
     await p.setDouble('bottomPadding', _bottomPadding);
     await p.setDouble('horizontalMargin', _horizontalMargin);
     await p.setString('fontFamily', _fontFamily);
-    // الجديدة
+
     await p.setString('subtitleFolder', _subtitleFolder);
     await p.setString('subtitleEncoding', _subtitleEncoding);
     await p.setString('preferredSubtitleLanguage', _preferredSubtitleLanguage);
@@ -191,9 +230,22 @@ class SettingsProvider extends ChangeNotifier {
     await p.setString('subtitleFontsFolder', _subtitleFontsFolder);
     await p.setBool('subtitleItalic', _subtitleItalic);
     await p.setBool('subtitleRTL', _subtitleRTL);
+
+    await p.setString('audioPlayerEngine', _audioPlayerEngine);
+    await p.setString('audioOutput', _audioOutput);
+    await p.setDouble('defaultAudioBoost', _defaultAudioBoost);
+    await p.setDouble('defaultVolume', _defaultVolume);
+    await p.setBool('showVolumePanel', _showVolumePanel);
+    await p.setBool('pauseOnHeadphonesDisconnect', _pauseOnHeadphonesDisconnect);
+    await p.setBool('fadeInStart', _fadeInStart);
+    await p.setBool('fadeInSeek', _fadeInSeek);
+    await p.setString('preferredAudioLanguage', _preferredAudioLanguage);
+    await p.setDouble('bluetoothAudioDelayMs', _bluetoothAudioDelayMs);
+    await p.setBool('audioPassthrough', _audioPassthrough);
+    await p.setDouble('audioRate', _audioRate);
   }
 
-  // Setters القديمة + الجديدة
+  // Setters
   void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
   void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
   void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
@@ -205,8 +257,6 @@ class SettingsProvider extends ChangeNotifier {
   void setSubtitleFontSize(double v) { _subtitleFontSize = v; notifyListeners(); _save(); }
   void setSubtitleColor(Color c) { _subtitleColorValue = c.value; notifyListeners(); _save(); }
   void setSubtitleBgOpacity(double v) { _subtitleBgOpacity = v; notifyListeners(); _save(); }
-  void setDefaultVolume(double v) { _defaultVolume = v; notifyListeners(); _save(); }
-  void setDefaultBrightness(double v) { _defaultBrightness = v; notifyListeners(); _save(); }
   void setSubtitleBgColor(Color c) { _subtitleBgColor = c; notifyListeners(); _save(); }
   void setOutlineColor(Color c) { _outlineColor = c; notifyListeners(); _save(); }
   void setOutlineWidth(double v) { _outlineWidth = v; notifyListeners(); _save(); }
@@ -217,8 +267,6 @@ class SettingsProvider extends ChangeNotifier {
   void setBottomPadding(double v) { _bottomPadding = v; notifyListeners(); _save(); }
   void setHorizontalMargin(double v) { _horizontalMargin = v; notifyListeners(); _save(); }
   void setFontFamily(String v) { _fontFamily = v; notifyListeners(); _save(); }
-
-  // جديد
   void setSubtitleFolder(String v) { _subtitleFolder = v; notifyListeners(); _save(); }
   void setSubtitleEncoding(String v) { _subtitleEncoding = v; notifyListeners(); _save(); }
   void setPreferredSubtitleLanguage(String v) { _preferredSubtitleLanguage = v; notifyListeners(); _save(); }
@@ -227,4 +275,16 @@ class SettingsProvider extends ChangeNotifier {
   void setSubtitleFontsFolder(String v) { _subtitleFontsFolder = v; notifyListeners(); _save(); }
   void setSubtitleItalic(bool v) { _subtitleItalic = v; notifyListeners(); _save(); }
   void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); _save(); }
+  void setAudioPlayerEngine(String v) { _audioPlayerEngine = v; notifyListeners(); _save(); }
+  void setAudioOutput(String v) { _audioOutput = v; notifyListeners(); _save(); }
+  void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); _save(); }
+  void setDefaultVolume(double v) { _defaultVolume = v; notifyListeners(); _save(); }
+  void setShowVolumePanel(bool v) { _showVolumePanel = v; notifyListeners(); _save(); }
+  void setPauseOnHeadphonesDisconnect(bool v) { _pauseOnHeadphonesDisconnect = v; notifyListeners(); _save(); }
+  void setFadeInStart(bool v) { _fadeInStart = v; notifyListeners(); _save(); }
+  void setFadeInSeek(bool v) { _fadeInSeek = v; notifyListeners(); _save(); }
+  void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); _save(); }
+  void setBluetoothAudioDelayMs(double v) { _bluetoothAudioDelayMs = v; notifyListeners(); _save(); }
+  void setAudioPassthrough(bool v) { _audioPassthrough = v; notifyListeners(); _save(); }
+  void setAudioRate(double v) { _audioRate = v; notifyListeners(); _save(); }
 }
