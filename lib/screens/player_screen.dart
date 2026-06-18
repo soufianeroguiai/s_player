@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
@@ -17,6 +18,45 @@ import '../providers/settings_provider.dart';
 import '../services/subtitle_service.dart';
 import '../services/pip_service.dart';
 import 'info_screen.dart';
+
+// ──────────────────────────────────────────────────────────
+// 📺 أوضاع ملء الشاشة (Fit / Crop / Stretch)
+// ──────────────────────────────────────────────────────────
+enum VideoFitMode { contain, cover, fill }
+
+BoxFit getBoxFit(VideoFitMode mode) {
+  switch (mode) {
+    case VideoFitMode.contain: return BoxFit.contain;
+    case VideoFitMode.cover:   return BoxFit.cover;
+    case VideoFitMode.fill:    return BoxFit.fill;
+  }
+}
+
+String modeName(VideoFitMode mode) {
+  switch (mode) {
+    case VideoFitMode.contain: return '📺 Fit';
+    case VideoFitMode.cover:   return '🔳 Crop';
+    case VideoFitMode.fill:    return '📐 Stretch';
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// 💾 حفظ واسترجاع وضع الملء
+// ──────────────────────────────────────────────────────────
+class VideoFitSettings {
+  static const _key = 'video_fit_mode';
+
+  static Future<void> save(VideoFitMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_key, mode.index);
+  }
+
+  static Future<VideoFitMode> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final index = prefs.getInt(_key) ?? 0;
+    return VideoFitMode.values[index];
+  }
+}
 
 class PlayerScreen extends StatefulWidget {
   final VideoItem video;
@@ -68,11 +108,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   bool _isLandscape = true;
 
-  // وضع ملء الشاشة (Fit / Crop / Stretch)
-  int _fitIndex = 0;
-  final _fits = [BoxFit.contain, BoxFit.cover, BoxFit.fill];
-  final _fitIcons = [Symbols.fit_screen_rounded, Symbols.crop_rounded, Symbols.aspect_ratio_rounded];
-  final _fitLabels = ['ملاءمة', 'قص', 'تمديد'];
+  // 🎞️ وضع الملء الحالي
+  VideoFitMode _fitMode = VideoFitMode.contain;
+  // 🏷️ Overlay وضع الملء (يختفي بعد 1.2 ثانية)
+  String? _fitOverlayText;
+  Timer? _fitOverlayTimer;
 
   @override
   void initState() {
@@ -89,6 +129,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _controller = VideoController(_player);
 
     _initPlayer();
+    _loadFitMode();
+  }
+
+  Future<void> _loadFitMode() async {
+    _fitMode = await VideoFitSettings.load();
+    if (mounted) setState(() {});
   }
 
   void _enterFullscreen() {
@@ -121,17 +167,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _toggleFit() {
     setState(() {
-      _fitIndex = (_fitIndex + 1) % _fits.length;
+      _fitMode = VideoFitMode.values[(_fitMode.index + 1) % VideoFitMode.values.length];
+      _showFitOverlay();
     });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_fitLabels[_fitIndex]),
-          duration: const Duration(milliseconds: 800),
-          backgroundColor: Colors.black54,
-        ),
-      );
-    }
+    VideoFitSettings.save(_fitMode);
+  }
+
+  void _showFitOverlay() {
+    _fitOverlayText = modeName(_fitMode);
+    _fitOverlayTimer?.cancel();
+    _fitOverlayTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) setState(() => _fitOverlayText = null);
+    });
   }
 
   Future<void> _initPlayer() async {
@@ -140,7 +187,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       await _player.open(Media(widget.video.path), play: settings.autoPlay);
       _player.setRate(_speed);
-      // تعيين الصوت الداخلي (0-100)
       _player.setVolume(_volume * 100);
 
       if (settings.rememberPosition) {
@@ -179,7 +225,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       });
 
-      // سطوع التطبيق
       try {
         _brightness = await ScreenBrightness.instance.application;
         await ScreenBrightness.instance.setApplicationScreenBrightness(_brightness);
@@ -349,14 +394,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _handleVerticalGesture(double dy) {
     final delta = -dy / 200;
     if (_dragIsLeftSide) {
-      // سطوع التطبيق (بدون صلاحيات)
       final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
       try {
         ScreenBrightness.instance.setApplicationScreenBrightness(newBrightness);
         setState(() { _brightness = newBrightness; _showBrightnessIndicator = true; _showVolumeIndicator = false; });
       } catch (_) {}
     } else {
-      // صوت المشغل الداخلي (0-100)
       final newVolume = (_volume + delta).clamp(0.0, 1.0);
       _player.setVolume(newVolume * 100);
       setState(() { _volume = newVolume; _showVolumeIndicator = true; _showBrightnessIndicator = false; });
@@ -601,7 +644,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             onPanEnd: _onPanEnd, 
             child: Video(
               controller: _controller,
-              fit: _fits[_fitIndex],
+              fit: getBoxFit(_fitMode),   // 🎞️ تطبيق وضع الملء
               controls: NoVideoControls,
               subtitleViewConfiguration: SubtitleViewConfiguration(
                 style: TextStyle(fontSize: s.subtitleFontSize, color: s.subtitleColor, fontWeight: FontWeight.normal, backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity)), 
@@ -610,6 +653,30 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               ),
             )
           ),
+          // 🏷️ Overlay نص وضع الملء (يختفي تلقائياً)
+          if (_fitOverlayText != null)
+            Positioned(
+              top: 100,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: AnimatedOpacity(
+                  opacity: _fitOverlayText != null ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _fitOverlayText!,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           if (_showVolumeIndicator) Positioned(right: 24, top: MediaQuery.of(context).size.height * 0.3, child: _buildFloatingIndicator(icon: Icons.volume_up, value: _volume, color: cs.primary)),
           if (_showBrightnessIndicator) Positioned(left: 24, top: MediaQuery.of(context).size.height * 0.3, child: _buildFloatingIndicator(icon: Icons.brightness_6, value: _brightness, color: cs.secondary)),
           if (_showControls && !_isLocked) ...[
@@ -617,7 +684,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               IconButton(icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white), onPressed: () => Navigator.pop(context)),
               Expanded(child: Text(widget.video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500))),
               IconButton(icon: Icon(_isLocked ? Symbols.lock_rounded : Symbols.lock_open_rounded, color: _isLocked ? Colors.orange : Colors.white54), onPressed: _toggleLock),
-              IconButton(icon: Icon(_fitIcons[_fitIndex], color: Colors.white70), onPressed: _toggleFit, tooltip: _fitLabels[_fitIndex]),
+              IconButton(icon: const Icon(Symbols.aspect_ratio_rounded, color: Colors.white70), onPressed: _toggleFit, tooltip: 'تغيير وضع الملء'),
               IconButton(icon: Icon(_isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded, color: Colors.white70), onPressed: _toggleOrientation),
               IconButton(icon: const Icon(Symbols.picture_in_picture_rounded, color: Colors.white70), onPressed: _enterPip),
               IconButton(icon: const Icon(Symbols.graphic_eq_rounded, color: Colors.white70), onPressed: _showAudioMenu),
@@ -648,7 +715,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _hideTimer?.cancel();
     _saveTimer?.cancel();
     _indicatorTimer?.cancel();
-    // إعادة سطوع التطبيق الأصلي
+    _fitOverlayTimer?.cancel();
     if (_originalApplicationBrightness != null) {
       try { ScreenBrightness.instance.setApplicationScreenBrightness(_originalApplicationBrightness!); } catch (_) {}
     }
