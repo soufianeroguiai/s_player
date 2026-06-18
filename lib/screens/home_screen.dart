@@ -66,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.pickFiles(type: FileType.video);
+    final result = await FilePicker.platform.pickFiles(type: FileType.video);
     if (result?.files.single.path != null) await _openByPath(result!.files.single.path!);
   }
 
@@ -214,7 +214,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     child: Icon(icon, color: fg, size: 22));
 }
 
-// ── All Tab ────────────────────────────────────
 class _AllTab extends StatelessWidget {
   final List<VideoItem> videos;
   final String? selectedFolder;
@@ -259,7 +258,6 @@ class _AllTab extends StatelessWidget {
   }
 }
 
-// ── بقية الـ Widgets (كما هي) ─────────────────
 class _Chips extends StatelessWidget {
   final Set<String> folders;
   final String? selected;

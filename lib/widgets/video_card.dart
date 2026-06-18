@@ -1,8 +1,7 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../models/video_item.dart';
-import 'video_thumbnail_loader.dart'; // تأكد من المسار الصحيح
+import 'video_thumbnail_loader.dart';
 
 class VideoCard extends StatelessWidget {
   final VideoItem video;
@@ -20,7 +19,6 @@ class VideoCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            // ✅ استبدال _Thumb القديمة بـ VideoThumbnailLoader
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: SizedBox(
@@ -74,12 +72,13 @@ class VideoCard extends StatelessWidget {
             ),
             const SizedBox(width: 14),
             Expanded(child: _Info(video: video)),
-            IconButton(
-              icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 22),
-              onPressed: onMoreTap,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            ),
+            if (onMoreTap != null)
+              IconButton(
+                icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 22),
+                onPressed: onMoreTap,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
           ],
         ),
       ),
@@ -109,11 +108,10 @@ class VideoGridCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // ✅ استبدال الصورة المصغرة القديمة بـ VideoThumbnailLoader
                   VideoThumbnailLoader(
                     videoPath: video.path,
-                    width: double.infinity,   // سيتمدد ليملأ العرض
-                    height: double.infinity,  // سيتمدد ليملأ الارتفاع
+                    width: double.infinity,
+                    height: double.infinity,
                   ),
                   Center(
                     child: Container(
@@ -178,12 +176,13 @@ class VideoGridCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
-                    onPressed: onMoreTap,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
+                  if (onMoreTap != null)
+                    IconButton(
+                      icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
+                      onPressed: onMoreTap,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
                 ],
               ),
             ),
@@ -194,7 +193,6 @@ class VideoGridCard extends StatelessWidget {
   }
 }
 
-// _Info و _Tag تبقى كما هي بدون تغيير
 class _Info extends StatelessWidget {
   final VideoItem video;
   const _Info({required this.video});

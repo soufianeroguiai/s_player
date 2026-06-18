@@ -11,8 +11,8 @@ class VideoThumbnailLoader extends StatefulWidget {
   const VideoThumbnailLoader({
     super.key,
     required this.videoPath,
-    this.width = 120,
-    this.height = 80,
+    this.width = double.infinity,
+    this.height = double.infinity,
   });
 
   @override
@@ -32,8 +32,9 @@ class _VideoThumbnailLoaderState extends State<VideoThumbnailLoader> {
   Future<void> _generateThumbnail() async {
     try {
       final tempDir = await getTemporaryDirectory();
-      final fileName = widget.videoPath.split('/').last.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-      final targetPath = '${tempDir.path}/$fileName.png';
+      // استخدام الـ hashCode لإنشاء اسم ملف فريد وآمن ومستقر ونظيف
+      final fileName = 'thumb_${widget.videoPath.hashCode}.jpg';
+      final targetPath = '${tempDir.path}/$fileName';
       final file = File(targetPath);
 
       if (await file.exists()) {
@@ -49,14 +50,21 @@ class _VideoThumbnailLoaderState extends State<VideoThumbnailLoader> {
       final thumbnail = await VideoThumbnail.thumbnailFile(
         video: widget.videoPath,
         thumbnailPath: tempDir.path,
-        imageFormat: ImageFormat.PNG,
-        maxHeight: 250,
-        quality: 50,
+        imageFormat: ImageFormat.JPEG, // تحويله لـ JPEG للحجم الخفيف والسرعة
+        maxHeight: 200, // دقة ممتازة للكروت الصغير والشبكية
+        quality: 60,
       );
+
+      if (thumbnail != null) {
+        final generatedFile = File(thumbnail);
+        if (await generatedFile.exists()) {
+          await generatedFile.rename(targetPath);
+        }
+      }
 
       if (mounted) {
         setState(() {
-          _thumbnailPath = thumbnail;
+          _thumbnailPath = targetPath;
           _isLoading = false;
         });
       }
@@ -70,7 +78,6 @@ class _VideoThumbnailLoaderState extends State<VideoThumbnailLoader> {
 
   @override
   Widget build(BuildContext context) {
-    // استخدام SizedBox لتمكين التمدد مع width/height = double.infinity
     return SizedBox(
       width: widget.width,
       height: widget.height,
@@ -87,17 +94,16 @@ class _VideoThumbnailLoaderState extends State<VideoThumbnailLoader> {
                   ),
                 ),
               )
-            : _thumbnailPath != null
+            : _thumbnailPath != null && File(_thumbnailPath!).existsSync()
                 ? Image.file(
                     File(_thumbnailPath!),
-                    fit: BoxFit.cover, // يملأ المساحة بالكامل
-                    width: widget.width,
-                    height: widget.height,
+                    fit: BoxFit.cover,
+                    cacheWidth: widget.width != double.infinity ? (widget.width * 2).toInt() : 250,
                     errorBuilder: (ctx, err, stack) => const Icon(Icons.video_file, color: Colors.white54, size: 40),
                   )
                 : Container(
                     color: Colors.grey[900],
-                    child: const Icon(Icons.broken_image, color: Colors.white54, size: 40),
+                    child: const Icon(Icons.play_circle_outline, color: Colors.white54, size: 40),
                   ),
       ),
     );
