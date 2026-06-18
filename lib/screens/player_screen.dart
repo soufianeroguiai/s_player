@@ -116,7 +116,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       await _player.open(Media(widget.video.path), play: settings.autoPlay);
       _player.setRate(_speed);
       
-      // الصوت: قراءة من النظام
       try {
         _volume = await VolumeController.instance.getVolume();
       } catch (_) {
@@ -126,7 +125,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         if (mounted) setState(() => _volume = vol);
       });
 
-      // السطوع: تعيين سطوع التطبيق فقط (بدون طلب صلاحيات النظام)
       try {
         _brightness = await ScreenBrightness.instance.current;
         await ScreenBrightness.instance.setScreenBrightness(_brightness);
@@ -428,68 +426,48 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   Future<void> _showSubtitleMenu() async {
     final cs = Theme.of(context).colorScheme;
-    
     final seen = <String>{};
-    final uniqueTracks = <SubtitleTrack>[];
-    for (final track in _subtitleTracks) {
-      final key = track.id; 
-      if (!seen.contains(key)) {
-        seen.add(key);
-        uniqueTracks.add(track);
-      }
-    }
+    final uniqueTracks = _subtitleTracks.where((t) => seen.add(t.id)).toList();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierColor: Colors.transparent,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.black87,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: EdgeInsets.zero,
-        content: SingleChildScrollView(
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.only(top: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const Text('الترجمات', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const Divider(color: Colors.white24),
               SwitchListTile(
-                activeColor: Colors.lightBlue,
-                title: Text(_showSubtitles ? 'إيقاف الترجمة' : 'تشغيل الترجمة', style: const TextStyle(color: Colors.white)),
+                activeColor: cs.primary,
+                title: Text(_showSubtitles ? 'إخفاء الترجمة' : 'إظهار الترجمة', style: const TextStyle(color: Colors.white)),
                 value: _showSubtitles,
                 onChanged: (v) async {
-                  try {
-                    if (!v) {
-                      await _player.setSubtitleTrack(SubtitleTrack.no());
-                    } else if (uniqueTracks.isNotEmpty) {
-                      await _player.setSubtitleTrack(uniqueTracks.first);
-                    }
-                    if (mounted) setState(() => _showSubtitles = v);
-                  } catch (e) {
-                    debugPrint("Error toggling subtitles: $e");
-                  }
-                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (!v) await _player.setSubtitleTrack(SubtitleTrack.no());
+                  else if (uniqueTracks.isNotEmpty) await _player.setSubtitleTrack(uniqueTracks.first);
+                  setState(() => _showSubtitles = v);
+                  setSheetState(() {});
                 },
               ),
-              const Divider(color: Colors.white24),
               ...uniqueTracks.map((track) {
-                String name = track.title ?? track.language ?? 'ترجمة (${track.id})';
-                String? lang = track.language;
                 final isSelected = _player.state.track.subtitle.id == track.id;
-
                 return ListTile(
-                  title: Text(name, style: const TextStyle(color: Colors.white)),
-                  subtitle: lang != null ? Text(lang, style: const TextStyle(color: Colors.white54)) : null,
+                  title: Text(track.title ?? track.language ?? 'مسار ${track.id}', style: const TextStyle(color: Colors.white)),
                   trailing: isSelected ? Icon(Icons.check, color: cs.primary) : null,
                   onTap: () async {
-                    try {
-                      await _player.setSubtitleTrack(track);
-                      if (mounted) setState(() => _showSubtitles = true);
-                    } catch (e) {
-                      debugPrint("Error setting subtitle track: $e");
-                    }
-                    if (ctx.mounted) Navigator.pop(ctx);
+                    await _player.setSubtitleTrack(track);
+                    setState(() => _showSubtitles = true);
+                    setSheetState(() {});
                   },
                 );
               }),
-              const Divider(color: Colors.white24),
               ListTile(
                 leading: const Icon(Icons.upload, color: Colors.white),
                 title: const Text('تحميل ترجمة خارجية', style: TextStyle(color: Colors.white)),
@@ -498,6 +476,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   _pickSubtitle();
                 },
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -507,48 +486,35 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   Future<void> _showAudioMenu() async {
     final cs = Theme.of(context).colorScheme;
-    
     final seen = <String>{};
-    final uniqueAudio = <AudioTrack>[];
-    for (final track in _audioTracks) {
-      final key = track.id;
-      if (!seen.contains(key)) {
-        seen.add(key);
-        uniqueAudio.add(track);
-      }
-    }
+    final uniqueAudio = _audioTracks.where((t) => seen.add(t.id)).toList();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierColor: Colors.transparent,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.black87,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: EdgeInsets.zero,
-        content: SingleChildScrollView(
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.only(top: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const Text('المسارات الصوتية', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const Divider(color: Colors.white24),
               ...uniqueAudio.map((track) {
-                String name = track.title ?? track.language ?? 'مسار صوتي (${track.id})';
-                String? lang = track.language;
                 final isSelected = _player.state.track.audio.id == track.id;
-
                 return ListTile(
-                  title: Text(name, style: const TextStyle(color: Colors.white)),
-                  subtitle: lang != null ? Text(lang, style: const TextStyle(color: Colors.white54)) : null,
+                  title: Text(track.title ?? track.language ?? 'مسار ${track.id}', style: const TextStyle(color: Colors.white)),
                   trailing: isSelected ? Icon(Icons.check, color: cs.primary) : null,
                   onTap: () async {
-                    try {
-                      await _player.setAudioTrack(track);
-                    } catch (e) {
-                      debugPrint("Error setting audio track: $e");
-                    }
-                    if (ctx.mounted) Navigator.pop(ctx);
+                    await _player.setAudioTrack(track);
+                    setSheetState(() {});
                   },
                 );
               }),
-              const Divider(color: Colors.white24),
               ListTile(
                 leading: const Icon(Icons.volume_up, color: Colors.white),
                 title: const Text('رفع الصوت (Boost)', style: TextStyle(color: Colors.white)),
@@ -558,6 +524,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   _showAudioBoostSheet();
                 },
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -602,7 +569,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
 
     return PopScope(
-      canPop: false, // تم التعديل لمنع الخروج التلقائي
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
@@ -704,7 +671,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         child: SafeArea(
                           child: Row(children: [
                             IconButton(icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white), onPressed: () {
-                              // إذا كان الخروج يدوياً من زر الرجوع في الواجهة
                               Navigator.pop(context);
                             }),
                             Expanded(child: Text(widget.video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500))),
@@ -770,7 +736,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _hideTimer?.cancel();
     _indicatorTimer?.cancel();
     
-    // إعادة ضبط السطوع ليعود لسطوع النظام الافتراضي
     try {
       ScreenBrightness.instance.resetScreenBrightness();
     } catch (_) {}

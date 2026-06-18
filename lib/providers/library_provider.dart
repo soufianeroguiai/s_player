@@ -26,7 +26,6 @@ class LibraryProvider extends ChangeNotifier {
     return map;
   }
 
-  /// تحميل الفيديوهات المخزنة سابقاً (سريع جداً)
   Future<void> loadCachedVideos() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
@@ -44,7 +43,6 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  /// حفظ الفيديوهات الحالية إلى ملف مؤقت
   Future<void> _saveVideosToCache() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
@@ -56,29 +54,23 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
+  // تم تعديل هذه الدالة لجلب المسار الحقيقي للملف (File Path) بدلًا من URI
   Future<VideoItem?> _buildVideoItem(AssetEntity asset, String albumName) async {
     try {
-      final mediaUrl = await asset.getMediaUrl();
-      if (mediaUrl == null) return null;
-
-      int fileSize = 0;
-      try {
-        final file = await asset.file;
-        if (file != null) fileSize = file.lengthSync();
-      } catch (_) {
-        fileSize = 0;
-      }
+      final file = await asset.file;
+      if (file == null) return null;
 
       return VideoItem(
         id: asset.id,
-        path: mediaUrl,
+        path: file.path, // المسار الحقيقي للنظام /storage/emulated/0/...
         name: asset.title ?? 'فيديو ${asset.id}',
-        size: fileSize,
+        size: file.lengthSync(),
         modified: asset.modifiedDateTime,
         folder: albumName,
         duration: asset.videoDuration,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint("خطأ في بناء عنصر الفيديو: $e");
       return null;
     }
   }
@@ -91,7 +83,7 @@ class LibraryProvider extends ChangeNotifier {
     try {
       final ps = await PhotoManager.requestPermissionExtend();
       if (!ps.isAuth && !ps.hasAccess) {
-        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.\nالرجاء منح الصلاحية من إعدادات التطبيق.';
+        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.';
         _loading = false;
         notifyListeners();
         return;
@@ -116,7 +108,7 @@ class LibraryProvider extends ChangeNotifier {
 
       result.sort((a, b) => b.modified.compareTo(a.modified));
       _videos = result;
-      await _saveVideosToCache(); // حفظ القائمة بعد المسح الناجح
+      await _saveVideosToCache();
     } catch (e) {
       _error = 'فشل المسح: $e';
     }
