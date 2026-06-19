@@ -376,7 +376,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
 
     final dx = details.localFocalPointDelta.dx;
-    final dy = details.localFocalPointDelta.dy;
+final dy = details.localFocalPointDelta.dy;
+
 
     if (dx.abs() < 2 && dy.abs() < 2) return;
 
@@ -401,7 +402,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     } else {
       // ➜ عمودي = صوت / سطوع
       final delta = -dy / 200.0;
-      final isLeft = details.localPosition.dx < screenWidth / 2;
+      final isLeft = details.localFocalPoint.dx < screenWidth / 2;
 
       if (isLeft) {
         final newBrightness = (_brightness + delta).clamp(0.0, 1.0);
@@ -1014,7 +1015,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.video_forward, color: Colors.white, size: 32),
+                    const Icon(Symbols.fast_forward_rounded, color: Colors.white, size: 32),
                     const SizedBox(height: 8),
                     Text(
                       _fmt(Duration(milliseconds: _seekPreviewMs.toInt())),
