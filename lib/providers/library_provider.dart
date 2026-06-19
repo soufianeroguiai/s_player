@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui'; // ضروري لـ RootIsolateToken
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
@@ -34,20 +32,15 @@ class LibraryProvider extends ChangeNotifier {
       final file = File('${dir.path}/video_cache.json');
       if (await file.exists()) {
         final jsonString = await file.readAsString();
-        final List<VideoItem> parsed = await compute(_parseVideoJson, jsonString);
-        _videos = parsed;
+        final List<dynamic> jsonList = json.decode(jsonString);
+        _videos = jsonList
+            .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
+            .toList();
         notifyListeners();
       }
     } catch (e) {
       debugPrint('فشل تحميل الذاكرة المؤقتة: $e');
     }
-  }
-
-  static List<VideoItem> _parseVideoJson(String jsonString) {
-    final List<dynamic> jsonList = json.decode(jsonString);
-    return jsonList
-        .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
-        .toList();
   }
 
   Future<void> _saveVideosToCache() async {
@@ -61,53 +54,24 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  // دالة المسح التي ستعمل في isolate - تقبل RootIsolateToken? للتوافق مع compute
-  static Future<List<VideoItem>> _scanInIsolate(RootIsolateToken? token) async {
-    // تهيئة الـ BinaryMessenger إذا كان الـ token موجوداً
-    if (token != null) {
-      BackgroundIsolateBinaryMessenger.ensureInitialized(token);
+  Future<VideoItem?> _buildVideoItem(AssetEntity asset, String albumName) async {
+    try {
+      final file = await asset.file;
+      if (file == null) return null;
+
+      return VideoItem(
+        id: asset.id,
+        path: file.path,
+        name: asset.title ?? 'فيديو ${asset.id}',
+        size: file.lengthSync(),
+        modified: asset.modifiedDateTime,
+        folder: albumName,
+        duration: asset.videoDuration,
+      );
+    } catch (e) {
+      debugPrint("خطأ في بناء عنصر الفيديو: $e");
+      return null;
     }
-
-    final ps = await PhotoManager.requestPermissionExtend();
-    if (!ps.isAuth && !ps.hasAccess) {
-      return [];
-    }
-
-    final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
-    final List<VideoItem> result = [];
-
-    const batchSize = 12;
-    for (final album in albums) {
-      final count = await album.assetCountAsync;
-      final assets = await album.getAssetListRange(start: 0, end: count);
-
-      for (var i = 0; i < assets.length; i += batchSize) {
-        final batch = assets.skip(i).take(batchSize);
-        final items = await Future.wait(
-          batch.map((asset) async {
-            try {
-              final file = await asset.file;
-              if (file == null) return null;
-              return VideoItem(
-                id: asset.id,
-                path: file.path,
-                name: asset.title ?? 'فيديو ${asset.id}',
-                size: file.lengthSync(),
-                modified: asset.modifiedDateTime,
-                folder: album.name,
-                duration: asset.videoDuration,
-              );
-            } catch (e) {
-              return null;
-            }
-          }),
-        );
-        result.addAll(items.whereType<VideoItem>());
-      }
-    }
-
-    result.sort((a, b) => b.modified.compareTo(a.modified));
-    return result;
   }
 
   Future<void> scan() async {
@@ -116,14 +80,36 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // الحصول على رمز الـ Isolate الرئيسي وتمريره إلى الـ compute
-      final token = RootIsolateToken.instance;
-      final result = await compute(_scanInIsolate, token);
+      final ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth && !ps.hasAccess) {
+        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.';
+        _loading = false;
+        notifyListeners();
+        return;
+      }
+
+      final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
+      final List<VideoItem> result = [];
+
+      const batchSize = 12;
+      for (final album in albums) {
+        final count = await album.assetCountAsync;
+        final assets = await album.getAssetListRange(start: 0, end: count);
+
+        for (var i = 0; i < assets.length; i += batchSize) {
+          final batch = assets.skip(i).take(batchSize);
+          final items = await Future.wait(
+            batch.map((asset) => _buildVideoItem(asset, album.name)),
+          );
+          result.addAll(items.whereType<VideoItem>());
+        }
+      }
+
+      result.sort((a, b) => b.modified.compareTo(a.modified));
       _videos = result;
       await _saveVideosToCache();
     } catch (e) {
       _error = 'فشل المسح: $e';
-      debugPrint('Error in scan: $e');
     }
 
     _loading = false;

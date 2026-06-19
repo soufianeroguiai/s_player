@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart'; // ضروري لـ debugPrint
 import 'package:path_provider/path_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
@@ -19,6 +18,7 @@ class ThumbnailManager {
     return videoPath.hashCode.toString();
   }
 
+  /// يُرجع File الصورة المصغرة (من الكاش أو القرص أو يولّدها)
   static Future<File?> getThumbnail(String videoPath) async {
     // 1. الذاكرة
     if (_cache.containsKey(videoPath)) {
@@ -34,7 +34,7 @@ class ThumbnailManager {
       return file;
     }
 
-    // 3. توليد الصورة المصغرة
+    // 3. توليد
     try {
       final thumbPath = await VideoThumbnail.thumbnailFile(
         video: videoPath,
@@ -43,22 +43,20 @@ class ThumbnailManager {
         maxWidth: 300,
       );
 
-      if (thumbPath != null && thumbPath.isNotEmpty) {
+      if (thumbPath != null) {
         final generated = File(thumbPath);
-        // نسخ الملف إلى مجلد الكاش الخاص بنا
         await generated.copy(file.path);
         _cache[videoPath] = file;
         return file;
-      } else {
-        debugPrint('⚠️ Thumbnail generation returned null for: $videoPath');
       }
     } catch (e) {
-      debugPrint('❌ Error generating thumbnail for $videoPath: $e');
+      return null;
     }
 
     return null;
   }
 
+  /// تحميل مسبق
   static Future<void> preload(String videoPath) async {
     if (!_cache.containsKey(videoPath)) {
       _cache[videoPath] = await getThumbnail(videoPath);

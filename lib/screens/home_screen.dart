@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/video_item.dart';
 import '../providers/library_provider.dart';
@@ -20,13 +18,14 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabs;
   String? _selectedFolder;
 
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initLibrary());
   }
 
@@ -41,6 +40,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshLibrary() async {
     await context.read<LibraryProvider>().scan();
     await context.read<LibraryProvider>().loadRecent();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
   }
 
   Future<void> _openPlayer(VideoItem video) async {
@@ -90,6 +95,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 10),
           const Text('SR Player'),
         ]),
+        bottom: TabBar(controller: _tabs, tabs: const [
+          Tab(text: 'الكل'), Tab(text: 'الأخيرة'), Tab(text: 'المجلدات'),
+        ]),
         actions: [
           IconButton(icon: const Icon(Symbols.search_rounded),
             onPressed: () => showSearch(context: context,
@@ -98,8 +106,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(settings.gridView ? Symbols.view_list_rounded : Symbols.grid_view_rounded),
             onPressed: () => settings.setGridView(!settings.gridView)),
           IconButton(icon: const Icon(Symbols.sort_rounded), onPressed: () => _sortSheet(settings)),
-          // زر فتح الملف موجود هنا في الأعلى
-          IconButton(icon: const Icon(Symbols.folder_open_rounded), onPressed: _pickFile, tooltip: 'فتح ملف'),
           IconButton(icon: const Icon(Symbols.settings_rounded),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
         ],
@@ -123,11 +129,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ]));
         }
 
-        // استخدام IndexedStack بدلاً من TabBarView للحفاظ على حالة القوائم
-        return IndexedStack(
-          index: _currentIndex,
-          children: [
-            _AllTab(
+        return TabBarView(controller: _tabs, children: [
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: _AllTab(
               videos: _sorted(lib.videos),
               selectedFolder: _selectedFolder,
               folders: lib.byFolder.keys.toSet(),
@@ -137,49 +142,22 @@ class _HomeScreenState extends State<HomeScreen> {
               gridView: settings.gridView,
               loading: lib.loading,
             ),
-            _RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
-            _FoldersTab(byFolder: lib.byFolder, onTap: (f) { setState(() => _selectedFolder = f); _currentIndex = 0; }),
-          ],
-        );
+          ),
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: _RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
+          ),
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: _FoldersTab(byFolder: lib.byFolder, onTap: (f) { setState(() => _selectedFolder = f); _tabs.animateTo(0); }),
+          ),
+        ]);
       }),
-      // الشريط السفلي العائم (SalomonBottomBar)
-      bottomNavigationBar: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        height: 70,
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(35),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: SalomonBottomBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
-          itemShape: const StadiumBorder(),
-          unselectedItemColor: cs.onSurfaceVariant,
-          selectedItemColor: cs.primary,
-          margin: const EdgeInsets.symmetric(horizontal: 10),
-          itemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          // ✅ تم إصلاح الأخطاء بإضافة const أمام كل عنصر
-          items: const [
-            const SalomonBottomBarItem(
-              icon: const Icon(Symbols.home_rounded),
-              title: const Text('الكل'),
-            ),
-            const SalomonBottomBarItem(
-              icon: const Icon(Symbols.history_rounded),
-              title: const Text('الأخيرة'),
-            ),
-            const SalomonBottomBarItem(
-              icon: const Icon(Symbols.folder_rounded),
-              title: const Text('المجلدات'),
-            ),
-          ],
-        ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _pickFile,
+        icon: const Icon(Symbols.folder_open_rounded),
+        label: const Text('فتح ملف'),
       ),
-      // تم حذف FloatingActionButton لأن الزر أصبح في الأعلى
-      floatingActionButton: null,
     );
   }
 
@@ -235,8 +213,6 @@ class _HomeScreenState extends State<HomeScreen> {
     decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
     child: Icon(icon, color: fg, size: 22));
 }
-
-// ------------------- المكونات الفرعية -------------------
 
 class _AllTab extends StatelessWidget {
   final List<VideoItem> videos;
@@ -314,71 +290,50 @@ class _Chips extends StatelessWidget {
   }
 }
 
-class _RecentTab extends StatefulWidget {
+class _RecentTab extends StatelessWidget {
   final List<String> paths;
   final List<VideoItem> all;
   final void Function(String) onOpen;
   final VoidCallback onClear;
   const _RecentTab({required this.paths, required this.all, required this.onOpen, required this.onClear});
 
-  @override
-  State<_RecentTab> createState() => _RecentTabState();
-}
-
-class _RecentTabState extends State<_RecentTab> {
-  Future<List<VideoItem>> _loadItems() async {
-    final map = {for (final v in widget.all) v.path: v};
-    final List<VideoItem> items = [];
-    for (final p in widget.paths) {
-      if (map.containsKey(p)) {
-        items.add(map[p]!);
-      } else {
-        try {
-          if (File(p).existsSync()) {
-            final stat = await File(p).stat();
-            final parts = p.split('/');
-            items.add(VideoItem(
-              id: p.hashCode.toString(), path: p, name: parts.last,
-              size: stat.size, modified: stat.modified,
-              folder: parts.length > 1 ? parts[parts.length - 2] : '', duration: Duration.zero,
-            ));
-          }
-        } catch (_) {}
-      }
-    }
-    return items;
+  List<VideoItem> get list {
+    final map = {for (final v in all) v.path: v};
+    return paths.map((p) {
+      if (map.containsKey(p)) return map[p]!;
+      try {
+        if (!File(p).existsSync()) return null;
+        final stat = File(p).statSync();
+        final parts = p.split('/');
+        return VideoItem(id: p.hashCode.toString(), path: p, name: parts.last,
+          size: stat.size, modified: stat.modified,
+          folder: parts.length > 1 ? parts[parts.length - 2] : '', duration: Duration.zero);
+      } catch (_) { return null; }
+    }).whereType<VideoItem>().toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return FutureBuilder<List<VideoItem>>(
-      future: _loadItems(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final items = snapshot.data ?? [];
-        if (items.isEmpty) return _Empty('ما شفتي فيديو بعد', Symbols.history_rounded);
-        return Column(children: [
-          Padding(padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
-            child: Row(children: [
-              Icon(Symbols.history_rounded, size: 16, color: cs.onSurfaceVariant),
-              const SizedBox(width: 6),
-              Text('${items.length} ملف', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
-              const Spacer(),
-              TextButton.icon(onPressed: widget.onClear,
-                icon: Icon(Symbols.delete_sweep_rounded, size: 16, color: cs.error),
-                label: Text('مسح', style: TextStyle(color: cs.error, fontSize: 12)),
-                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10))),
-            ])),
-          Expanded(child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 90),
-            itemCount: items.length,
-            itemBuilder: (_, i) => VideoCard(video: items[i], onTap: () => widget.onOpen(items[i].path)))),
-        ]);
-      }
-    );
+    final items = list;
+    if (items.isEmpty) return _Empty('ما شفتي فيديو بعد', Symbols.history_rounded);
+    return Column(children: [
+      Padding(padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+        child: Row(children: [
+          Icon(Symbols.history_rounded, size: 16, color: cs.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text('${items.length} ملف', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+          const Spacer(),
+          TextButton.icon(onPressed: onClear,
+            icon: Icon(Symbols.delete_sweep_rounded, size: 16, color: cs.error),
+            label: Text('مسح', style: TextStyle(color: cs.error, fontSize: 12)),
+            style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10))),
+        ])),
+      Expanded(child: ListView.builder(
+        padding: const EdgeInsets.only(bottom: 90),
+        itemCount: items.length,
+        itemBuilder: (_, i) => VideoCard(video: items[i], onTap: () => onOpen(items[i].path)))),
+    ]);
   }
 }
 
@@ -436,12 +391,9 @@ class _Empty extends StatelessWidget {
   }
 }
 
-// Search Delegate مع debounce Timer
 class _SearchDelegate extends SearchDelegate<VideoItem?> {
   final List<VideoItem> videos;
   final Future<void> Function(VideoItem) onOpen;
-  Timer? _debounceTimer;
-
   _SearchDelegate(this.videos, this.onOpen);
 
   @override
@@ -460,15 +412,7 @@ class _SearchDelegate extends SearchDelegate<VideoItem?> {
   Widget buildResults(BuildContext context) => _list(context);
 
   @override
-  Widget buildSuggestions(BuildContext context) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      if (context.mounted) {
-        (context as Element).markNeedsBuild();
-      }
-    });
-    return _list(context);
-  }
+  Widget buildSuggestions(BuildContext context) => _list(context);
 
   Widget _list(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -479,11 +423,5 @@ class _SearchDelegate extends SearchDelegate<VideoItem?> {
       itemCount: results.length,
       itemBuilder: (_, i) => VideoCard(video: results[i],
         onTap: () { close(context, results[i]); onOpen(results[i]); }));
-  }
-
-  @override
-  void dispose() {
-    _debounceTimer?.cancel();
-    super.dispose();
   }
 }
