@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
+import '../services/thumbnail_service.dart';
 
 class LibraryProvider extends ChangeNotifier {
   List<VideoItem> _videos = [];
@@ -137,45 +138,46 @@ class LibraryProvider extends ChangeNotifier {
       final video = videosToScan[i];
 
       if (!['mkv', 'mp4', 'avi', 'webm', 'm4v'].contains(video.extension)) continue;
-      if (video.subtitleTypes.isNotEmpty) continue;
 
       final player = Player();
       try {
         await player.open(Media(video.path), play: false);
-        await Future.delayed(const Duration(milliseconds: 150));
+        await Future.delayed(const Duration(milliseconds: 500));
 
-        final tracks = player.state.tracks.subtitle;
-        final types = <String>{};
-
-        for (final track in tracks) {
-          final id = (track.id ?? '').toLowerCase();
-          final title = (track.title ?? '').toLowerCase();
-
-          if (id.contains('srt') || title.contains('srt') || title.contains('subrip')) {
-            types.add('SRT');
+        // 1. فحص الترجمات
+        if (video.subtitleTypes.isEmpty) {
+          final tracks = player.state.tracks.subtitle;
+          final types = <String>{};
+          for (final track in tracks) {
+            final id = (track.id ?? '').toLowerCase();
+            final title = (track.title ?? '').toLowerCase();
+            if (id.contains('srt') || title.contains('srt') || title.contains('subrip')) {
+              types.add('SRT');
+            }
+            if (id.contains('ass') || title.contains('ass')) {
+              types.add('ASS');
+            }
+            if (id.contains('ssa') || title.contains('ssa')) {
+              types.add('SSA');
+            }
+            if (id.contains('vtt') || title.contains('vtt')) {
+              types.add('VTT');
+            }
           }
-          if (id.contains('ass') || title.contains('ass')) {
-            types.add('ASS');
-          }
-          if (id.contains('ssa') || title.contains('ssa')) {
-            types.add('SSA');
-          }
-          if (id.contains('vtt') || title.contains('vtt')) {
-            types.add('VTT');
-          }
+          video.subtitleTypes = types.toList();
+          notifyListeners();
         }
 
-        video.subtitleTypes = types.toList();
-        notifyListeners();
+        // 2. توليد الصورة المصغرة (باستخدام نفس الجلسة)
+        await ThumbnailService().get(video.path);
+
       } catch (_) {
       } finally {
         await player.dispose();
       }
 
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 300));
     }
-
-    await _saveVideosToCache();
   }
 
   Future<void> loadRecent() async {

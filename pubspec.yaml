@@ -18,10 +18,8 @@ dependencies:
 
   # 📁 File & Media
   file_picker: ^12.0.0-beta.5
-  photo_manager: ^3.9.0  
+  photo_manager: ^3.9.0
   path_provider: ^2.1.6
-  video_thumbnail: ^0.5.6
-  video_thumbnail_gen: ^0.6.3
 
   # 🔐 Permissions
   permission_handler: ^12.0.3
@@ -33,7 +31,6 @@ dependencies:
   # 🎨 UI
   material_symbols_icons: ^4.2951.0
   flex_color_picker: ^3.8.0    
-  salomon_bottom_bar: ^3.3.2
 
   # ⚙️ Utilities
   share_plus: ^13.1.0
