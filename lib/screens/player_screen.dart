@@ -1312,14 +1312,6 @@ class _SubtitleGestureWrapper extends StatefulWidget {
   State<_SubtitleGestureWrapper> createState() => _SubtitleGestureWrapperState();
 }
 
-class _SubtitleGestureWrapper extends StatefulWidget {
-  final Widget child;
-  const _SubtitleGestureWrapper({required this.child});
-
-  @override
-  State<_SubtitleGestureWrapper> createState() => _SubtitleGestureWrapperState();
-}
-
 class _SubtitleGestureWrapperState extends State<_SubtitleGestureWrapper> {
   bool _isScaling = false;
   Timer? _scaleDelayTimer;
@@ -1327,46 +1319,11 @@ class _SubtitleGestureWrapperState extends State<_SubtitleGestureWrapper> {
   static const double _scaleThreshold = 1.02;
 
   void _onScaleStart(ScaleStartDetails details) {
-    // ✅ استخدام initialScale بدلاً من scale
-    _startScale = details.initialScale;
+    _startScale = 1.0;
     _scaleDelayTimer = Timer(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isScaling = true);
     });
   }
-
-  void _onScaleUpdate(ScaleUpdateDetails details) {
-    if (!_isScaling) return;
-    final currentScale = details.scale;
-    if ((currentScale - _startScale).abs() > _scaleThreshold - 1.0) {
-      final s = context.read<SettingsProvider>();
-      final newFontSize = (s.subtitleFontSize * currentScale).clamp(10.0, 150.0);
-      s.setSubtitleFontSize(newFontSize.roundToDouble());
-      _startScale = currentScale;
-    }
-  }
-
-  void _onScaleEnd(ScaleEndDetails details) {
-    _scaleDelayTimer?.cancel();
-    setState(() => _isScaling = false);
-  }
-
-  @override
-  void dispose() {
-    _scaleDelayTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onScaleStart: _onScaleStart,
-      onScaleUpdate: _onScaleUpdate,
-      onScaleEnd: _onScaleEnd,
-      behavior: HitTestBehavior.opaque,
-      child: widget.child,
-    );
-  }
-}
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
     if (!_isScaling) return;
