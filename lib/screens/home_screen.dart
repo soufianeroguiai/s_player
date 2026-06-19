@@ -161,10 +161,20 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedItemColor: cs.primary,
           margin: const EdgeInsets.symmetric(horizontal: 10),
           itemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          // ✅ تم إصلاح الأخطاء بإضافة const أمام كل عنصر
           items: const [
-            SalomonBottomBarItem(icon: Icon(Symbols.home_rounded), title: Text('الكل')),
-            SalomonBottomBarItem(icon: Icon(Symbols.history_rounded), title: Text('الأخيرة')),
-            SalomonBottomBarItem(icon: Icon(Symbols.folder_rounded), title: Text('المجلدات')),
+            const SalomonBottomBarItem(
+              icon: const Icon(Symbols.home_rounded),
+              title: const Text('الكل'),
+            ),
+            const SalomonBottomBarItem(
+              icon: const Icon(Symbols.history_rounded),
+              title: const Text('الأخيرة'),
+            ),
+            const SalomonBottomBarItem(
+              icon: const Icon(Symbols.folder_rounded),
+              title: const Text('المجلدات'),
+            ),
           ],
         ),
       ),
@@ -426,7 +436,7 @@ class _Empty extends StatelessWidget {
   }
 }
 
-// Search Delegate مع debounce Timer لإصلاح الأخطاء
+// Search Delegate مع debounce Timer
 class _SearchDelegate extends SearchDelegate<VideoItem?> {
   final List<VideoItem> videos;
   final Future<void> Function(VideoItem) onOpen;

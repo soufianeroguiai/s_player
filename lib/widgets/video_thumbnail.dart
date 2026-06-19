@@ -22,7 +22,7 @@ class VideoThumbnail extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shimmer();
         }
-        if (snapshot.hasData && snapshot.data != null && await snapshot.data!.exists()) {
+        if (snapshot.hasData && snapshot.data != null) {
           return Image.file(
             snapshot.data!,
             fit: BoxFit.cover,
