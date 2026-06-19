@@ -247,9 +247,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _scheduleHide();
 
       await _loadSubtitleFromPreferredFolder(settings);
-      
-      // تطبيق مزامنة الترجمة الأولية
-      _player.setSubtitleDelay(Duration(milliseconds: (_subtitleSync * 1000).round()));
 
     } catch (e) {
       if (mounted) {
@@ -745,7 +742,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 onChanged: (v) {
                   setState(() => _subtitleSync = v);
                   settings.setDefaultSubtitleSync(v);
-                  _player.setSubtitleDelay(Duration(milliseconds: (v * 1000).round()));
+                  // ملاحظة: مزامنة الترجمة غير مدعومة في media_kit حالياً
                 },
                 activeColor: Theme.of(context).colorScheme.primary,
               ),
@@ -787,6 +784,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Widget _buildSettingsContent() {
     final s = context.watch<SettingsProvider>();
     final cs = Theme.of(context).colorScheme;
+    // استخدام Offset واحد بدلاً من x/y منفصلين
+    final currentShadowOffset = s.textShadowOffset;
+
     return Column(mainAxisSize: MainAxisSize.min, children: [
       ListTile(
         dense: true,
@@ -855,24 +855,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ),
         ListTile(
           dense: true,
-          title: const Text('إزاحة أفقية', style: TextStyle(color: Colors.white70)),
+          title: const Text('إزاحة الظل الأفقية', style: TextStyle(color: Colors.white70)),
           subtitle: Slider(
-            value: s.textShadowOffsetX, min: -10, max: 10,
+            value: currentShadowOffset.dx, min: -10, max: 10,
             onChanged: (v) {
-              s.textShadowOffsetX = v;
-              s.notifyListeners();
+              s.setTextShadowOffset(Offset(v, currentShadowOffset.dy));
             },
             activeColor: cs.primary,
           ),
         ),
         ListTile(
           dense: true,
-          title: const Text('إزاحة رأسية', style: TextStyle(color: Colors.white70)),
+          title: const Text('إزاحة الظل الرأسية', style: TextStyle(color: Colors.white70)),
           subtitle: Slider(
-            value: s.textShadowOffsetY, min: -10, max: 10,
+            value: currentShadowOffset.dy, min: -10, max: 10,
             onChanged: (v) {
-              s.textShadowOffsetY = v;
-              s.notifyListeners();
+              s.setTextShadowOffset(Offset(currentShadowOffset.dx, v));
             },
             activeColor: cs.primary,
           ),
@@ -959,7 +957,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
                   shadows: s.textShadowEnabled
                       ? [Shadow(color: s.textShadowColor, blurRadius: s.textShadowBlurRadius,
-                          offset: Offset(s.textShadowOffsetX, s.textShadowOffsetY))]
+                          offset: s.textShadowOffset)]
                       : null,
                 ),
                 textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
