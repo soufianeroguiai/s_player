@@ -375,9 +375,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       return;
     }
 
-    final dx = details.localFocalPointDelta.dx;
-final dy = details.localFocalPointDelta.dy;
-
+    final dx = details.focalPointDelta.dx;
+final dy = details.focalPointDelta.dy;
 
     if (dx.abs() < 2 && dy.abs() < 2) return;
 
