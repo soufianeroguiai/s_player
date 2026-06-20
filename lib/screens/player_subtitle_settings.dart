@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../providers/settings_provider.dart';
 
-// دالة مساعدة لإنشاء أشرطة التمرير بشكل أنيق مع الأرقام
+// دالة مساعدة لإنشاء أشرطة التمرير الأنيقة
 Widget _buildSliderRow({
   required String title,
   required double value,
@@ -14,7 +15,7 @@ Widget _buildSliderRow({
   required Color activeColor,
 }) {
   return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4.0),
+    padding: const EdgeInsets.symmetric(vertical: 6.0),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -38,26 +39,25 @@ Widget _buildSliderRow({
   );
 }
 
-// واجهة التخصيص المحسنة
+// الواجهة الاحترافية لتخصيص الترجمة
 Widget buildSubtitleSettingsContent(BuildContext context) {
   final s = context.watch<SettingsProvider>();
   final cs = Theme.of(context).colorScheme;
 
   return Directionality(
-    textDirection: TextDirection.rtl, // ضمان المحاذاة العربية دائماً
+    textDirection: TextDirection.rtl,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min, 
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // ── الخط والحجم ──
+        // ── 1. الخط والحجم ──
+        const Text('الخط والحجم', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
         _buildSliderRow(
-          title: 'حجم الخط',
-          value: s.subtitleFontSize, min: 10, max: 100,
+          title: 'حجم الخط', value: s.subtitleFontSize, min: 10, max: 150,
           label: '${s.subtitleFontSize.toInt()} px',
-          onChanged: (v) => s.setSubtitleFontSize(v),
-          activeColor: cs.primary,
+          onChanged: (v) => s.setSubtitleFontSize(v), activeColor: cs.primary,
         ),
-        
         ListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
@@ -65,7 +65,7 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(s.fontFamily, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              Text(s.fontFamily.split('/').last, style: const TextStyle(color: Colors.white70, fontSize: 13)),
               const Icon(Icons.arrow_drop_down, color: Colors.white70),
             ],
           ),
@@ -73,8 +73,10 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
         ),
 
         const Divider(color: Colors.white24, height: 24),
-        
-        // ── الألوان والخلفية بطريقة احترافية ──
+
+        // ── 2. الألوان والخلفية ──
+        const Text('الألوان والخلفية', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -89,8 +91,6 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
           ],
         ),
         const SizedBox(height: 16),
-        
-        // تصميم لون الخلفية والتوغل بجانب بعضهما
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -114,25 +114,23 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
             ),
           ],
         ),
-
         if (s.subtitleBgOpacity > 0) ...[
           const SizedBox(height: 8),
           _buildSliderRow(
-            title: 'شفافية الخلفية',
-            value: s.subtitleBgOpacity, min: 0.1, max: 1.0,
+            title: 'شفافية الخلفية', value: s.subtitleBgOpacity, min: 0.1, max: 1.0,
             label: '${(s.subtitleBgOpacity * 100).toInt()}%',
-            onChanged: (v) => s.setSubtitleBgOpacity(v),
-            activeColor: cs.primary,
+            onChanged: (v) => s.setSubtitleBgOpacity(v), activeColor: cs.primary,
           ),
         ],
 
         const Divider(color: Colors.white24, height: 24),
 
-        // ── ظل النص ──
+        // ── 3. الظلال (Shadows) ──
+        const Text('تأثيرات الظل', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('ظل النص', style: TextStyle(color: Colors.white, fontSize: 14)),
+            const Text('تفعيل ظل النص', style: TextStyle(color: Colors.white, fontSize: 14)),
             Switch(
               value: s.textShadowEnabled,
               onChanged: (v) => s.setTextShadowEnabled(v),
@@ -140,9 +138,8 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
             ),
           ],
         ),
-        
         if (s.textShadowEnabled) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -157,29 +154,40 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
             ],
           ),
           _buildSliderRow(
-            title: 'حجم الظل (Blur)', value: s.textShadowBlurRadius, min: 0, max: 20,
+            title: 'قوة الظل (Blur)', value: s.textShadowBlurRadius, min: 0, max: 20,
             label: '${s.textShadowBlurRadius.toInt()}',
             onChanged: (v) => s.setTextShadowBlurRadius(v), activeColor: cs.primary,
           ),
+          _buildSliderRow(
+            title: 'إزاحة أفقية (X)', value: s.textShadowOffsetX, min: -10, max: 10,
+            label: '${s.textShadowOffsetX.toInt()}',
+            onChanged: (v) => s.setTextShadowOffsetX(v), activeColor: cs.primary,
+          ),
+          _buildSliderRow(
+            title: 'إزاحة رأسية (Y)', value: s.textShadowOffsetY, min: -10, max: 10,
+            label: '${s.textShadowOffsetY.toInt()}',
+            onChanged: (v) => s.setTextShadowOffsetY(v), activeColor: cs.primary,
+          ),
         ],
-
-        const Divider(color: Colors.white24, height: 24),
-
-        // ── الموقع (مزامنة مع السحب) ──
-        _buildSliderRow(
-          title: 'الارتفاع عن الأسفل',
-          value: s.bottomPadding, min: 0, max: 300,
-          label: '${s.bottomPadding.toInt()} px',
-          onChanged: (v) => s.setBottomPadding(v),
-          activeColor: cs.primary,
-        ),
       ],
     ),
   );
 }
 
 void _showFontPicker(BuildContext context, SettingsProvider s) {
-  final fonts = ['Roboto', 'monospace', 'serif', 'sans-serif', 'Cairo', 'Amiri', 'Noto Naskh Arabic'];
+  final fonts = [
+    'Default',
+    'Adobe Arabic',
+    'Cairo',
+    'Amiri',
+    'Roboto',
+  ];
+
+  // إضافة الخط المخصص للقائمة إذا كان موجوداً
+  if (!fonts.contains(s.fontFamily) && s.fontFamily != 'Default') {
+    fonts.add(s.fontFamily);
+  }
+
   showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -188,14 +196,33 @@ void _showFontPicker(BuildContext context, SettingsProvider s) {
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: fonts.map((font) => ListTile(
-            title: Text(font, textAlign: TextAlign.right, style: TextStyle(
-              color: s.fontFamily == font ? Theme.of(context).colorScheme.primary : Colors.white,
-              fontFamily: font,
-            )),
-            trailing: s.fontFamily == font ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary) : null,
-            onTap: () { s.setFontFamily(font); Navigator.pop(ctx); },
-          )).toList(),
+          children: [
+            ...fonts.map((font) => ListTile(
+              title: Text(font.split('/').last, textAlign: TextAlign.right, style: TextStyle(
+                color: s.fontFamily == font ? Theme.of(context).colorScheme.primary : Colors.white,
+                fontFamily: font.contains('/') ? null : font, // تطبيق الخط إذا لم يكن مسار ملف
+              )),
+              trailing: s.fontFamily == font ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary) : null,
+              onTap: () {
+                s.setFontFamily(font);
+                Navigator.pop(ctx);
+              },
+            )).toList(),
+            const Divider(color: Colors.white24),
+            ListTile(
+              leading: const Icon(Icons.folder_open, color: Colors.blueAccent),
+              title: const Text('إضافة خط من الهاتف', textAlign: TextAlign.right, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+              onTap: () async {
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom, allowedExtensions: ['ttf', 'otf'],
+                );
+                if (result != null) {
+                  s.setFontFamily(result.files.single.path!);
+                  Navigator.pop(ctx);
+                }
+              },
+            ),
+          ],
         ),
       ),
     ),
