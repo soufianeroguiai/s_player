@@ -50,6 +50,8 @@ class VideoFitSettings {
   }
 }
 
+enum GestureType { none, seek, volumeBrightness }
+
 class PlayerScreen extends StatefulWidget {
   final VideoItem video;
   const PlayerScreen({super.key, required this.video});
@@ -105,12 +107,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   DateTime? _lastBrightTime;
   Timer? _indicatorTimer;
 
-  // ── متغيرات الإيماءات الجديدة (Pan) ──
+  // متغيرات الإيماءات Pan
   double _panStartVolume = 0.8;
   double _panStartBrightness = 0.7;
   double _panStartSeekMs = 0.0;
-  
-  enum GestureType { none, seek, volumeBrightness }
   GestureType _panType = GestureType.none;
   Offset _panStartPos = Offset.zero;
 
@@ -401,17 +401,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try { await PipService.enter(); } catch (_) {}
   }
 
-  // ═══════════════════════════════════════════════
-  // 🎯 الإيماءات الجديدة باستخدام Pan (خالية من التعارض)
-  // ═══════════════════════════════════════════════
-  void _onPanStart(DragStartDetails details) {
+  // ──────────────────────────────────────────────
+  // إيماءات Pan (منفصلة عن Tap)
+  // ──────────────────────────────────────────────
+  void _onPanDown(DragDownDetails details) {
     if (_isLocked) return;
     _hideTimer?.cancel();
     _indicatorTimer?.cancel();
 
     _panStartPos = details.localPosition;
-    _panType = GestureType.none; // لم نحدد بعد
-    // حفظ القيم المرجعية
+    _panType = GestureType.none;
     _panStartVolume = _volumeNotifier.value;
     _panStartBrightness = _brightnessNotifier.value;
     _panStartSeekMs = _position.inMilliseconds.toDouble();
@@ -419,11 +418,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _onPanUpdate(DragUpdateDetails details, double screenWidth) {
-    if (_isLocked || _panType == GestureType.none) {
-      // نحاول تحديد الاتجاه عند بداية السحب
+    if (_isLocked) return;
+
+    if (_panType == GestureType.none) {
       final delta = details.localPosition - _panStartPos;
-      if (delta.distance < 8) return; // عتبة صغيرة لتجنب الاهتزاز
-      // تحديد النوع بناءً على الزاوية
+      if (delta.distance < 8) return;
       if (delta.dx.abs() > delta.dy.abs()) {
         _panType = GestureType.seek;
       } else {
@@ -440,7 +439,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _handleSeekPan(DragUpdateDetails details, double screenWidth) {
     final dx = details.delta.dx;
-    // معامل سرعة البحث يتناسب مع مدة الفيديو
     final double seekFactor = (_duration.inMilliseconds * 0.25).clamp(50000, 500000);
     final seekChangeMs = (dx / screenWidth) * seekFactor;
     _seekMsNotifier.value = (_seekMsNotifier.value + seekChangeMs)
@@ -454,7 +452,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _handleVolumeBrightnessPan(DragUpdateDetails details, double screenWidth) {
     final dy = details.delta.dy;
-    final double delta = -dy / 200.0; // حساسية جيدة
+    final double delta = -dy / 200.0;
     final bool isLeft = details.localPosition.dx < screenWidth / 2;
     final DateTime now = DateTime.now();
 
@@ -518,9 +516,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
   }
 
-  // ═══════════════════════════════════════════════
-  // واجهة المؤشرات العائمة (لم تُمس)
-  // ═══════════════════════════════════════════════
+  // ──────────────────────────────────────────────
+  // مؤشرات عائمة
+  // ──────────────────────────────────────────────
   Widget _buildFloatingIndicator({
     required IconData icon,
     required double displayValue,
@@ -988,7 +986,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         body: !_initialized
             ? Center(child: CircularProgressIndicator(color: cs.primary))
             : Stack(children: [
-          // 🎯 GestureDetector بسيط: Tap + DoubleTap + Pan منفصلة
           GestureDetector(
             onTap: _toggleControls,
             onDoubleTapDown: _isLocked ? null : (details) {
@@ -998,7 +995,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   : (_position - const Duration(seconds: 10));
               _player.seek(target.isNegative ? Duration.zero : (target > _duration ? _duration : target));
             },
-            onPanStart: _onPanStart,
+            onPanDown: _onPanDown,
             onPanUpdate: (details) => _onPanUpdate(details, screenWidth),
             onPanEnd: _onPanEnd,
             child: Video(
@@ -1024,7 +1021,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             ),
           ),
 
-          // المؤشرات (بقيت كما هي)
           ValueListenableBuilder<bool>(
             valueListenable: _showSeekNotifier,
             builder: (context, show, child) {
