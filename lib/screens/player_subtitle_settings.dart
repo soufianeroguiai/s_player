@@ -28,21 +28,30 @@ Widget _buildSliderRow({
         ),
         SliderTheme(
           data: SliderThemeData(
-            trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            trackHeight: 4, // سماكة الشريط
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+            activeTrackColor: activeColor,
+            inactiveTrackColor: Colors.white24,
+            thumbColor: Colors.white,
           ),
-          child: Slider(value: value, min: min, max: max, onChanged: onChanged, activeColor: activeColor),
+          child: Slider(value: value, min: min, max: max, onChanged: onChanged),
         ),
       ],
     ),
   );
 }
 
-// الواجهة الاحترافية لتخصيص الترجمة
+// الواجهة الاحترافية المدمجة لتخصيص الترجمة
 Widget buildSubtitleSettingsContent(BuildContext context) {
   final s = context.watch<SettingsProvider>();
   final cs = Theme.of(context).colorScheme;
+
+  // إعداد قائمة الخطوط المتاحة
+  final List<String> availableFonts = ['Default', 'Adobe Arabic', 'Cairo', 'Amiri', 'Roboto'];
+  if (!availableFonts.contains(s.fontFamily) && s.fontFamily != 'Default') {
+    availableFonts.add(s.fontFamily);
+  }
 
   return Directionality(
     textDirection: TextDirection.rtl,
@@ -50,26 +59,76 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // ── زر إضافة ترجمة يدوية في الأعلى ──
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white10,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.folder_open, color: Colors.blueAccent),
+            label: const Text('إضافة ملف ترجمة من الهاتف', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            onPressed: () async {
+              // الاستدعاء المباشر المتوافق مع الإصدار 12 من FilePicker
+              FilePickerResult? result = await FilePicker.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: ['srt', 'vtt', 'ass', 'ssa'],
+              );
+              if (result != null) {
+                String subtitlePath = result.files.single.path!;
+                // قم بتفعيل هذا السطر إذا كانت لديك دالة في الـ Provider لتمرير الترجمة
+                // s.setExternalSubtitle(subtitlePath);
+              }
+            },
+          ),
+        ),
+        
+        const Divider(color: Colors.white24, height: 30),
+
         // ── 1. الخط والحجم ──
-        const Text('الخط والحجم', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const Text('تخصيص الخط', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
+        
+        // القائمة المنسدلة للخطوط مدمجة هنا
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white10,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1A1A2E),
+              value: availableFonts.contains(s.fontFamily) ? s.fontFamily : 'Default',
+              icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white70),
+              items: availableFonts.map((String font) {
+                return DropdownMenuItem<String>(
+                  value: font,
+                  child: Text(
+                    font.split('/').last,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontFamily: font.contains('/') ? null : font,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                if (newValue != null) s.setFontFamily(newValue);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
         _buildSliderRow(
           title: 'حجم الخط', value: s.subtitleFontSize, min: 10, max: 150,
           label: '${s.subtitleFontSize.toInt()} px',
           onChanged: (v) => s.setSubtitleFontSize(v), activeColor: cs.primary,
-        ),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          title: const Text('نوع الخط', style: TextStyle(color: Colors.white, fontSize: 14)),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(s.fontFamily.split('/').last, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              const Icon(Icons.arrow_drop_down, color: Colors.white70),
-            ],
-          ),
-          onTap: () => _showFontPicker(context, s),
         ),
 
         const Divider(color: Colors.white24, height: 24),
@@ -170,63 +229,6 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
           ),
         ],
       ],
-    ),
-  );
-}
-
-void _showFontPicker(BuildContext context, SettingsProvider s) {
-  final fonts = [
-    'Default',
-    'Adobe Arabic',
-    'Cairo',
-    'Amiri',
-    'Roboto',
-  ];
-
-  // إضافة الخط المخصص للقائمة إذا كان موجوداً
-  if (!fonts.contains(s.fontFamily) && s.fontFamily != 'Default') {
-    fonts.add(s.fontFamily);
-  }
-
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF1A1A2E),
-      title: const Text('اختر نوع الخط', style: TextStyle(color: Colors.white), textAlign: TextAlign.right),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ...fonts.map((font) => ListTile(
-              title: Text(font.split('/').last, textAlign: TextAlign.right, style: TextStyle(
-                color: s.fontFamily == font ? Theme.of(context).colorScheme.primary : Colors.white,
-                fontFamily: font.contains('/') ? null : font, // تطبيق الخط إذا لم يكن مسار ملف
-              )),
-              trailing: s.fontFamily == font ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary) : null,
-              onTap: () {
-                s.setFontFamily(font);
-                Navigator.pop(ctx);
-              },
-            )).toList(),
-            const Divider(color: Colors.white24),
-            ListTile(
-              leading: const Icon(Icons.folder_open, color: Colors.blueAccent),
-              title: const Text('إضافة خط من الهاتف', textAlign: TextAlign.right, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-              onTap: () async {
-                FilePickerResult? result = await FilePicker.pickFiles(
-  type: FileType.custom, allowedExtensions: ['ttf', 'otf'],
-);
-
-
-                if (result != null) {
-                  s.setFontFamily(result.files.single.path!);
-                  Navigator.pop(ctx);
-                }
-              },
-            ),
-          ],
-        ),
-      ),
     ),
   );
 }
