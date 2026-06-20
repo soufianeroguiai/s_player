@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart'; // <-- ضروري لـ ScaleGestureRecognizer
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -27,17 +26,23 @@ enum VideoFitMode { contain, cover, fill }
 
 BoxFit getBoxFit(VideoFitMode mode) {
   switch (mode) {
-    case VideoFitMode.contain: return BoxFit.contain;
-    case VideoFitMode.cover:   return BoxFit.cover;
-    case VideoFitMode.fill:    return BoxFit.fill;
+    case VideoFitMode.contain:
+      return BoxFit.contain;
+    case VideoFitMode.cover:
+      return BoxFit.cover;
+    case VideoFitMode.fill:
+      return BoxFit.fill;
   }
 }
 
 String modeName(VideoFitMode mode) {
   switch (mode) {
-    case VideoFitMode.contain: return 'Fit';
-    case VideoFitMode.cover:   return 'Crop';
-    case VideoFitMode.fill:    return 'Stretch';
+    case VideoFitMode.contain:
+      return 'Fit';
+    case VideoFitMode.cover:
+      return 'Crop';
+    case VideoFitMode.fill:
+      return 'Stretch';
   }
 }
 
@@ -111,7 +116,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable();
 
-    // ربط PlayerGestures بالحقول
     getPlayer = () => _player;
     volumeNotifier = _volumeNotifier;
     brightnessNotifier = _brightnessNotifier;
@@ -194,7 +198,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _toggleFit() {
     setState(() {
-      _fitMode = VideoFitMode.values[(_fitMode.index + 1) % VideoFitMode.values.length];
+      _fitMode =
+          VideoFitMode.values[(_fitMode.index + 1) % VideoFitMode.values.length];
       _showFitOverlay();
     });
     VideoFitSettings.save(_fitMode);
@@ -217,7 +222,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
       if (settings.rememberPosition) {
         try {
-          final saved = await context.read<LibraryProvider>().getPosition(widget.video.path);
+          final saved =
+              await context.read<LibraryProvider>().getPosition(widget.video.path);
           if (saved != null && saved.inSeconds > 0) await _player.seek(saved);
         } catch (_) {}
       }
@@ -228,7 +234,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (settings.rememberPosition) {
           _saveTimer?.cancel();
           _saveTimer = Timer(const Duration(seconds: 5), () {
-            if (mounted) context.read<LibraryProvider>().savePosition(widget.video.path, _position);
+            if (mounted)
+              context
+                  .read<LibraryProvider>()
+                  .savePosition(widget.video.path, _position);
           });
         }
       });
@@ -251,9 +260,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       });
 
       try {
-        _brightnessNotifier.value = await ScreenBrightness.instance.application;
+        _brightnessNotifier.value =
+            await ScreenBrightness.instance.application;
         if (_brightnessNotifier.value < 0.1) _brightnessNotifier.value = 0.1;
-        await ScreenBrightness.instance.setApplicationScreenBrightness(_brightnessNotifier.value);
+        await ScreenBrightness.instance
+            .setApplicationScreenBrightness(_brightnessNotifier.value);
       } catch (_) {
         _brightnessNotifier.value = 0.7;
       }
@@ -279,7 +290,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
 
-    final videoName = widget.video.path.split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '');
+    final videoName =
+        widget.video.path.split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '');
     final folder = Directory(s.subtitleFolder);
     if (await folder.exists()) {
       final matchedFiles = <File>[];
@@ -287,8 +299,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (file is File) {
           final fileName = file.path.split('/').last;
           if (fileName.startsWith(videoName) &&
-              (fileName.endsWith('.srt') || fileName.endsWith('.SRT') ||
-               fileName.endsWith('.ssa') || fileName.endsWith('.ass'))) {
+              (fileName.endsWith('.srt') ||
+                  fileName.endsWith('.SRT') ||
+                  fileName.endsWith('.ssa') ||
+                  fileName.endsWith('.ass'))) {
             matchedFiles.add(file);
           }
         }
@@ -305,10 +319,12 @@ class _PlayerScreenState extends State<PlayerScreen>
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: matchedFiles.map((f) => ListTile(
-                  title: Text(f.path.split('/').last),
-                  onTap: () => Navigator.pop(ctx, f),
-                )).toList(),
+                children: matchedFiles
+                    .map((f) => ListTile(
+                          title: Text(f.path.split('/').last),
+                          onTap: () => Navigator.pop(ctx, f),
+                        ))
+                    .toList(),
               ),
             ),
           ),
@@ -347,7 +363,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       for (int i = 0; i < entries.length; i++) {
         final e = entries[i];
         srtContent.writeln('${i + 1}');
-        srtContent.writeln('${_formatSrtTime(e.start)} --> ${_formatSrtTime(e.end)}');
+        srtContent
+            .writeln('${_formatSrtTime(e.start)} --> ${_formatSrtTime(e.end)}');
         srtContent.writeln(e.text);
         srtContent.writeln();
       }
@@ -381,7 +398,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _pickSubtitle() async {
     final result = await FilePicker.pickFiles(
-        type: FileType.custom, allowedExtensions: ['srt', 'SRT', 'ssa', 'ass']);
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'SRT', 'ssa', 'ass']);
     if (result?.files.single.path != null) {
       final settings = context.read<SettingsProvider>();
       await _loadSrtFile(result!.files.single.path!, settings.subtitleEncoding);
@@ -391,7 +409,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _scheduleHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isPlaying && !_isLocked) setState(() => _showControls = false);
+      if (mounted && _isPlaying && !_isLocked)
+        setState(() => _showControls = false);
     });
   }
 
@@ -402,7 +421,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _enterPip() async {
-    try { await PipService.enter(); } catch (_) {}
+    try {
+      await PipService.enter();
+    } catch (_) {}
   }
 
   void _showAudioMenu() {
@@ -411,7 +432,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     final uniqueAudio = <AudioTrack>[];
     for (final t in _audioTracks) {
       final k = t.title ?? t.language ?? 'unknown';
-      if (!seen.contains(k)) { seen.add(k); uniqueAudio.add(t); }
+      if (!seen.contains(k)) {
+        seen.add(k);
+        uniqueAudio.add(t);
+      }
     }
 
     showDialog(
@@ -432,14 +456,19 @@ class _PlayerScreenState extends State<PlayerScreen>
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  title: Text(name, style: const TextStyle(color: Colors.white)),
+                  title:
+                      Text(name, style: const TextStyle(color: Colors.white)),
                   subtitle: track.language != null
-                      ? Text(track.language!, style: const TextStyle(color: Colors.white54))
+                      ? Text(track.language!,
+                          style: const TextStyle(color: Colors.white54))
                       : null,
                   trailing: _player.state.track.audio == track
                       ? Icon(Icons.check, color: cs.primary)
                       : null,
-                  onTap: () { _player.setAudioTrack(track); Navigator.pop(ctx); },
+                  onTap: () {
+                    _player.setAudioTrack(track);
+                    Navigator.pop(ctx);
+                  },
                 );
               }),
               const Divider(color: Colors.white24),
@@ -463,7 +492,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     final uniqueTracks = <SubtitleTrack>[];
     for (final t in _subtitleTracks) {
       final k = t.title ?? t.language ?? 'unknown';
-      if (!seen.contains(k)) { seen.add(k); uniqueTracks.add(t); }
+      if (!seen.contains(k)) {
+        seen.add(k);
+        uniqueTracks.add(t);
+      }
     }
 
     showDialog(
@@ -497,7 +529,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                   contentPadding: EdgeInsets.zero,
                   title: Text(name, style: const TextStyle(color: Colors.white)),
                   subtitle: track.language != null
-                      ? Text(track.language!, style: const TextStyle(color: Colors.white54))
+                      ? Text(track.language!,
+                          style: const TextStyle(color: Colors.white54))
                       : null,
                   trailing: _player.state.track.subtitle == track
                       ? Icon(Icons.check, color: cs.primary)
@@ -513,13 +546,18 @@ class _PlayerScreenState extends State<PlayerScreen>
             const Divider(color: Colors.white24),
             ListTile(
               leading: const Icon(Icons.upload_file, color: Colors.white),
-              title: const Text('تحميل ترجمة من ملف', style: TextStyle(color: Colors.white)),
-              onTap: () { Navigator.pop(ctx); _pickSubtitle(); },
+              title: const Text('تحميل ترجمة من ملف',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickSubtitle();
+              },
             ),
             const Divider(color: Colors.white24),
             ListTile(
               leading: const Icon(Icons.settings, color: Colors.white),
-              title: const Text('مزامنة وإعدادات', style: TextStyle(color: Colors.white)),
+              title: const Text('مزامنة وإعدادات',
+                  style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(ctx);
                 _showSyncSpeedPaletteSheet();
@@ -528,7 +566,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             const Divider(color: Colors.white24),
             ListTile(
               leading: const Icon(Icons.palette, color: Colors.white),
-              title: const Text('تخصيص المظهر', style: TextStyle(color: Colors.white)),
+              title: const Text('تخصيص المظهر',
+                  style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(ctx);
                 showSubtitleSettingsSheet(context);
@@ -552,13 +591,20 @@ class _PlayerScreenState extends State<PlayerScreen>
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Text('إعدادات الترجمة',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
             const Divider(color: Colors.white24),
             ListTile(
               dense: true,
-              title: const Text('مزامنة الترجمة', style: TextStyle(color: Colors.white)),
+              title: const Text('مزامنة الترجمة',
+                  style: TextStyle(color: Colors.white)),
               subtitle: Slider(
-                value: _subtitleSync, min: -5.0, max: 5.0, divisions: 100,
+                value: _subtitleSync,
+                min: -5.0,
+                max: 5.0,
+                divisions: 100,
                 label: '${_subtitleSync.toStringAsFixed(1)}s',
                 onChanged: (v) {
                   setState(() => _subtitleSync = v);
@@ -569,9 +615,13 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
             ListTile(
               dense: true,
-              title: const Text('سرعة الترجمة', style: TextStyle(color: Colors.white)),
+              title: const Text('سرعة الترجمة',
+                  style: TextStyle(color: Colors.white)),
               subtitle: Slider(
-                value: _subtitleSpeed, min: 0.5, max: 2.0, divisions: 15,
+                value: _subtitleSpeed,
+                min: 0.5,
+                max: 2.0,
+                divisions: 15,
                 label: '${_subtitleSpeed}x',
                 onChanged: (v) => setState(() => _subtitleSpeed = v),
                 activeColor: Theme.of(context).colorScheme.primary,
@@ -585,11 +635,16 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   FontWeight _getFontWeight(int index) {
     switch (index) {
-      case 0: return FontWeight.w300;
-      case 1: return FontWeight.normal;
-      case 2: return FontWeight.w500;
-      case 3: return FontWeight.bold;
-      default: return FontWeight.normal;
+      case 0:
+        return FontWeight.w300;
+      case 1:
+        return FontWeight.normal;
+      case 2:
+        return FontWeight.w500;
+      case 3:
+        return FontWeight.bold;
+      default:
+        return FontWeight.normal;
     }
   }
 
@@ -619,7 +674,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                   onDoubleTapDown: _isLocked
                       ? null
                       : (details) {
-                          final isRight = details.localPosition.dx > screenWidth / 2;
+                          final isRight =
+                              details.localPosition.dx > screenWidth / 2;
                           final target = isRight
                               ? (_position + const Duration(seconds: 10))
                               : (_position - const Duration(seconds: 10));
@@ -640,33 +696,34 @@ class _PlayerScreenState extends State<PlayerScreen>
                         color: s.subtitleColor,
                         fontWeight: _getFontWeight(s.fontWeightIndex),
                         fontFamily: s.fontFamily,
-                        fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
-                        backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
+                        fontStyle: s.subtitleItalic
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                        backgroundColor:
+                            s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
                         shadows: s.textShadowEnabled
-                            ? [Shadow(color: s.textShadowColor, blurRadius: s.textShadowBlurRadius,
-                                offset: Offset(s.textShadowOffsetX, s.textShadowOffsetY))]
+                            ? [
+                                Shadow(
+                                    color: s.textShadowColor,
+                                    blurRadius: s.textShadowBlurRadius,
+                                    offset: Offset(s.textShadowOffsetX,
+                                        s.textShadowOffsetY))
+                              ]
                             : null,
                       ),
-                      textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
-                      padding: EdgeInsets.fromLTRB(s.horizontalMargin, 0, s.horizontalMargin, s.bottomPadding),
+                      textAlign:
+                          s.subtitleRTL ? TextAlign.right : TextAlign.center,
+                      padding: EdgeInsets.fromLTRB(s.horizontalMargin, 0,
+                          s.horizontalMargin, s.bottomPadding),
                     ),
                   ),
                 ),
                 Positioned(
                   bottom: 0, left: 0, right: 0, height: 200,
-                  child: RawGestureDetector(
-                    gestures: {
-                      ScaleGestureRecognizer:
-                          GestureRecognizerFactoryWithHandlers<ScaleGestureRecognizer>(
-                        () => ScaleGestureRecognizer(),
-                        (instance) {
-                          instance
-                            ..onStart = onScaleStart
-                            ..onUpdate = onScaleUpdate
-                            ..onEnd = onScaleEnd;
-                        },
-                      ),
-                    },
+                  child: GestureDetector(
+                    onScaleStart: onScaleStart,
+                    onScaleUpdate: onScaleUpdate,
+                    onScaleEnd: onScaleEnd,
                     behavior: HitTestBehavior.translucent,
                   ),
                 ),
@@ -679,19 +736,27 @@ class _PlayerScreenState extends State<PlayerScreen>
                       builder: (context, seekMs, child) {
                         return Center(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 16),
                             decoration: BoxDecoration(
                               color: Colors.black.withOpacity(0.75),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
-                              const Icon(Symbols.fast_forward_rounded, color: Colors.white, size: 32),
-                              const SizedBox(height: 8),
-                              Text(
-                                _fmt(Duration(milliseconds: seekMs.toInt())),
-                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                              ),
-                            ]),
+                            child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Symbols.fast_forward_rounded,
+                                      color: Colors.white, size: 32),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _fmt(Duration(
+                                        milliseconds: seekMs.toInt())),
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ]),
                           ),
                         );
                       },
@@ -709,9 +774,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                           left: 24,
                           top: MediaQuery.of(context).size.height * 0.25,
                           child: PlayerIndicators.buildFloatingIndicator(
-                            icon: volume == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                            icon: volume == 0
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded,
                             displayValue: volume,
-                            labelText: '${(volume * _audioBoost).round()}%',
+                            labelText:
+                                '${(volume * _audioBoost).round()}%',
                             color: cs.primary,
                           ),
                         );
@@ -730,7 +798,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                           right: 24,
                           top: MediaQuery.of(context).size.height * 0.25,
                           child: PlayerIndicators.buildFloatingIndicator(
-                            icon: brightness < 0.15 ? Icons.brightness_low_rounded : Icons.brightness_6_rounded,
+                            icon: brightness < 0.15
+                                ? Icons.brightness_low_rounded
+                                : Icons.brightness_6_rounded,
                             displayValue: brightness,
                             labelText: '${(brightness * 100).round()}%',
                             color: cs.secondary,
@@ -741,22 +811,40 @@ class _PlayerScreenState extends State<PlayerScreen>
                   },
                 ),
                 if (_fitOverlayText != null)
-                  Positioned(top: 100, left: 0, right: 0,
-                    child: Center(child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.55), borderRadius: BorderRadius.circular(20)),
-                      child: Text(_fitOverlayText!, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                    ))),
+                  Positioned(
+                      top: 100,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                          child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.55),
+                            borderRadius: BorderRadius.circular(20)),
+                        child: Text(_fitOverlayText!,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600)),
+                      ))),
                 if (_isLocked)
-                  Positioned(top: 16, right: 16,
-                    child: SafeArea(child: GestureDetector(
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: SafeArea(
+                        child: GestureDetector(
                       onTap: _toggleLock,
                       child: Container(
                         padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.85), shape: BoxShape.circle),
-                        child: const Icon(Symbols.lock_rounded, color: Colors.white, size: 22),
+                        decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.85),
+                            shape: BoxShape.circle),
+                        child: const Icon(Symbols.lock_rounded,
+                            color: Colors.white, size: 22),
                       ),
-                    ))),
+                    )),
+                  ),
                 if (_showControls && !_isLocked) ...[
                   Positioned(top: 0, left: 0, right: 0,
                     child: PlayerTopBar(
@@ -774,19 +862,26 @@ class _PlayerScreenState extends State<PlayerScreen>
                     child: PlayerBottomBar(
                       position: _position,
                       duration: _duration,
-                      onSeek: (v) => _player.seek(Duration(milliseconds: (v * _duration.inMilliseconds).toInt())),
+                      onSeek: (v) => _player.seek(Duration(
+                          milliseconds:
+                              (v * _duration.inMilliseconds).toInt())),
                       primaryColor: cs.primary,
                     )),
                   Center(child: PlayerCenterButtons(
                     isPlaying: _isPlaying,
-                    onPlayPause: () => _isPlaying ? _player.pause() : _player.play(),
+                    onPlayPause: () =>
+                        _isPlaying ? _player.pause() : _player.play(),
                     onSkipBack: () {
-                      final target = _position - const Duration(seconds: 10);
-                      _player.seek(target.isNegative ? Duration.zero : target);
+                      final target =
+                          _position - const Duration(seconds: 10);
+                      _player.seek(
+                          target.isNegative ? Duration.zero : target);
                     },
                     onSkipForward: () {
-                      final target = _position + const Duration(seconds: 10);
-                      _player.seek(target > _duration ? _duration : target);
+                      final target =
+                          _position + const Duration(seconds: 10);
+                      _player.seek(
+                          target > _duration ? _duration : target);
                     },
                     primaryColor: cs.primaryContainer,
                     onPrimaryContainer: cs.onPrimaryContainer,
@@ -810,7 +905,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _saveTimer?.cancel();
     _fitOverlayTimer?.cancel();
     disposeGestures();
-    try { ScreenBrightness.instance.resetApplicationScreenBrightness(); } catch (_) {}
+    try {
+      ScreenBrightness.instance.resetApplicationScreenBrightness();
+    } catch (_) {}
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
