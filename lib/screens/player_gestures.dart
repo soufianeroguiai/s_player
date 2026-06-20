@@ -9,7 +9,7 @@ import '../providers/settings_provider.dart';
 
 enum GestureType { none, seek, volumeBrightness }
 
-mixin PlayerGestures on ChangeNotifier {
+mixin PlayerGestures {
   late final Player Function() getPlayer;
   late final ValueNotifier<double> volumeNotifier;
   late final ValueNotifier<double> brightnessNotifier;

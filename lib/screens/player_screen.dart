@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; // <-- ضروري لـ ScaleGestureRecognizer
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -27,16 +28,16 @@ enum VideoFitMode { contain, cover, fill }
 BoxFit getBoxFit(VideoFitMode mode) {
   switch (mode) {
     case VideoFitMode.contain: return BoxFit.contain;
-    case VideoFitMode.cover: return BoxFit.cover;
-    case VideoFitMode.fill: return BoxFit.fill;
+    case VideoFitMode.cover:   return BoxFit.cover;
+    case VideoFitMode.fill:    return BoxFit.fill;
   }
 }
 
 String modeName(VideoFitMode mode) {
   switch (mode) {
     case VideoFitMode.contain: return 'Fit';
-    case VideoFitMode.cover: return 'Crop';
-    case VideoFitMode.fill: return 'Stretch';
+    case VideoFitMode.cover:   return 'Crop';
+    case VideoFitMode.fill:    return 'Stretch';
   }
 }
 
@@ -110,6 +111,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable();
 
+    // ربط PlayerGestures بالحقول
     getPlayer = () => _player;
     volumeNotifier = _volumeNotifier;
     brightnessNotifier = _brightnessNotifier;
@@ -122,7 +124,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     getDuration = () => _duration;
     getPosition = () => _position;
     scheduleHide = _scheduleHide;
-    cancelHideTimer = () { _hideTimer?.cancel(); _indicatorTimer?.cancel(); };
+    cancelHideTimer = () { _hideTimer?.cancel(); };
     getContext = () => context;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -658,9 +660,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                           GestureRecognizerFactoryWithHandlers<ScaleGestureRecognizer>(
                         () => ScaleGestureRecognizer(),
                         (instance) {
-                          instance.onStart = onScaleStart;
-                          instance.onUpdate = onScaleUpdate;
-                          instance.onEnd = onScaleEnd;
+                          instance
+                            ..onStart = onScaleStart
+                            ..onUpdate = onScaleUpdate
+                            ..onEnd = onScaleEnd;
                         },
                       ),
                     },
@@ -805,7 +808,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _showSeekNotifier.dispose();
     _hideTimer?.cancel();
     _saveTimer?.cancel();
-    _indicatorTimer?.cancel();
     _fitOverlayTimer?.cancel();
     disposeGestures();
     try { ScreenBrightness.instance.resetApplicationScreenBrightness(); } catch (_) {}
