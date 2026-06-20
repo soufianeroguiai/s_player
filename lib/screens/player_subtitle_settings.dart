@@ -213,9 +213,10 @@ void _showFontPicker(BuildContext context, SettingsProvider s) {
               leading: const Icon(Icons.folder_open, color: Colors.blueAccent),
               title: const Text('إضافة خط من الهاتف', textAlign: TextAlign.right, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
               onTap: () async {
-                FilePickerResult? result = await FilePicker.instance.pickFiles(
+                FilePickerResult? result = await FilePicker.pickFiles(
   type: FileType.custom, allowedExtensions: ['ttf', 'otf'],
 );
+
 
                 if (result != null) {
                   s.setFontFamily(result.files.single.path!);
