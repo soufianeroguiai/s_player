@@ -17,7 +17,7 @@ class VideoThumbnailLoader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notifier = ThumbnailService().getNotifier(video);
+    final notifier = ThumbnailService().getNotifier(video.path);  // ← تم التصحيح
 
     return SizedBox(
       width: width,
