@@ -1,11 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- ⚠️  للإنترنت (media_kit / تحديثات) -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ⚠️  Android 13+ صلاحيات الوسائط بدلاً من storage -->
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_SETTINGS"/>
+
+    <!-- ⚠️  فقط للأجهزة القديمة (أندرويد 12 وأقل) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+    <!-- ⚠️  للتحكم بالإضاءة -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+
+    <!-- ⚠️  للتأكد من استمرارية التشغيل -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:label="SR Player"
@@ -41,6 +53,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- ⚠️  للسماح بفتح ملفات الفيديو -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="video/*"/>
         </intent>
     </queries>
 </manifest>
