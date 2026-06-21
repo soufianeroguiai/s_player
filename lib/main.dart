@@ -14,7 +14,7 @@ void main() async {
 
   FlutterError.onError = (details) => FlutterError.presentError(details);
   PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('Error: $error');
+    debugPrint('خطأ: $error');
     runApp(ErrorApp(error.toString()));
     return true;
   };
@@ -22,7 +22,7 @@ void main() async {
   try {
     MediaKit.ensureInitialized();
   } catch (e) {
-    runApp(ErrorApp('MediaKit initialization failed:\n$e'));
+    runApp(ErrorApp('فشل تهيئة MediaKit:\n$e'));
     return;
   }
 
@@ -37,7 +37,7 @@ void main() async {
     settings = SettingsProvider();
     await settings.load();
   } catch (e) {
-    runApp(ErrorApp('Settings load failed:\n$e'));
+    runApp(ErrorApp('فشل تحميل الإعدادات:\n$e'));
     return;
   }
 
@@ -110,7 +110,7 @@ class _PermissionGateState extends State<PermissionGate> {
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircularProgressIndicator(color: Colors.white),
             SizedBox(height: 20),
-            Text('Requesting permissions...', style: TextStyle(color: Colors.white70, fontSize: 16)),
+            Text('جاري طلب الصلاحيات...', style: TextStyle(color: Colors.white70, fontSize: 16)),
           ]),
         ),
       );
@@ -125,14 +125,22 @@ class _PermissionGateState extends State<PermissionGate> {
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               const Icon(Icons.folder_off_rounded, color: Colors.white38, size: 80),
               const SizedBox(height: 24),
-              const Text('Permissions required', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const Text(
+                'الصلاحيات مطلوبة',
+                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
-              const Text('This app needs media access to display videos.', style: TextStyle(color: Colors.white60, fontSize: 15), textAlign: TextAlign.center),
+              const Text(
+                'يحتاج التطبيق إلى إذن الوصول إلى الوسائط لعرض الفيديوهات.',
+                style: TextStyle(color: Colors.white60, fontSize: 15),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: _requestPermissions,
                 icon: const Icon(Icons.security_rounded),
-                label: const Text('Grant permissions'),
+                label: const Text('منح الصلاحيات'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueAccent,
                   foregroundColor: Colors.white,
@@ -142,8 +150,10 @@ class _PermissionGateState extends State<PermissionGate> {
               ),
               const SizedBox(height: 16),
               TextButton(
-                onPressed: () => setState(() => _allGranted = true),
-                child: const Text('Skip', style: TextStyle(color: Colors.white38)),
+                onPressed: () {
+                  setState(() => _allGranted = true);
+                },
+                child: const Text('تخطي', style: TextStyle(color: Colors.white38)),
               ),
             ]),
           ),
@@ -171,14 +181,14 @@ class ErrorApp extends StatelessWidget {
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 24),
-              const Text('Sorry, an error occurred', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const Text('عذراً، حدث خطأ', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               Text(message, style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.5), textAlign: TextAlign.center),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () => main(),
                 icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                label: const Text('إعادة المحاولة'),
               ),
             ]),
           ),

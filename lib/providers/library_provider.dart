@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // ← تم الإضافة
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
@@ -68,6 +68,13 @@ class LibraryProvider extends ChangeNotifier {
         if (dotIndex != -1) name = name.substring(0, dotIndex);
         if (name.length < 2) name = '$albumName ${asset.id}';
       }
+      List<int>? thumbBytes;
+      try {
+        final thumbData = await asset.thumbData;
+        if (thumbData != null) {
+          thumbBytes = thumbData;
+        }
+      } catch (_) {}
       return VideoItem(
         id: asset.id,
         path: file.path,
@@ -77,6 +84,7 @@ class LibraryProvider extends ChangeNotifier {
         folder: albumName,
         duration: asset.videoDuration,
         subtitleTypes: [],
+        thumbnail: thumbBytes,
       );
     } catch (e) {
       return null;
@@ -90,14 +98,14 @@ class LibraryProvider extends ChangeNotifier {
     try {
       final ps = await PhotoManager.requestPermissionExtend();
       if (!ps.isAuth && !ps.hasAccess) {
-        _error = 'Media permission not granted.';
+        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.';
         _loading = false;
         notifyListeners();
         return;
       }
       final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
       final List<VideoItem> result = [];
-      const batchSize = 12;
+      const batchSize = 6;
       for (final album in albums) {
         final count = await album.assetCountAsync;
         final assets = await album.getAssetListRange(start: 0, end: count);
@@ -113,7 +121,7 @@ class LibraryProvider extends ChangeNotifier {
       await _saveVideosToCache();
       ThumbnailService().clearCache();
     } catch (e) {
-      _error = 'Scan failed: $e';
+      _error = 'فشل المسح: $e';
     }
     _loading = false;
     notifyListeners();

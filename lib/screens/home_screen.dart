@@ -96,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           const Text('SR Player'),
         ]),
         bottom: TabBar(controller: _tabs, tabs: const [
-          Tab(text: 'All'), Tab(text: 'Recent'), Tab(text: 'Folders'),
+          Tab(text: 'الكل'), Tab(text: 'الأخيرة'), Tab(text: 'المجلدات'),
         ]),
         actions: [
           IconButton(icon: const Icon(Symbols.search_rounded),
@@ -115,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircularProgressIndicator(color: cs.primary),
             const SizedBox(height: 16),
-            Text('Scanning...', style: TextStyle(color: cs.onSurfaceVariant)),
+            Text('جاري البحث...', style: TextStyle(color: cs.onSurfaceVariant)),
           ]));
         }
         if (lib.error != null && lib.videos.isEmpty) {
@@ -125,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             FilledButton.icon(onPressed: () => _initLibrary(),
-              icon: const Icon(Symbols.refresh_rounded), label: const Text('Retry')),
+              icon: const Icon(Symbols.refresh_rounded), label: const Text('إعادة المحاولة')),
           ]));
         }
 
@@ -156,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _pickFile,
         icon: const Icon(Symbols.folder_open_rounded),
-        label: const Text('Open file'),
+        label: const Text('فتح ملف'),
       ),
     );
   }
@@ -167,17 +167,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Padding(padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-          child: Text('Sort by', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+          child: Text('ترتيب حسب', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
         const Divider(height: 1),
-        ...[('date','Date',Symbols.calendar_today_rounded),('name','Name',Symbols.sort_by_alpha_rounded),
-            ('size','Size',Symbols.data_usage_rounded),('duration','Duration',Symbols.timer_rounded)].map((e) =>
+        ...[('date','التاريخ',Symbols.calendar_today_rounded),('name','الاسم',Symbols.sort_by_alpha_rounded),
+            ('size','الحجم',Symbols.data_usage_rounded),('duration','المدة',Symbols.timer_rounded)].map((e) =>
           ListTile(leading: Icon(e.$3), title: Text(e.$2),
             trailing: s.sortBy == e.$1 ? Icon(Symbols.check_rounded, color: cs.primary) : null,
             onTap: () { s.sortBy == e.$1 ? s.setSortDesc(!s.sortDesc) : s.setSortBy(e.$1); Navigator.pop(context); })),
         const Divider(height: 1),
         ListTile(
           leading: Icon(s.sortDesc ? Symbols.arrow_downward_rounded : Symbols.arrow_upward_rounded),
-          title: Text(s.sortDesc ? 'Descending' : 'Ascending'),
+          title: Text(s.sortDesc ? 'تنازلي' : 'تصاعدي'),
           onTap: () { s.setSortDesc(!s.sortDesc); Navigator.pop(context); }),
       ]),
     ));
@@ -194,15 +194,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         const Divider(height: 1),
         ListTile(
           leading: _mIcon(Symbols.play_arrow_rounded, cs.primaryContainer, cs.onPrimaryContainer),
-          title: const Text('Play'),
+          title: const Text('تشغيل'),
           onTap: () { Navigator.pop(context); _openPlayer(video); }),
         ListTile(
           leading: _mIcon(Symbols.info_rounded, cs.secondaryContainer, cs.onSecondaryContainer),
-          title: const Text('Info'),
+          title: const Text('معلومات'),
           onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: video))); }),
         ListTile(
           leading: _mIcon(Symbols.share_rounded, cs.tertiaryContainer, cs.onTertiaryContainer),
-          title: const Text('Share'),
+          title: const Text('مشاركة'),
           onTap: () { Navigator.pop(context); Share.shareXFiles([XFile(video.path)], subject: video.name); }),
       ]),
     ));
@@ -241,7 +241,7 @@ class _AllTab extends StatelessWidget {
         LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
       Expanded(
         child: list.isEmpty && !loading
-            ? _Empty('No videos found', Symbols.video_library_rounded)
+            ? _Empty('ما لقينا فيديوهات', Symbols.video_library_rounded)
             : gridView
                 ? GridView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
@@ -271,7 +271,7 @@ class _Chips extends StatelessWidget {
     return Container(height: 48, color: cs.surface,
       child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         children: [
-          _chip('All', selected == null, () => onChanged(null), cs),
+          _chip('الكل', selected == null, () => onChanged(null), cs),
           ...list.map((f) => _chip(f, selected == f, () => onChanged(selected == f ? null : f), cs)),
         ]));
   }
@@ -316,17 +316,17 @@ class _RecentTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final items = list;
-    if (items.isEmpty) return _Empty('No recent videos', Symbols.history_rounded);
+    if (items.isEmpty) return _Empty('ما شفتي فيديو بعد', Symbols.history_rounded);
     return Column(children: [
       Padding(padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
         child: Row(children: [
           Icon(Symbols.history_rounded, size: 16, color: cs.onSurfaceVariant),
           const SizedBox(width: 6),
-          Text('${items.length} files', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+          Text('${items.length} ملف', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
           const Spacer(),
           TextButton.icon(onPressed: onClear,
             icon: Icon(Symbols.delete_sweep_rounded, size: 16, color: cs.error),
-            label: Text('Clear', style: TextStyle(color: cs.error, fontSize: 12)),
+            label: Text('مسح', style: TextStyle(color: cs.error, fontSize: 12)),
             style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10))),
         ])),
       Expanded(child: ListView.builder(
@@ -346,7 +346,7 @@ class _FoldersTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final keys = byFolder.keys.toList()..sort();
-    if (keys.isEmpty) return _Empty('No folders found', Symbols.folder_off_rounded);
+    if (keys.isEmpty) return _Empty('ما لقينا مجلدات', Symbols.folder_off_rounded);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
       itemCount: keys.length,
@@ -364,7 +364,7 @@ class _FoldersTab extends StatelessWidget {
               decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(14)),
               child: Icon(Symbols.folder_rounded, color: cs.onSecondaryContainer, size: 28)),
             title: Text(folder, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 15)),
-            subtitle: Text('${videos.length} videos  •  $size', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+            subtitle: Text('${videos.length} فيديو  •  $size', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
             trailing: Icon(Symbols.chevron_right_rounded, color: cs.onSurfaceVariant),
             onTap: () => onTap(folder),
           ));
@@ -386,7 +386,7 @@ class _Empty extends StatelessWidget {
       const SizedBox(height: 20),
       Text(msg, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 17, fontWeight: FontWeight.w600)),
       const SizedBox(height: 6),
-      Text('Tap "Open file" to select a video', style: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.6), fontSize: 13)),
+      Text('اضغط "فتح ملف" لاختيار فيديو', style: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.6), fontSize: 13)),
     ]));
   }
 }
@@ -397,7 +397,7 @@ class _SearchDelegate extends SearchDelegate<VideoItem?> {
   _SearchDelegate(this.videos, this.onOpen);
 
   @override
-  String get searchFieldLabel => 'Search videos...';
+  String get searchFieldLabel => 'ابحث عن فيديو...';
 
   @override
   List<Widget> buildActions(BuildContext context) => [
@@ -418,7 +418,7 @@ class _SearchDelegate extends SearchDelegate<VideoItem?> {
     final cs = Theme.of(context).colorScheme;
     final results = query.isEmpty ? videos
         : videos.where((v) => v.name.toLowerCase().contains(query.toLowerCase())).toList();
-    if (results.isEmpty) return Center(child: Text('No results', style: TextStyle(color: cs.onSurfaceVariant)));
+    if (results.isEmpty) return Center(child: Text('ما لقينا نتائج', style: TextStyle(color: cs.onSurfaceVariant)));
     return ListView.builder(
       itemCount: results.length,
       itemBuilder: (_, i) => VideoCard(video: results[i],

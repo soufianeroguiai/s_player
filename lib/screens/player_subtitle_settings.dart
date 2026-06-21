@@ -54,7 +54,7 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('Font', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const Text('الخط', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
         Wrap(
           spacing: 8,
@@ -81,24 +81,24 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
         ),
         const SizedBox(height: 12),
         _buildSliderRow(
-          title: 'Font size', value: s.subtitleFontSize, min: 10, max: 150,
+          title: 'حجم الخط', value: s.subtitleFontSize, min: 10, max: 150,
           label: '${s.subtitleFontSize.toInt()} px',
           onChanged: (v) => s.setSubtitleFontSize(v), activeColor: cs.primary,
         ),
         _buildSliderRow(
-          title: 'Bottom margin', value: s.bottomPadding, min: 0, max: 300,
+          title: 'الهامش السفلي', value: s.bottomPadding, min: 0, max: 300,
           label: '${s.bottomPadding.toInt()} px',
           onChanged: (v) => s.setBottomPadding(v), activeColor: cs.primary,
         ),
         _buildSliderRow(
-          title: 'Side margin', value: s.horizontalMargin, min: 0, max: 100,
+          title: 'الهامش الجانبي', value: s.horizontalMargin, min: 0, max: 100,
           label: '${s.horizontalMargin.toInt()} px',
           onChanged: (v) => s.setHorizontalMargin(v), activeColor: cs.primary,
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Italic', style: TextStyle(color: Colors.white, fontSize: 14)),
+            const Text('مائل', style: TextStyle(color: Colors.white, fontSize: 14)),
             Switch(
               value: s.subtitleItalic,
               onChanged: (v) => s.setSubtitleItalic(v),
@@ -109,7 +109,7 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('RTL', style: TextStyle(color: Colors.white, fontSize: 14)),
+            const Text('اتجاه النص (RTL)', style: TextStyle(color: Colors.white, fontSize: 14)),
             Switch(
               value: s.subtitleRTL,
               onChanged: (v) => s.setSubtitleRTL(v),
@@ -118,14 +118,14 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
           ],
         ),
         const Divider(color: Colors.white24, height: 24),
-        const Text('Colors & Background', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const Text('الألوان والخلفية', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
-        _buildColorPickerRow(context, 'Text color', s.subtitleColor, (c) => s.setSubtitleColor(c)),
+        _buildColorPickerRow(context, 'لون النص', s.subtitleColor, (c) => s.setSubtitleColor(c)),
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Background color', style: TextStyle(color: Colors.white, fontSize: 14)),
+            const Text('لون الخلفية', style: TextStyle(color: Colors.white, fontSize: 14)),
             GestureDetector(
               onTap: () async {
                 final newColor = await showDialog<Color>(
@@ -148,17 +148,17 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
         if (s.subtitleBgOpacity > 0) ...[
           const SizedBox(height: 8),
           _buildSliderRow(
-            title: 'Background opacity', value: s.subtitleBgOpacity, min: 0.0, max: 1.0,
+            title: 'شفافية الخلفية', value: s.subtitleBgOpacity, min: 0.0, max: 1.0,
             label: '${(s.subtitleBgOpacity * 100).toInt()}%',
             onChanged: (v) => s.setSubtitleBgOpacity(v), activeColor: cs.primary,
           ),
         ],
         const Divider(color: Colors.white24, height: 24),
-        const Text('Shadow', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const Text('تأثيرات الظل', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Enable shadow', style: TextStyle(color: Colors.white, fontSize: 14)),
+            const Text('تفعيل ظل النص', style: TextStyle(color: Colors.white, fontSize: 14)),
             Switch(
               value: s.textShadowEnabled,
               onChanged: (v) => s.setTextShadowEnabled(v),
@@ -168,19 +168,19 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
         ),
         if (s.textShadowEnabled) ...[
           const SizedBox(height: 8),
-          _buildColorPickerRow(context, 'Shadow color', s.textShadowColor, (c) => s.setTextShadowColor(c)),
+          _buildColorPickerRow(context, 'لون الظل', s.textShadowColor, (c) => s.setTextShadowColor(c)),
           _buildSliderRow(
-            title: 'Shadow blur', value: s.textShadowBlurRadius, min: 0, max: 20,
+            title: 'قوة الظل', value: s.textShadowBlurRadius, min: 0, max: 20,
             label: '${s.textShadowBlurRadius.toInt()}',
             onChanged: (v) => s.setTextShadowBlurRadius(v), activeColor: cs.primary,
           ),
           _buildSliderRow(
-            title: 'Shadow X', value: s.textShadowOffsetX, min: -10, max: 10,
+            title: 'إزاحة أفقية (X)', value: s.textShadowOffsetX, min: -10, max: 10,
             label: '${s.textShadowOffsetX.toInt()}',
             onChanged: (v) => s.setTextShadowOffsetX(v), activeColor: cs.primary,
           ),
           _buildSliderRow(
-            title: 'Shadow Y', value: s.textShadowOffsetY, min: -10, max: 10,
+            title: 'إزاحة رأسية (Y)', value: s.textShadowOffsetY, min: -10, max: 10,
             label: '${s.textShadowOffsetY.toInt()}',
             onChanged: (v) => s.setTextShadowOffsetY(v), activeColor: cs.primary,
           ),
@@ -241,7 +241,7 @@ class _SimpleColorPickerState extends State<_SimpleColorPicker> {
     ];
     return AlertDialog(
       backgroundColor: Colors.grey[900],
-      title: const Text('Choose a color', style: TextStyle(color: Colors.white)),
+      title: const Text('اختر لوناً', style: TextStyle(color: Colors.white)),
       content: Wrap(
         spacing: 12,
         runSpacing: 12,
@@ -263,11 +263,11 @@ class _SimpleColorPickerState extends State<_SimpleColorPicker> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: const Text('إلغاء'),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, _selectedColor),
-          child: const Text('OK'),
+          child: const Text('موافق'),
         ),
       ],
     );

@@ -6,8 +6,6 @@ class PipService {
   static Future<void> enter() async {
     try {
       await _channel.invokeMethod('enterPip');
-    } catch (e) {
-      // PiP غير مدعوم أو فشل
-    }
+    } catch (e) {}
   }
 }

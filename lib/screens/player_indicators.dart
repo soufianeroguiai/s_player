@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 class PlayerIndicators {
   static Widget buildFloatingIndicator({
     required IconData icon,
-    required double displayValue, // القيمة ستكون من 0.0 إلى 1.0 للمؤشر
+    required double displayValue,
     required String labelText,
     required Color color,
   }) {
@@ -53,7 +53,7 @@ class PlayerIndicators {
                       child: SliderTheme(
                         data: SliderThemeData(
                           trackHeight: 4,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0), // إخفاء الدائرة ليكون شريطاً احترافياً
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
                           activeTrackColor: color,
                           inactiveTrackColor: Colors.white.withOpacity(0.2),
                         ),
@@ -69,7 +69,7 @@ class PlayerIndicators {
                   Text(
                     labelText,
                     style: TextStyle(
-                        color: color, // لون النص يتطابق مع لون الشريط
+                        color: color,
                         fontSize: 12,
                         fontWeight: FontWeight.w900),
                   ),

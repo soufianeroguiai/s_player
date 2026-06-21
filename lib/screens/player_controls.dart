@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'player_audio_boost.dart';
 
 class PlayerTopBar extends StatelessWidget {
   final String videoName;
@@ -182,4 +181,21 @@ class PlayerCenterButtons extends StatelessWidget {
       CtrlBtn(Symbols.forward_10_rounded, onSkipForward),
     ]);
   }
+}
+
+class CtrlBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const CtrlBtn(this.icon, this.onTap, {super.key});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12), shape: BoxShape.circle),
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+      );
 }

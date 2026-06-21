@@ -138,7 +138,6 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // --- دوال اختيار القيم (نوافذ منبثقة) ---
   void _audioOutputPicker(BuildContext ctx, SettingsProvider s) {
     final outputs = ['auto', 'speaker', 'headphones', 'bluetooth'];
     showDialog(

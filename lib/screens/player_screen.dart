@@ -88,8 +88,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Timer? _fitOverlayTimer;
 
   double _subtitleSync = 0.0;
-  double _subtitleSpeed = 1.0;
   bool _autoSubtitleSelected = false;
+  bool _tracksReceived = false;
 
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
   final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
@@ -103,15 +103,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() => _isLandscape = MediaQuery.of(context).orientation == Orientation.landscape);
     });
+
     _enterFullscreen();
     final settings = context.read<SettingsProvider>();
     _showSubtitles = settings.showSubtitlesByDefault;
     _speed = settings.defaultSpeed;
     _subtitleSync = settings.defaultSubtitleSync;
+
     _loadPersistedVolumeAndBrightness();
+
     _player = Player();
     _controller = VideoController(_player);
     _initPlayer();
@@ -185,16 +189,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       await _player.open(Media(widget.video.path), play: settings.autoPlay);
       await _player.setSubtitleTrack(SubtitleTrack.no());
+
       _player.setRate(_speed);
       final effectiveVolume = (settings.defaultVolume * (settings.defaultAudioBoost / 100.0)).clamp(0.0, 2.0);
       _volumeLevel = effectiveVolume;
       _player.setVolume(effectiveVolume * 100.0);
+
       if (settings.rememberPosition) {
         try {
           final saved = await context.read<LibraryProvider>().getPosition(widget.video.path);
           if (saved != null && saved.inSeconds > 0) await _player.seek(saved);
         } catch (_) {}
       }
+
       _player.stream.position.listen((pos) {
         if (!mounted) return;
         setState(() => _position = pos);
@@ -205,12 +212,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           });
         }
       });
+
       _player.stream.duration.listen((dur) => mounted ? setState(() => _duration = dur) : null);
       _player.stream.playing.listen((playing) => mounted ? setState(() => _isPlaying = playing) : null);
       _player.stream.tracks.listen((tracks) {
         if (!mounted) return;
         setState(() { _subtitleTracks = tracks.subtitle; _audioTracks = tracks.audio; });
+        if (!_tracksReceived) {
+          _tracksReceived = true;
+          _decideSubtitles(settings);
+        }
       });
+
       try {
         _brightnessNotifier.value = await ScreenBrightness.instance.application;
         if (_brightnessNotifier.value < 0.1) _brightnessNotifier.value = 0.1;
@@ -218,20 +231,25 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       } catch (_) {
         _brightnessNotifier.value = 0.7;
       }
+
       setState(() => _initialized = true);
       _scheduleHide();
-      final srtPath = SubtitleService.findSrt(widget.video.path);
-      if (srtPath != null) {
-        await _loadSrtFile(srtPath, settings.subtitleEncoding);
-        _autoSubtitleSelected = true;
-      } else {
-        _applyPreferredSubtitleLanguage(settings);
-      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cannot play: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تشغيل الملف: $e')));
         Navigator.pop(context);
       }
+    }
+  }
+
+  void _decideSubtitles(SettingsProvider settings) {
+    if (_autoSubtitleSelected) return;
+    final srtPath = SubtitleService.findSrt(widget.video.path);
+    if (srtPath != null) {
+      _loadSrtFile(srtPath, settings.subtitleEncoding);
+      _autoSubtitleSelected = true;
+    } else {
+      _applyPreferredSubtitleLanguage(settings);
     }
   }
 
@@ -253,6 +271,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       await _player.setSubtitleTrack(SubtitleTrack.no());
       final entries = await SubtitleService.load(path);
       if (entries.isEmpty) return;
+
       final srtContent = StringBuffer();
       for (int i = 0; i < entries.length; i++) {
         final e = entries[i];
@@ -261,9 +280,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         srtContent.writeln(e.text);
         srtContent.writeln();
       }
-      await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'External subtitle'));
+      await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
       if (mounted) setState(() => _showSubtitles = true);
-    } catch (e) {}
+    } catch (_) {}
   }
 
   String _formatSrtTime(Duration d) {
@@ -332,15 +351,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Widget _buildAudioPanelContent() {
     final cs = Theme.of(context).colorScheme;
     final uniqueAudio = _audioTracks.toSet().toList();
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           if (uniqueAudio.isNotEmpty) ...[
-            const Text('Audio tracks', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+            const Text('المسارات الصوتية', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
             ...uniqueAudio.map((track) {
-              final name = track.title ?? track.language ?? 'Audio track';
+              final name = track.title ?? track.language ?? 'مسار صوتي';
               return ListTile(
                 title: Text(name, style: const TextStyle(color: Colors.white)),
                 trailing: _player.state.track.audio == track ? Icon(Icons.check, color: cs.primary) : null,
@@ -364,7 +384,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         children: [
           SwitchListTile(
-            title: const Text('Enable subtitles', style: TextStyle(color: Colors.white)),
+            title: const Text('تفعيل الترجمة', style: TextStyle(color: Colors.white)),
             value: _showSubtitles,
             onChanged: (v) {
               setState(() => _showSubtitles = v);
@@ -375,7 +395,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           if (uniqueTracks.isNotEmpty) ...[
             const Divider(color: Colors.white24),
             ...uniqueTracks.map((track) {
-              final name = track.title ?? track.language ?? 'Subtitle';
+              final name = track.title ?? track.language ?? 'ترجمة';
               return ListTile(
                 title: Text(name, style: const TextStyle(color: Colors.white)),
                 trailing: _player.state.track.subtitle == track ? Icon(Icons.check, color: cs.primary) : null,
@@ -389,15 +409,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           const Divider(color: Colors.white24),
           ListTile(
             leading: const Icon(Icons.folder_open, color: Colors.white70),
-            title: const Text('Load subtitle file', style: TextStyle(color: Colors.white)),
-            onTap: () { _pickSubtitle(); },
+            title: const Text('اختيار ملف ترجمة', style: TextStyle(color: Colors.white)),
+            onTap: () => _pickSubtitle(),
           ),
           const Divider(color: Colors.white24),
-          const Text('Sync', style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold)),
+          const Text('المزامنة', style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold)),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Subtitle delay', style: TextStyle(color: Colors.white)),
+              const Text('تأخير الترجمة', style: TextStyle(color: Colors.white)),
               Text('${_subtitleSync > 0 ? '+' : ''}${_subtitleSync.toStringAsFixed(1)}s', style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -441,7 +461,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _currentMenu == ActiveMenu.subtitles ? 'Subtitle Settings' : 'Audio Settings',
+                      _currentMenu == ActiveMenu.subtitles ? 'إعدادات الترجمة' : 'إعدادات الصوت',
                       style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     IconButton(
@@ -453,7 +473,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               ),
               const Divider(color: Colors.white24, height: 1),
               Expanded(
-                child: _currentMenu == ActiveMenu.subtitles ? _buildSubtitlePanelContent() :
+                child: _currentMenu == ActiveMenu.subtitles ? _buildSubtitlePanelContent() : 
                        _currentMenu == ActiveMenu.audio ? _buildAudioPanelContent() : const SizedBox.shrink(),
               ),
             ],
@@ -468,7 +488,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       width: 50,
       height: 160,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
+        color: Colors.black.withOpacity(0.6), 
         borderRadius: BorderRadius.circular(25),
       ),
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -483,7 +503,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 data: SliderThemeData(
                   trackHeight: 8.0,
                   activeTrackColor: color,
-                  inactiveTrackColor: Colors.white24,
+                  inactiveTrackColor: Colors.white24, 
                   thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
                   overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
                   trackShape: const RoundedRectSliderTrackShape(),
@@ -568,7 +588,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         double delta = -details.focalPointDelta.dy / 200.0;
                         if (isRight) {
                           setState(() {
-                            _volumeLevel = (_volumeLevel + delta).clamp(0.0, 2.0);
+                            _volumeLevel = (_volumeLevel + delta).clamp(0.0, 2.0); 
                             _player.setVolume(_volumeLevel * 100.0);
                           });
                           _showVolNotifier.value = true;
@@ -694,7 +714,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       left: 30,
                       top: MediaQuery.of(context).size.height * 0.3,
                       child: _buildVerticalSlider(
-                        _volumeLevel / 2.0,
+                        _volumeLevel / 2.0, 
                         _volumeLevel == 0 ? Icons.volume_off_rounded : (isBoosted ? Icons.volume_up_rounded : Icons.volume_down_rounded),
                         '${(_volumeLevel * 100).round()}%',
                         isBoosted ? Colors.orangeAccent : cs.primary,

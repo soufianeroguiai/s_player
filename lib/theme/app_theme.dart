@@ -30,12 +30,10 @@ class AppTheme {
         iconTheme: IconThemeData(color: cs.onSurfaceVariant),
       ),
 
-      // ✅ FIXED
       tabBarTheme: const TabBarThemeData(
         labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
       ),
 
-      // ❌ FIXED
       cardTheme: CardThemeData(
         color: cs.surfaceContainerLow,
         elevation: 0,
