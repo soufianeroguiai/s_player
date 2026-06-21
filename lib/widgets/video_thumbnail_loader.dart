@@ -25,27 +25,16 @@ class VideoThumbnailLoader extends StatelessWidget {
         errorBuilder: (_, __, ___) => _placeholder(),
       );
     }
+
     final notifier = ThumbnailService().getNotifier(video.path);
-    return SizedBox(
-      width: width,
-      height: height,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: ValueListenableBuilder<Uint8List?>(
-          valueListenable: notifier,
-          builder: (context, bytes, child) {
-            if (bytes == null) {
-              return _placeholder();
-            }
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (_, __, ___) => _placeholder(),
-            );
-          },
-        ),
-      ),
+    return ValueListenableBuilder<Uint8List?>(
+      valueListenable: notifier,
+      builder: (context, bytes, child) {
+        if (bytes == null) return _placeholder();
+        return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => _placeholder(),
+        );
+      },
     );
   }
 

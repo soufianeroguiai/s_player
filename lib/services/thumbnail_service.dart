@@ -47,25 +47,27 @@ class ThumbnailService {
 
   static Future<Uint8List?> _generateThumbnail(String videoPath) async {
     try {
-      return await VideoThumbnail.thumbnailData(
+      final uint8list = await VideoThumbnail.thumbnailData(
         video: videoPath,
         imageFormat: ImageFormat.JPEG,
         maxWidth: 256,
         quality: 75,
+        timeMs: 1000, // إطار من الثانية الأولى
       );
+      return uint8list;
     } catch (_) {
       return null;
     }
   }
 
   Future<File> _cacheFile(String videoPath) async {
-    final dir = await getTemporaryDirectory();
+    final dir = await getApplicationDocumentsDirectory();
     final safeName = Uri.encodeComponent(videoPath);
     return File('${dir.path}/thumb_$safeName.jpg');
   }
 
   Future<void> clearCache() async {
-    final dir = await getTemporaryDirectory();
+    final dir = await getApplicationDocumentsDirectory();
     final files = dir.listSync().where((f) => f.path.contains('thumb_'));
     for (final f in files) {
       if (f is File) await f.delete();
