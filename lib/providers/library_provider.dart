@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -68,12 +69,9 @@ class LibraryProvider extends ChangeNotifier {
         if (dotIndex != -1) name = name.substring(0, dotIndex);
         if (name.length < 2) name = '$albumName ${asset.id}';
       }
-      List<int>? thumbBytes;
+      Uint8List? thumbBytes;
       try {
-        final thumbData = await asset.thumbData;
-        if (thumbData != null) {
-          thumbBytes = thumbData;
-        }
+        thumbBytes = await asset.thumbDataWithSize(256, 256);
       } catch (_) {}
       return VideoItem(
         id: asset.id,
