@@ -88,8 +88,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Timer? _fitOverlayTimer;
 
   double _subtitleSync = 0.0;
-  bool _autoSubtitleSelected = false;
   bool _tracksReceived = false;
+  SubtitleTrack? _currentSubtitleTrack;
 
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
   final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
@@ -189,6 +189,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     try {
       await _player.open(Media(widget.video.path), play: settings.autoPlay);
       await _player.setSubtitleTrack(SubtitleTrack.no());
+      _currentSubtitleTrack = null;
 
       _player.setRate(_speed);
       final effectiveVolume = (settings.defaultVolume * (settings.defaultAudioBoost / 100.0)).clamp(0.0, 2.0);
@@ -243,32 +244,34 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _decideSubtitles(SettingsProvider settings) {
-    if (_autoSubtitleSelected) return;
     final srtPath = SubtitleService.findSrt(widget.video.path);
     if (srtPath != null) {
       _loadSrtFile(srtPath, settings.subtitleEncoding);
-      _autoSubtitleSelected = true;
     } else {
       _applyPreferredSubtitleLanguage(settings);
     }
   }
 
   void _applyPreferredSubtitleLanguage(SettingsProvider s) {
-    if (_autoSubtitleSelected || _subtitleTracks.isEmpty) return;
+    if (_subtitleTracks.isEmpty) return;
     for (final track in _subtitleTracks) {
       if (track.language == s.preferredSubtitleLanguage) {
-        _player.setSubtitleTrack(track);
-        setState(() => _showSubtitles = true);
-        _autoSubtitleSelected = true;
+        _activateSubtitleTrack(track);
         return;
       }
     }
-    _autoSubtitleSelected = true;
+  }
+
+  void _activateSubtitleTrack(SubtitleTrack track) async {
+    await _player.setSubtitleTrack(SubtitleTrack.no());
+    await Future.delayed(const Duration(milliseconds: 50));
+    await _player.setSubtitleTrack(track);
+    _currentSubtitleTrack = track;
+    if (mounted) setState(() => _showSubtitles = true);
   }
 
   Future<void> _loadSrtFile(String path, [String encoding = 'UTF-8']) async {
     try {
-      await _player.setSubtitleTrack(SubtitleTrack.no());
       final entries = await SubtitleService.load(path);
       if (entries.isEmpty) return;
 
@@ -280,7 +283,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         srtContent.writeln(e.text);
         srtContent.writeln();
       }
-      await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
+      final track = SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية');
+      await _player.setSubtitleTrack(SubtitleTrack.no());
+      await Future.delayed(const Duration(milliseconds: 50));
+      await _player.setSubtitleTrack(track);
+      _currentSubtitleTrack = track;
       if (mounted) setState(() => _showSubtitles = true);
     } catch (_) {}
   }
@@ -388,7 +395,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             value: _showSubtitles,
             onChanged: (v) {
               setState(() => _showSubtitles = v);
-              if (!v) _player.setSubtitleTrack(SubtitleTrack.no());
+              if (!v) {
+                _player.setSubtitleTrack(SubtitleTrack.no());
+                _currentSubtitleTrack = null;
+              } else {
+                if (_currentSubtitleTrack != null) {
+                  _player.setSubtitleTrack(_currentSubtitleTrack!);
+                }
+              }
             },
             activeColor: cs.primary,
           ),
@@ -398,11 +412,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               final name = track.title ?? track.language ?? 'ترجمة';
               return ListTile(
                 title: Text(name, style: const TextStyle(color: Colors.white)),
-                trailing: _player.state.track.subtitle == track ? Icon(Icons.check, color: cs.primary) : null,
-                onTap: () {
-                  _player.setSubtitleTrack(track);
-                  setState(() => _showSubtitles = true);
-                },
+                trailing: _currentSubtitleTrack == track ? Icon(Icons.check, color: cs.primary) : null,
+                onTap: () => _activateSubtitleTrack(track),
               );
             }),
           ],
