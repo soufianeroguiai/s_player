@@ -64,6 +64,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   double _startSubtitleSize = 24.0;
   double _startBottomPadding = 0.0;
   Offset _startFocalPoint = Offset.zero;
+  int _subtitlePointerCount = 0;
 
   double _volumeLevel = 1.0;
 
@@ -793,63 +794,74 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
                 ),
-
                 Positioned(
                   bottom: s.bottomPadding,
                   left: 0,
                   right: 0,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onScaleStart: (details) {
-                      if (details.pointerCount == 2) {
-                        _startSubtitleSize = s.subtitleFontSize;
-                        _startBottomPadding = s.bottomPadding;
-                        _startFocalPoint = details.focalPoint;
-                      }
+                  child: Listener(
+                    onPointerDown: (event) {
+                      _subtitlePointerCount++;
+                      setState(() {});
                     },
-                    onScaleUpdate: (details) {
-                      if (details.pointerCount == 2 && !_isPlaying) {
-                        double newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
-                        s.setSubtitleFontSize(newSize);
-                        double dy = details.focalPoint.dy - _startFocalPoint.dy;
-                        double newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.9);
-                        s.setBottomPadding(newPadding);
-                      }
+                    onPointerUp: (event) {
+                      _subtitlePointerCount--;
+                      setState(() {});
                     },
-                    child: Container(
-                      color: Colors.transparent,
-                      width: double.infinity,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: s.horizontalMargin),
-                        child: Material(
+                    child: IgnorePointer(
+                      ignoring: _subtitlePointerCount < 2 || _isPlaying,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onScaleStart: (details) {
+                          if (details.pointerCount == 2 && !_isPlaying) {
+                            _startSubtitleSize = s.subtitleFontSize;
+                            _startBottomPadding = s.bottomPadding;
+                            _startFocalPoint = details.focalPoint;
+                          }
+                        },
+                        onScaleUpdate: (details) {
+                          if (details.pointerCount == 2 && !_isPlaying) {
+                            double newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
+                            s.setSubtitleFontSize(newSize);
+                            double dy = details.focalPoint.dy - _startFocalPoint.dy;
+                            double newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.9);
+                            s.setBottomPadding(newPadding);
+                          }
+                        },
+                        child: Container(
                           color: Colors.transparent,
-                          child: StreamBuilder<String>(
-                            stream: _player.stream.subtitle.map((s) => s.join('\n')),
-                            builder: (context, snapshot) {
-                              if (!_showSubtitles || !snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
-                              return Text(
-                                snapshot.data!,
-                                textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: s.subtitleFontSize,
-                                  color: s.subtitleColor,
-                                  fontWeight: _getFontWeight(s.fontWeightIndex),
-                                  fontFamily: s.fontFamily == 'Default' ? null : s.fontFamily,
-                                  fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
-                                  backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
-                                  shadows: s.textShadowEnabled
-                                      ? [Shadow(color: s.textShadowColor, blurRadius: s.textShadowBlurRadius, offset: Offset(s.textShadowOffsetX, s.textShadowOffsetY))]
-                                      : null,
-                                ),
-                              );
-                            },
+                          width: double.infinity,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: s.horizontalMargin),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: StreamBuilder<String>(
+                                stream: _player.stream.subtitle.map((s) => s.join('\n')),
+                                builder: (context, snapshot) {
+                                  if (!_showSubtitles || !snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+                                  return Text(
+                                    snapshot.data!,
+                                    textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: s.subtitleFontSize,
+                                      color: s.subtitleColor,
+                                      fontWeight: _getFontWeight(s.fontWeightIndex),
+                                      fontFamily: s.fontFamily == 'Default' ? null : s.fontFamily,
+                                      fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
+                                      backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
+                                      shadows: s.textShadowEnabled
+                                          ? [Shadow(color: s.textShadowColor, blurRadius: s.textShadowBlurRadius, offset: Offset(s.textShadowOffsetX, s.textShadowOffsetY))]
+                                          : null,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-
                 ValueListenableBuilder<bool>(
                   valueListenable: _showSeekNotifier,
                   builder: (context, show, child) {
