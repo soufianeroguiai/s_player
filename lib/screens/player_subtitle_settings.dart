@@ -64,14 +64,14 @@ Widget buildSubtitleSettingsContent(BuildContext context) {
             return ChoiceChip(
               label: Text(font.split('/').last,
                   style: TextStyle(
-                    color: isSelected ? cs.onPrimary : Colors.white70,
-                    fontFamily: font.contains('/') ? null : font,
+                    color: isSelected ? cs.onPrimary : Colors.white,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   )),
               selected: isSelected,
               onSelected: (_) => s.setFontFamily(font),
               selectedColor: cs.primary,
-              backgroundColor: Colors.white.withOpacity(0.08),
+              backgroundColor: isSelected ? cs.primary : Colors.grey[850]!,
               side: BorderSide.none,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
