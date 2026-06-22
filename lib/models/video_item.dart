@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+/// يمثل ملف فيديو واحد في مكتبة التطبيق.
 class VideoItem {
   final String id;
   final String path;
@@ -8,10 +9,11 @@ class VideoItem {
   final DateTime modified;
   final String folder;
   final Duration duration;
-  List<int>? thumbnail;
   String? thumbnailPath;
   List<String> subtitleTypes;
-  late ValueNotifier<List<String>> subtitlesNotifier;
+
+  /// يُحدَّث عند اكتشاف مسارات ترجمة مدمجة داخل الفيديو (SRT/ASS/SSA/VTT).
+  late final ValueNotifier<List<String>> subtitlesNotifier;
 
   VideoItem({
     required this.id,
@@ -21,7 +23,6 @@ class VideoItem {
     required this.modified,
     required this.folder,
     required this.duration,
-    this.thumbnail,
     this.thumbnailPath,
     this.subtitleTypes = const [],
   }) {
@@ -32,7 +33,9 @@ class VideoItem {
 
   String get formattedSize {
     if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(0)} KB';
-    if (size < 1024 * 1024 * 1024) return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
@@ -45,6 +48,27 @@ class VideoItem {
 
   String get formattedDate {
     return '${modified.year}-${modified.month.toString().padLeft(2, '0')}-${modified.day.toString().padLeft(2, '0')}';
+  }
+
+  /// ينشئ [VideoItem] من مسار ملف موجود على القرص (يُستخدم للملفات
+  /// المفتوحة يدوياً أو الموجودة في قائمة "الأخيرة" والتي لم تعد ضمن
+  /// نتائج مسح مكتبة الوسائط). يستخدم المسار نفسه كمعرّف لأنه فريد
+  /// وثابت، بخلاف hashCode الذي لا يضمن الثبات بين تشغيلات مختلفة.
+  factory VideoItem.fromPath({
+    required String path,
+    required int size,
+    required DateTime modified,
+  }) {
+    final parts = path.split('/');
+    return VideoItem(
+      id: path,
+      path: path,
+      name: parts.last,
+      size: size,
+      modified: modified,
+      folder: parts.length > 1 ? parts[parts.length - 2] : '',
+      duration: Duration.zero,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -71,7 +95,10 @@ class VideoItem {
       folder: json['folder'] as String,
       duration: Duration(milliseconds: json['duration'] as int),
       thumbnailPath: json['thumbnailPath'] as String?,
-      subtitleTypes: (json['subtitleTypes'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      subtitleTypes: (json['subtitleTypes'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 }

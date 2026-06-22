@@ -1,10 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
+/// عناصر بصرية عائمة لعرض مستوى الصوت/الإضاءة أثناء السحب على الشاشة.
 class PlayerIndicators {
   static Widget buildFloatingIndicator({
     required IconData icon,
-    required double displayValue,
+    required double displayValue, // من 0.0 إلى 1.0
     required String labelText,
     required Color color,
   }) {
@@ -35,7 +36,7 @@ class PlayerIndicators {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.white.withOpacity(0.18),
-                    Colors.white.withOpacity(0.06)
+                    Colors.white.withOpacity(0.06),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(26),
@@ -69,9 +70,7 @@ class PlayerIndicators {
                   Text(
                     labelText,
                     style: TextStyle(
-                        color: color,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900),
+                        color: color, fontSize: 12, fontWeight: FontWeight.w900),
                   ),
                 ],
               ),

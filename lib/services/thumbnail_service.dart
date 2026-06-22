@@ -1,9 +1,17 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/video_item.dart';
 
+/// يولّد ويخزّن الصور المصغّرة لفيديوهات المكتبة.
+///
+/// المصدر الأساسي هو [AssetEntity.thumbnailDataWithSize] من photo_manager:
+/// استخراج native سريع لا يفتح أي مشغل فيديو ولا ينتظر أي مهلة يدوية.
+/// يُستخدم استخراج لقطة عبر media_kit فقط كحل بديل نادر للملفات
+/// المفتوحة يدوياً (زر "فتح ملف") التي لا تملك AssetEntity مقابل في
+/// مكتبة الوسائط، وبالتالي لا تمر بالمسار السريع.
 class ThumbnailService {
   static final ThumbnailService _instance = ThumbnailService._internal();
   factory ThumbnailService() => _instance;
@@ -11,67 +19,83 @@ class ThumbnailService {
 
   final Map<String, ValueNotifier<Uint8List?>> _notifiers = {};
   final Set<String> _pendingPaths = {};
-  int _activeJobs = 0;
-  static const int _maxConcurrent = 2;
 
-  ValueNotifier<Uint8List?> getNotifier(String videoPath) {
-    if (!_notifiers.containsKey(videoPath)) {
-      _notifiers[videoPath] = ValueNotifier(null);
-      _generate(videoPath);
+  ValueNotifier<Uint8List?> getNotifier(VideoItem video) {
+    final path = video.path;
+    if (!_notifiers.containsKey(path)) {
+      _notifiers[path] = ValueNotifier(null);
+      _generate(video);
     }
-    return _notifiers[videoPath]!;
+    return _notifiers[path]!;
   }
 
-  Future<void> _generate(String videoPath) async {
-    if (_pendingPaths.contains(videoPath)) return;
-    final cacheFile = await _cacheFile(videoPath);
-    if (await cacheFile.exists()) {
-      _notifiers[videoPath]?.value = await cacheFile.readAsBytes();
-      return;
-    }
-    _pendingPaths.add(videoPath);
-    _activeJobs++;
+  Future<void> _generate(VideoItem video) async {
+    final path = video.path;
+    if (_pendingPaths.contains(path)) return;
+    _pendingPaths.add(path);
+
     try {
-      final thumbnailData = await _generateThumbnail(videoPath);
-      if (thumbnailData != null) {
-        await cacheFile.writeAsBytes(thumbnailData);
-        _notifiers[videoPath]?.value = thumbnailData;
+      final cacheFile = await _cacheFile(path);
+      if (await cacheFile.exists()) {
+        _notifiers[path]?.value = await cacheFile.readAsBytes();
+        return;
+      }
+
+      // video.id يساوي المسار نفسه فقط للفيديوهات المفتوحة يدوياً
+      // (انظر VideoItem.fromPath)، بينما فيديوهات المكتبة الممسوحة
+      // عبر LibraryProvider.scan() لها asset.id حقيقي من photo_manager.
+      final bytes = video.id != path
+          ? await _fromAssetEntity(video.id)
+          : await _fromMediaKitScreenshot(path);
+
+      if (bytes != null) {
+        await cacheFile.writeAsBytes(bytes);
+        _notifiers[path]?.value = bytes;
       }
     } catch (e) {
-      debugPrint('Thumbnail generation failed: $e');
+      debugPrint('تعذّر توليد الصورة المصغّرة لـ $path: $e');
     } finally {
-      _pendingPaths.remove(videoPath);
-      _activeJobs--;
+      _pendingPaths.remove(path);
     }
   }
 
-  static Future<Uint8List?> _generateThumbnail(String videoPath) async {
+  Future<Uint8List?> _fromAssetEntity(String assetId) async {
     try {
-      final uint8list = await VideoThumbnail.thumbnailData(
-        video: videoPath,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 256,
-        quality: 75,
-        timeMs: 1000, // إطار من الثانية الأولى
+      final asset = await AssetEntity.fromId(assetId);
+      if (asset == null) return null;
+      return await asset.thumbnailDataWithSize(
+        const ThumbnailSize(360, 240),
+        quality: 80,
       );
-      return uint8list;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('فشل استخراج صورة مصغّرة عبر photo_manager: $e');
       return null;
     }
   }
 
-  Future<File> _cacheFile(String videoPath) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final safeName = Uri.encodeComponent(videoPath);
-    return File('${dir.path}/thumb_$safeName.jpg');
+  /// حل بديل فقط لملف فُتح يدوياً وليس جزءاً من مكتبة الوسائط الممسوحة.
+  /// نادر الاستخدام مقارنة بالمسار الأساسي، لذا التكلفة (فتح مشغل
+  /// مؤقت) مقبولة هنا.
+  Future<Uint8List?> _fromMediaKitScreenshot(String path) async {
+    Player? player;
+    try {
+      player = Player();
+      await player.open(Media(path), play: false);
+      await Future.delayed(const Duration(milliseconds: 400));
+      final shot = await player.screenshot(format: 'image/jpeg');
+      return (shot != null && shot.isNotEmpty) ? shot : null;
+    } catch (e) {
+      debugPrint('فشل استخراج لقطة عبر media_kit: $e');
+      return null;
+    } finally {
+      await player?.dispose();
+    }
   }
 
-  Future<void> clearCache() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final files = dir.listSync().where((f) => f.path.contains('thumb_'));
-    for (final f in files) {
-      if (f is File) await f.delete();
-    }
-    _notifiers.clear();
+  Future<File> _cacheFile(String videoPath) async {
+    final dir = await getTemporaryDirectory();
+    // hashCode هنا مجرد اسم ملف مؤقت غير حساس (وليس معرّفاً دائماً)؛
+    // في أسوأ الأحوال نادرة الحدوث يُعاد توليد الصورة، وهو غير ضار.
+    return File('${dir.path}/thumb_${videoPath.hashCode}.jpg');
   }
 }

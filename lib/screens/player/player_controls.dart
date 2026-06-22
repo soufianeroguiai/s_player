@@ -107,8 +107,7 @@ class PlayerBottomBar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: Row(children: [
-            Text(_fmt(position),
-                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            Text(_fmt(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
             Expanded(
               child: SliderTheme(
                 data: SliderThemeData(
@@ -119,15 +118,13 @@ class PlayerBottomBar extends StatelessWidget {
                     thumbColor: primaryColor),
                 child: Slider(
                   value: duration.inMilliseconds > 0
-                      ? (position.inMilliseconds / duration.inMilliseconds)
-                          .clamp(0.0, 1.0)
+                      ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
                       : 0.0,
                   onChanged: onSeek,
                 ),
               ),
             ),
-            Text(_fmt(duration),
-                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            Text(_fmt(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
           ]),
         ),
       ),
@@ -166,14 +163,9 @@ class PlayerCenterButtons extends StatelessWidget {
           child: Container(
             width: 68,
             height: 68,
-            decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.9),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-                isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
-                color: onPrimaryContainer,
-                size: 38),
+            decoration: BoxDecoration(color: primaryColor.withOpacity(0.9), shape: BoxShape.circle),
+            child: Icon(isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
+                color: onPrimaryContainer, size: 38),
           ),
         ),
       ),
@@ -193,8 +185,7 @@ class CtrlBtn extends StatelessWidget {
         child: Container(
           width: 50,
           height: 50,
-          decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12), shape: BoxShape.circle),
+          decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), shape: BoxShape.circle),
           child: Icon(icon, color: Colors.white, size: 28),
         ),
       );

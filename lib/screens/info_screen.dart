@@ -11,12 +11,13 @@ class InfoScreen extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(video.name),
+        title: Text(video.name), // عنوان ديناميكي باسم الفيديو
         leading: IconButton(icon: const Icon(Symbols.arrow_back_rounded), onPressed: () => Navigator.pop(context)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(children: [
+          // أيقونة الفيديو
           Container(
             width: 100, height: 100,
             decoration: BoxDecoration(
@@ -27,9 +28,11 @@ class InfoScreen extends StatelessWidget {
             child: Icon(Symbols.movie_rounded, color: cs.onPrimaryContainer, size: 52),
           ),
           const SizedBox(height: 16),
+          // اسم الملف
           Text(video.name, textAlign: TextAlign.center,
               style: TextStyle(color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 24),
+          // معلومات الملف
           _section(context, 'معلومات الملف', [
             _row(context, Symbols.storage_rounded, 'الحجم', video.formattedSize),
             _row(context, Symbols.folder_rounded, 'المجلد', video.folder),
@@ -37,10 +40,12 @@ class InfoScreen extends StatelessWidget {
             _row(context, Symbols.label_rounded, 'الامتداد', video.extension.toUpperCase()),
           ]),
           const SizedBox(height: 16),
+          // معلومات الفيديو
           _section(context, 'معلومات الفيديو', [
             _row(context, Symbols.timer_rounded, 'المدة', video.formattedDuration),
           ]),
           const SizedBox(height: 16),
+          // مسار الملف
           _section(context, 'المسار', [
             Padding(padding: const EdgeInsets.all(16),
               child: SelectableText(video.path,

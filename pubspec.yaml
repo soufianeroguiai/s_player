@@ -2,7 +2,7 @@ name: sr_player
 description: SR Player - Advanced Video Player
 publish_to: 'none'
 
-version: 1.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -11,23 +11,29 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # 🎬 Video Stack
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
 
-  file_picker: ^12.0.0-beta.7
+  # 📁 File & Media
+  file_picker: ^12.0.0-beta.5
   photo_manager: ^3.9.0
   path_provider: ^2.1.6
-  video_thumbnail: ^0.5.3
 
+  # 🔐 Permissions
   permission_handler: ^12.0.3
 
+  # 📦 State
   provider: ^6.1.5+1
   shared_preferences: ^2.5.5
 
+  # 🎨 UI
   material_symbols_icons: ^4.2951.0
   flex_color_picker: ^3.8.0
+  google_fonts: ^6.2.1
 
+  # ⚙️ Utilities
   share_plus: ^13.1.0
   wakelock_plus: ^1.6.1
   screen_brightness: ^2.1.11

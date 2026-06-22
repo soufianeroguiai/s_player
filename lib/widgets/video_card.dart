@@ -133,6 +133,8 @@ class _Info extends StatelessWidget {
         _Tag(video.formattedSize, cs),
         const SizedBox(width: 6),
         _Tag(video.extension.toUpperCase(), cs, primary: true),
+        
+        // بطاقات عرض صيغ الترجمة المدمجة باللون الأخضر المميز
         ValueListenableBuilder<List<String>>(
           valueListenable: video.subtitlesNotifier,
           builder: (context, subtitles, _) {

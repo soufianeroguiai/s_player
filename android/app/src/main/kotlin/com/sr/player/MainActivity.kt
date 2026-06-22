@@ -1,6 +1,7 @@
 package com.sr.player
 
 import android.app.PictureInPictureParams
+import android.content.res.Configuration
 import android.os.Build
 import android.util.Rational
 import io.flutter.embedding.android.FlutterActivity
@@ -8,27 +9,49 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val PIP_CHANNEL = "com.splayer.app/pip"
+    private val pipChannelName = "com.splayer.app/pip"
+    private var pipChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PIP_CHANNEL)
-            .setMethodCallHandler { call, result ->
-                if (call.method == "enterPip") {
-                    enterPipMode()
-                    result.success(true)
-                } else {
-                    result.notImplemented()
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pipChannelName)
+        channel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "enterPip" -> {
+                    result.success(enterPipMode())
                 }
+                else -> result.notImplemented()
             }
+        }
+        pipChannel = channel
     }
 
-    private fun enterPipMode() {
+    override fun onDetachedFromFlutterEngine(flutterEngine: FlutterEngine) {
+        pipChannel?.setMethodCallHandler(null)
+        pipChannel = null
+        super.onDetachedFromFlutterEngine(flutterEngine)
+    }
+
+    private fun enterPipMode(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val params = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
                 .build()
-            enterPictureInPictureMode(params)
+            return enterPictureInPictureMode(params)
         }
+        return false
+    }
+
+    /// يُستدعى من نظام أندرويد عند أي دخول/خروج فعلي لوضع PiP، سواء
+    /// تم استدعاؤه من زر التطبيق أو من تفاعل المستخدم مع زر الهوم
+    /// (الذي يدخل PiP تلقائياً بفضل supportsPictureInPicture في
+    /// AndroidManifest). هذا هو المصدر الوحيد الموثوق لحالة PiP
+    /// الحقيقية، لذا نبلّغ به Flutter مباشرة بدل افتراض الحالة يدوياً.
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        pipChannel?.invokeMethod("onPipModeChanged", isInPictureInPictureMode)
     }
 }
