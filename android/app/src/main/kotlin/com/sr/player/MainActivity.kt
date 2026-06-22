@@ -26,12 +26,6 @@ class MainActivity : FlutterActivity() {
         pipChannel = channel
     }
 
-    override fun onDetachedFromFlutterEngine(flutterEngine: FlutterEngine) {
-        pipChannel?.setMethodCallHandler(null)
-        pipChannel = null
-        super.onDetachedFromFlutterEngine(flutterEngine)
-    }
-
     private fun enterPipMode(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val params = PictureInPictureParams.Builder()
@@ -42,11 +36,6 @@ class MainActivity : FlutterActivity() {
         return false
     }
 
-    /// يُستدعى من نظام أندرويد عند أي دخول/خروج فعلي لوضع PiP، سواء
-    /// تم استدعاؤه من زر التطبيق أو من تفاعل المستخدم مع زر الهوم
-    /// (الذي يدخل PiP تلقائياً بفضل supportsPictureInPicture في
-    /// AndroidManifest). هذا هو المصدر الوحيد الموثوق لحالة PiP
-    /// الحقيقية، لذا نبلّغ به Flutter مباشرة بدل افتراض الحالة يدوياً.
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
         newConfig: Configuration
