@@ -107,10 +107,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() => _isLandscape = MediaQuery.of(context).orientation == Orientation.landscape);
-    });
-
     _enterFullscreen();
     final settings = context.read<SettingsProvider>();
     _showSubtitles = settings.showSubtitlesByDefault;
@@ -144,20 +140,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _enterFullscreen() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _setOrientations();
-  }
-
-  void _setOrientations() {
-    if (_isLandscape) {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
-    } else {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    }
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   }
 
   void _toggleOrientation() {
-    setState(() => _isLandscape = !_isLandscape);
-    _setOrientations();
+    if (_isLandscape) {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    } else {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
   }
 
   void _toggleLock() {
@@ -714,161 +711,166 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         backgroundColor: Colors.black,
         body: !_initialized
             ? Center(child: CircularProgressIndicator(color: cs.primary))
-            : Stack(children: [
-                GestureDetector(
-                  onTap: _toggleControls,
-                  onDoubleTapDown: _isLocked ? null : (details) {
-                    if (details.localPosition.dx > screenWidth * 0.35 && details.localPosition.dx < screenWidth * 0.65) {
-                      _isPlaying ? _player.pause() : _player.play();
-                      return;
-                    }
-                    final isRight = details.localPosition.dx > screenWidth / 2;
-                    final target = isRight ? (_position + const Duration(seconds: 10)) : (_position - const Duration(seconds: 10));
-                    _player.seek(target.isNegative ? Duration.zero : (target > _duration ? _duration : target));
-                  },
-                  onScaleStart: (details) {
-                    if (_isLocked) return;
-                    if (details.pointerCount == 2) {
-                      _baseVideoScale = _videoScale;
-                      _baseVideoOffset = _videoOffset;
-                    } else {
-                      _seekMsNotifier.value = _position.inMilliseconds.toDouble();
-                    }
-                  },
-                  onScaleUpdate: (details) {
-                    if (_isLocked) return;
-                    if (details.pointerCount == 2) {
-                      setState(() {
-                        _videoScale = (_baseVideoScale * details.scale).clamp(1.0, 5.0);
-                        if (_videoScale > 1.0) _videoOffset = _baseVideoOffset + details.focalPointDelta;
-                        else _videoOffset = Offset.zero;
-                      });
-                    } else if (details.pointerCount == 1) {
-                      final isRight = details.focalPoint.dx > screenWidth / 2;
-                      final isHorizontal = details.focalPointDelta.dx.abs() > details.focalPointDelta.dy.abs();
-                      if (details.focalPointDelta.distance < 1) return;
-                      if (isHorizontal) {
-                        double seekFactor = (_duration.inMilliseconds * 0.25).clamp(50000, 500000).toDouble();
-                        double seekChangeMs = (details.focalPointDelta.dx / screenWidth) * seekFactor;
-                        _seekMsNotifier.value = (_seekMsNotifier.value + seekChangeMs).clamp(0.0, _duration.inMilliseconds.toDouble());
-                        _showSeekNotifier.value = true;
-                        _showVolNotifier.value = false;
-                        _showBrightNotifier.value = false;
-                      } else {
-                        double delta = -details.focalPointDelta.dy / 200.0;
-                        if (isRight) {
-                          setState(() {
-                            _volumeLevel = (_volumeLevel + delta).clamp(0.0, 2.0); 
-                            _player.setVolume(_volumeLevel * 100.0);
-                          });
-                          _showVolNotifier.value = true;
-                          _showSeekNotifier.value = false;
-                          _showBrightNotifier.value = false;
-                        } else {
-                          double newBright = (_brightnessNotifier.value + delta).clamp(0.0, 1.0);
-                          _brightnessNotifier.value = newBright;
-                          ScreenBrightness.instance.setApplicationScreenBrightness(newBright);
-                          _showBrightNotifier.value = true;
-                          _showVolNotifier.value = false;
-                          _showSeekNotifier.value = false;
+            : OrientationBuilder(
+                builder: (context, orientation) {
+                  _isLandscape = orientation == Orientation.landscape;
+                  return Stack(children: [
+                    GestureDetector(
+                      onTap: _toggleControls,
+                      onDoubleTapDown: _isLocked ? null : (details) {
+                        if (details.localPosition.dx > screenWidth * 0.35 && details.localPosition.dx < screenWidth * 0.65) {
+                          _isPlaying ? _player.pause() : _player.play();
+                          return;
                         }
-                        _resetIndicatorTimer();
-                      }
-                    }
-                  },
-                  onScaleEnd: (details) {
-                    if (_isLocked) return;
-                    if (_showSeekNotifier.value) {
-                       _player.seek(Duration(milliseconds: _seekMsNotifier.value.toInt()));
-                       _showSeekNotifier.value = false;
-                       _scheduleHide();
-                    }
-                    _savePersistedVolume();
-                  },
-                  child: ClipRect(
-                    child: Transform.translate(
-                      offset: _videoOffset,
-                      child: Transform.scale(
-                        scale: _videoScale,
-                        child: Video(
-                          controller: _controller,
-                          fit: getBoxFit(_fitMode),
-                          controls: NoVideoControls,
-                          subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+                        final isRight = details.localPosition.dx > screenWidth / 2;
+                        final target = isRight ? (_position + const Duration(seconds: 10)) : (_position - const Duration(seconds: 10));
+                        _player.seek(target.isNegative ? Duration.zero : (target > _duration ? _duration : target));
+                      },
+                      onScaleStart: (details) {
+                        if (_isLocked) return;
+                        if (details.pointerCount == 2) {
+                          _baseVideoScale = _videoScale;
+                          _baseVideoOffset = _videoOffset;
+                        } else {
+                          _seekMsNotifier.value = _position.inMilliseconds.toDouble();
+                        }
+                      },
+                      onScaleUpdate: (details) {
+                        if (_isLocked) return;
+                        if (details.pointerCount == 2) {
+                          setState(() {
+                            _videoScale = (_baseVideoScale * details.scale).clamp(1.0, 5.0);
+                            if (_videoScale > 1.0) _videoOffset = _baseVideoOffset + details.focalPointDelta;
+                            else _videoOffset = Offset.zero;
+                          });
+                        } else if (details.pointerCount == 1) {
+                          final isRight = details.focalPoint.dx > screenWidth / 2;
+                          final isHorizontal = details.focalPointDelta.dx.abs() > details.focalPointDelta.dy.abs();
+                          if (details.focalPointDelta.distance < 1) return;
+                          if (isHorizontal) {
+                            double seekFactor = (_duration.inMilliseconds * 0.25).clamp(50000, 500000).toDouble();
+                            double seekChangeMs = (details.focalPointDelta.dx / screenWidth) * seekFactor;
+                            _seekMsNotifier.value = (_seekMsNotifier.value + seekChangeMs).clamp(0.0, _duration.inMilliseconds.toDouble());
+                            _showSeekNotifier.value = true;
+                            _showVolNotifier.value = false;
+                            _showBrightNotifier.value = false;
+                          } else {
+                            double delta = -details.focalPointDelta.dy / 200.0;
+                            if (isRight) {
+                              setState(() {
+                                _volumeLevel = (_volumeLevel + delta).clamp(0.0, 2.0); 
+                                _player.setVolume(_volumeLevel * 100.0);
+                              });
+                              _showVolNotifier.value = true;
+                              _showSeekNotifier.value = false;
+                              _showBrightNotifier.value = false;
+                            } else {
+                              double newBright = (_brightnessNotifier.value + delta).clamp(0.0, 1.0);
+                              _brightnessNotifier.value = newBright;
+                              ScreenBrightness.instance.setApplicationScreenBrightness(newBright);
+                              _showBrightNotifier.value = true;
+                              _showVolNotifier.value = false;
+                              _showSeekNotifier.value = false;
+                            }
+                            _resetIndicatorTimer();
+                          }
+                        }
+                      },
+                      onScaleEnd: (details) {
+                        if (_isLocked) return;
+                        if (_showSeekNotifier.value) {
+                           _player.seek(Duration(milliseconds: _seekMsNotifier.value.toInt()));
+                           _showSeekNotifier.value = false;
+                           _scheduleHide();
+                        }
+                        _savePersistedVolume();
+                      },
+                      child: ClipRect(
+                        child: Transform.translate(
+                          offset: _videoOffset,
+                          child: Transform.scale(
+                            scale: _videoScale,
+                            child: Video(
+                              controller: _controller,
+                              fit: getBoxFit(_fitMode),
+                              controls: NoVideoControls,
+                              subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                Positioned(
-                  bottom: s.bottomPadding,
-                  left: 0,
-                  right: 0,
-                  child: SizedBox(
-                    height: 200,
-                    child: Listener(
-                      onPointerDown: (event) {
-                        final dyFromBottom = 200 - event.localPosition.dy;
-                        if (dyFromBottom >= 0 && dyFromBottom <= 200) {
-                          _subtitlePointerCount++;
-                          _lastPointerInSubtitleArea = true;
-                        } else {
-                          _lastPointerInSubtitleArea = false;
-                        }
-                        setState(() {});
-                      },
-                      onPointerUp: (event) {
-                        if (_lastPointerInSubtitleArea) {
-                          _subtitlePointerCount--;
-                        }
-                        setState(() {});
-                      },
-                      child: IgnorePointer(
-                        ignoring: _subtitlePointerCount < 2 || _isPlaying || !_lastPointerInSubtitleArea,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onScaleStart: (details) {
-                            if (details.pointerCount == 2 && !_isPlaying) {
-                              _startSubtitleSize = s.subtitleFontSize;
-                              _startBottomPadding = s.bottomPadding;
-                              _startFocalPoint = details.focalPoint;
+                    Positioned(
+                      bottom: s.bottomPadding,
+                      left: 0,
+                      right: 0,
+                      child: SizedBox(
+                        height: 200,
+                        child: Listener(
+                          onPointerDown: (event) {
+                            final dyFromBottom = 200 - event.localPosition.dy;
+                            if (dyFromBottom >= 0 && dyFromBottom <= 200) {
+                              _subtitlePointerCount++;
+                              _lastPointerInSubtitleArea = true;
+                            } else {
+                              _lastPointerInSubtitleArea = false;
                             }
+                            setState(() {});
                           },
-                          onScaleUpdate: (details) {
-                            if (details.pointerCount == 2 && !_isPlaying) {
-                              double newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
-                              s.setSubtitleFontSize(newSize);
-                              double dy = details.focalPoint.dy - _startFocalPoint.dy;
-                              double newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.9);
-                              s.setBottomPadding(newPadding);
+                          onPointerUp: (event) {
+                            if (_lastPointerInSubtitleArea) {
+                              _subtitlePointerCount--;
                             }
+                            setState(() {});
                           },
-                          child: Align(
-                            alignment: Alignment.bottomCenter,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: s.horizontalMargin),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: StreamBuilder<String>(
-                                  stream: _player.stream.subtitle.map((s) => s.join('\n')),
-                                  builder: (context, snapshot) {
-                                    if (!_showSubtitles || !snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
-                                    return Text(
-                                      snapshot.data!,
-                                      textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: s.subtitleFontSize,
-                                        color: s.subtitleColor,
-                                        fontWeight: _getFontWeight(s.fontWeightIndex),
-                                        fontFamily: s.fontFamily == 'Default' ? null : s.fontFamily,
-                                        fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
-                                        backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
-                                        shadows: s.textShadowEnabled
-                                            ? [Shadow(color: s.textShadowColor, blurRadius: s.textShadowBlurRadius, offset: Offset(s.textShadowOffsetX, s.textShadowOffsetY))]
-                                            : null,
-                                      ),
-                                    );
-                                  },
+                          child: IgnorePointer(
+                            ignoring: _subtitlePointerCount < 2 || _isPlaying || !_lastPointerInSubtitleArea,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onScaleStart: (details) {
+                                if (details.pointerCount == 2 && !_isPlaying) {
+                                  _startSubtitleSize = s.subtitleFontSize;
+                                  _startBottomPadding = s.bottomPadding;
+                                  _startFocalPoint = details.focalPoint;
+                                }
+                              },
+                              onScaleUpdate: (details) {
+                                if (details.pointerCount == 2 && !_isPlaying) {
+                                  double newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
+                                  s.setSubtitleFontSize(newSize);
+                                  double dy = details.focalPoint.dy - _startFocalPoint.dy;
+                                  double newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.9);
+                                  s.setBottomPadding(newPadding);
+                                }
+                              },
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: s.horizontalMargin),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: StreamBuilder<String>(
+                                      stream: _player.stream.subtitle.map((s) => s.join('\n')),
+                                      builder: (context, snapshot) {
+                                        if (!_showSubtitles || !snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+                                        return Text(
+                                          snapshot.data!,
+                                          textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: s.subtitleFontSize,
+                                            color: s.subtitleColor,
+                                            fontWeight: _getFontWeight(s.fontWeightIndex),
+                                            fontFamily: s.fontFamily == 'Default' ? null : s.fontFamily,
+                                            fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
+                                            backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
+                                            shadows: s.textShadowEnabled
+                                                ? [Shadow(color: s.textShadowColor, blurRadius: s.textShadowBlurRadius, offset: Offset(s.textShadowOffsetX, s.textShadowOffsetY))]
+                                                : null,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -876,132 +878,132 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         ),
                       ),
                     ),
-                  ),
-                ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showSeekNotifier,
-                  builder: (context, show, child) {
-                    if (!show) return const SizedBox.shrink();
-                    return ValueListenableBuilder<double>(
-                      valueListenable: _seekMsNotifier,
-                      builder: (context, seekMs, child) {
-                        return Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                            decoration: BoxDecoration(color: Colors.black.withOpacity(0.75), borderRadius: BorderRadius.circular(20)),
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
-                              const Icon(Symbols.fast_forward_rounded, color: Colors.white, size: 32),
-                              const SizedBox(height: 8),
-                              Text(_fmt(Duration(milliseconds: seekMs.toInt())), style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                            ]),
-                          ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _showSeekNotifier,
+                      builder: (context, show, child) {
+                        if (!show) return const SizedBox.shrink();
+                        return ValueListenableBuilder<double>(
+                          valueListenable: _seekMsNotifier,
+                          builder: (context, seekMs, child) {
+                            return Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                decoration: BoxDecoration(color: Colors.black.withOpacity(0.75), borderRadius: BorderRadius.circular(20)),
+                                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Symbols.fast_forward_rounded, color: Colors.white, size: 32),
+                                  const SizedBox(height: 8),
+                                  Text(_fmt(Duration(milliseconds: seekMs.toInt())), style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                                ]),
+                              ),
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showVolNotifier,
-                  builder: (context, show, child) {
-                    if (!show) return const SizedBox.shrink();
-                    final bool isBoosted = _volumeLevel > 1.0;
-                    return Positioned(
-                      left: 30,
-                      top: MediaQuery.of(context).size.height * 0.3,
-                      child: _buildVerticalSlider(
-                        _volumeLevel / 2.0, 
-                        _volumeLevel == 0 ? Icons.volume_off_rounded : (isBoosted ? Icons.volume_up_rounded : Icons.volume_down_rounded),
-                        '${(_volumeLevel * 100).round()}%',
-                        isBoosted ? Colors.orangeAccent : cs.primary,
-                      ),
-                    );
-                  },
-                ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showBrightNotifier,
-                  builder: (context, show, child) {
-                    if (!show) return const SizedBox.shrink();
-                    return ValueListenableBuilder<double>(
-                      valueListenable: _brightnessNotifier,
-                      builder: (context, brightness, child) {
+                    ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _showVolNotifier,
+                      builder: (context, show, child) {
+                        if (!show) return const SizedBox.shrink();
+                        final bool isBoosted = _volumeLevel > 1.0;
                         return Positioned(
-                          right: 30,
+                          left: 30,
                           top: MediaQuery.of(context).size.height * 0.3,
                           child: _buildVerticalSlider(
-                            brightness,
-                            brightness < 0.15 ? Icons.brightness_low_rounded : Icons.brightness_6_rounded,
-                            '${(brightness * 100).round()}%',
-                            cs.secondary,
+                            _volumeLevel / 2.0, 
+                            _volumeLevel == 0 ? Icons.volume_off_rounded : (isBoosted ? Icons.volume_up_rounded : Icons.volume_down_rounded),
+                            '${(_volumeLevel * 100).round()}%',
+                            isBoosted ? Colors.orangeAccent : cs.primary,
                           ),
                         );
                       },
-                    );
-                  },
-                ),
-                if (_fitOverlayText != null)
-                  Positioned(top: 100, left: 0, right: 0,
-                    child: Center(child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.55), borderRadius: BorderRadius.circular(20)),
-                      child: Text(_fitOverlayText!, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                    ))),
-                if (_isLocked)
-                  Positioned(top: 16, right: 16,
-                    child: SafeArea(child: GestureDetector(
-                      onTap: _toggleLock,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.85), shape: BoxShape.circle),
-                        child: const Icon(Symbols.lock_rounded, color: Colors.white, size: 22),
-                      ),
-                    ))),
-                if (_showControls && !_isLocked) ...[
-                  Positioned(top: 0, left: 0, right: 0,
-                    child: PlayerTopBar(
-                      videoName: widget.video.name,
-                      onBack: () => Navigator.pop(context),
-                      onToggleFit: _toggleFit,
-                      onToggleOrientation: _toggleOrientation,
-                      onPip: _enterPip,
-                      onAudioMenu: () {
-                        setState(() {
-                          _currentMenu = _currentMenu == ActiveMenu.audio ? ActiveMenu.none : ActiveMenu.audio;
-                          if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
-                        });
+                    ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _showBrightNotifier,
+                      builder: (context, show, child) {
+                        if (!show) return const SizedBox.shrink();
+                        return ValueListenableBuilder<double>(
+                          valueListenable: _brightnessNotifier,
+                          builder: (context, brightness, child) {
+                            return Positioned(
+                              right: 30,
+                              top: MediaQuery.of(context).size.height * 0.3,
+                              child: _buildVerticalSlider(
+                                brightness,
+                                brightness < 0.15 ? Icons.brightness_low_rounded : Icons.brightness_6_rounded,
+                                '${(brightness * 100).round()}%',
+                                cs.secondary,
+                              ),
+                            );
+                          },
+                        );
                       },
-                      onSubtitleMenu: () {
-                        setState(() {
-                          _currentMenu = _currentMenu == ActiveMenu.subtitles ? ActiveMenu.none : ActiveMenu.subtitles;
-                          if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
-                        });
-                      },
-                      isLandscape: _isLandscape,
-                      showSubtitles: _showSubtitles,
-                    )),
-                  Positioned(bottom: 0, left: 0, right: 0,
-                    child: PlayerBottomBar(
-                      position: _position,
-                      duration: _duration,
-                      onSeek: (v) => _player.seek(Duration(milliseconds: (v * _duration.inMilliseconds).toInt())),
-                      primaryColor: cs.primary,
-                    )),
-                  Center(child: PlayerCenterButtons(
-                    isPlaying: _isPlaying,
-                    onPlayPause: () => _isPlaying ? _player.pause() : _player.play(),
-                    onSkipBack: () {
-                      final target = _position - const Duration(seconds: 10);
-                      _player.seek(target.isNegative ? Duration.zero : target);
-                    },
-                    onSkipForward: () {
-                      final target = _position + const Duration(seconds: 10);
-                      _player.seek(target > _duration ? _duration : target);
-                    },
-                    primaryColor: cs.primaryContainer,
-                    onPrimaryContainer: cs.onPrimaryContainer,
-                  )),
-                ],
-                _buildSidePanel(),
-              ]),
+                    ),
+                    if (_fitOverlayText != null)
+                      Positioned(top: 100, left: 0, right: 0,
+                        child: Center(child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.55), borderRadius: BorderRadius.circular(20)),
+                          child: Text(_fitOverlayText!, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                        ))),
+                    if (_isLocked)
+                      Positioned(top: 16, right: 16,
+                        child: SafeArea(child: GestureDetector(
+                          onTap: _toggleLock,
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.85), shape: BoxShape.circle),
+                            child: const Icon(Symbols.lock_rounded, color: Colors.white, size: 22),
+                          ),
+                        ))),
+                    if (_showControls && !_isLocked) ...[
+                      Positioned(top: 0, left: 0, right: 0,
+                        child: PlayerTopBar(
+                          videoName: widget.video.name,
+                          onBack: () => Navigator.pop(context),
+                          onToggleFit: _toggleFit,
+                          onToggleOrientation: _toggleOrientation,
+                          onPip: _enterPip,
+                          onAudioMenu: () {
+                            setState(() {
+                              _currentMenu = _currentMenu == ActiveMenu.audio ? ActiveMenu.none : ActiveMenu.audio;
+                              if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
+                            });
+                          },
+                          onSubtitleMenu: () {
+                            setState(() {
+                              _currentMenu = _currentMenu == ActiveMenu.subtitles ? ActiveMenu.none : ActiveMenu.subtitles;
+                              if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
+                            });
+                          },
+                          isLandscape: _isLandscape,
+                          showSubtitles: _showSubtitles,
+                        )),
+                      Positioned(bottom: 0, left: 0, right: 0,
+                        child: PlayerBottomBar(
+                          position: _position,
+                          duration: _duration,
+                          onSeek: (v) => _player.seek(Duration(milliseconds: (v * _duration.inMilliseconds).toInt())),
+                          primaryColor: cs.primary,
+                        )),
+                      Center(child: PlayerCenterButtons(
+                        isPlaying: _isPlaying,
+                        onPlayPause: () => _isPlaying ? _player.pause() : _player.play(),
+                        onSkipBack: () {
+                          final target = _position - const Duration(seconds: 10);
+                          _player.seek(target.isNegative ? Duration.zero : target);
+                        },
+                        onSkipForward: () {
+                          final target = _position + const Duration(seconds: 10);
+                          _player.seek(target > _duration ? _duration : target);
+                        },
+                        primaryColor: cs.primaryContainer,
+                        onPrimaryContainer: cs.onPrimaryContainer,
+                      )),
+                    ],
+                    _buildSidePanel(),
+                  ]);
+                },
+              ),
       ),
     );
   }
