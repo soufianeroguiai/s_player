@@ -32,7 +32,7 @@ class ThumbnailService {
     _pendingPaths.add(videoPath);
     _activeJobs++;
     try {
-      final thumbnailData = await compute(_generateThumbnail, videoPath);
+      final thumbnailData = await _generateThumbnail(videoPath);
       if (thumbnailData != null) {
         await cacheFile.writeAsBytes(thumbnailData);
         _notifiers[videoPath]?.value = thumbnailData;

@@ -111,7 +111,6 @@ class LibraryProvider extends ChangeNotifier {
       _videos = result;
       _updateByFolder();
       await _saveVideosToCache();
-      ThumbnailService().clearCache();
     } catch (e) {
       _error = 'فشل المسح: $e';
     }
