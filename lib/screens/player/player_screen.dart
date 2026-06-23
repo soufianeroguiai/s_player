@@ -760,28 +760,30 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   },
                 ),
 
-                // ── شريط مؤشر الصوت الذكي ──
+                // ── مؤشر الصوت (يمين الشاشة — جانب إيماءة الصوت) ──
                 ValueListenableBuilder<bool>(
                   valueListenable: _showVolNotifier,
                   builder: (context, show, child) {
                     if (!show) return const SizedBox.shrink();
                     final bool isBoosted = _volumeLevel > 1.0;
                     return Positioned(
-                      left: 24,
-                      top: MediaQuery.of(context).size.height * 0.25,
+                      right: 20,
+                      top: MediaQuery.of(context).size.height * 0.22,
                       child: PlayerIndicators.buildFloatingIndicator(
                         icon: _volumeLevel == 0
                             ? Icons.volume_off_rounded
-                            : (isBoosted ? Icons.volume_up_rounded : Icons.volume_down_rounded),
-                        displayValue: _volumeLevel / 2.0,
+                            : isBoosted
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_down_rounded,
+                        displayValue: (_volumeLevel / 2.0).clamp(0.0, 1.0),
                         labelText: '${(_volumeLevel * 100).round()}%',
-                        color: isBoosted ? Colors.orangeAccent : cs.primary,
+                        color: isBoosted ? Colors.orangeAccent : const Color(0xFF4FC3F7),
                       ),
                     );
                   },
                 ),
 
-                // ── شريط مؤشر الإضاءة ──
+                // ── مؤشر السطوع (يسار الشاشة — جانب إيماءة السطوع) ──
                 ValueListenableBuilder<bool>(
                   valueListenable: _showBrightNotifier,
                   builder: (context, show, child) {
@@ -790,13 +792,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       valueListenable: _brightnessNotifier,
                       builder: (context, brightness, child) {
                         return Positioned(
-                          right: 24,
-                          top: MediaQuery.of(context).size.height * 0.25,
+                          left: 20,
+                          top: MediaQuery.of(context).size.height * 0.22,
                           child: PlayerIndicators.buildFloatingIndicator(
-                            icon: brightness < 0.15 ? Icons.brightness_low_rounded : Icons.brightness_6_rounded,
+                            icon: brightness < 0.15
+                                ? Icons.brightness_2_rounded
+                                : brightness < 0.5
+                                    ? Icons.brightness_5_rounded
+                                    : Icons.brightness_7_rounded,
                             displayValue: brightness,
                             labelText: '${(brightness * 100).round()}%',
-                            color: cs.secondary,
+                            color: const Color(0xFFFFD54F),
                           ),
                         );
                       },
