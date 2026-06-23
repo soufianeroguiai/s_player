@@ -71,6 +71,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _autoSubtitleSelected = false;
   bool _autoAudioSelected = false;
 
+  /// هل جاستر الإصبعين نشط حالياً لتحريك الترجمة/تكبيرها
+  bool _subtitleGestureActive = false;
+
   /// آخر إدخالات SRT الخام (قبل تطبيق إزاحة المزامنة)، تُستخدم لإعادة
   /// بناء الترجمة بسرعة عند تغيير _subtitleSync دون إعادة قراءة الملف.
   List<SubtitleEntry>? _lastSubtitleEntries;
@@ -352,6 +355,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
   }
 
+  String? _seekHintText;
+  Timer? _seekHintTimer;
+
+  void _showSeekHint(int seconds) {
+    setState(() => _seekHintText = seconds > 0 ? '+${seconds}s ⏩' : '${seconds}s ⏪');
+    _seekHintTimer?.cancel();
+    _seekHintTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _seekHintText = null);
+    });
+  }
+
   void _onVolumeChanged(double newLevel) {
     setState(() {
       _volumeLevel = newLevel.clamp(0.0, 2.0);
@@ -597,77 +611,107 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         body: !_initialized
             ? Center(child: CircularProgressIndicator(color: cs.primary))
             : Stack(children: [
-                // ─── الجاستر الذكي الشامل ───
+                // ─── طبقة الجاستر الشاملة ───
+                // مقسّمة لثلاث مناطق أفقية:
+                //   يسار الشاشة  → سطوع (سحب عمودي)  + تأخير (ضغط مزدوج)
+                //   منتصف الشاشة → play/pause (ضغط مزدوج)
+                //   يمين الشاشة  → صوت   (سحب عمودي)  + تقديم (ضغط مزدوج)
+                // إصبعان في أي مكان → تكبير/تصغير وتحريك الترجمة (عند الإيقاف فقط)
                 GestureDetector(
                   onTap: _toggleControls,
                   onDoubleTapDown: _isLocked
                       ? null
                       : (details) {
-                          final isRight = details.localPosition.dx > screenWidth / 2;
-                          final target = isRight
-                              ? (_position + const Duration(seconds: 10))
-                              : (_position - const Duration(seconds: 10));
-                          _player.seek(
-                              target.isNegative ? Duration.zero : (target > _duration ? _duration : target));
+                          final x = details.localPosition.dx;
+                          // ثلث أيسر → تأخير 10 ثواني
+                          if (x < screenWidth / 3) {
+                            final target = _position - const Duration(seconds: 10);
+                            _player.seek(target.isNegative ? Duration.zero : target);
+                            _showSeekHint(-10);
+                          }
+                          // ثلث أيمن → تقديم 10 ثواني
+                          else if (x > screenWidth * 2 / 3) {
+                            final target = _position + const Duration(seconds: 10);
+                            _player.seek(target > _duration ? _duration : target);
+                            _showSeekHint(10);
+                          }
+                          // المنتصف → play / pause
+                          else {
+                            _isPlaying ? _player.pause() : _player.play();
+                          }
                         },
                   onScaleStart: (details) {
                     if (_isLocked) return;
                     if (details.pointerCount == 2) {
-                      _startSubtitleSize = s.subtitleFontSize;
-                      _startBottomPadding = s.bottomPadding;
-                      _startFocalPoint = details.focalPoint;
+                      // إصبعان: تكبير الترجمة + رفعها/خفضها
+                      // متاح فقط عند إيقاف الفيديو
+                      if (!_isPlaying) {
+                        _startSubtitleSize = s.subtitleFontSize;
+                        _startBottomPadding = s.bottomPadding;
+                        _startFocalPoint = details.focalPoint;
+                        _subtitleGestureActive = true;
+                      }
                     } else {
+                      // إصبع واحد: seek بالسحب الأفقي
                       _seekMsNotifier.value = _position.inMilliseconds.toDouble();
+                      _subtitleGestureActive = false;
                     }
                   },
                   onScaleUpdate: (details) {
                     if (_isLocked) return;
 
-                    if (details.pointerCount == 2) {
-                      double newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
+                    // ── إصبعان: تكبير/تصغير وتحريك الترجمة ──
+                    if (details.pointerCount == 2 && _subtitleGestureActive) {
+                      final newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
                       s.setSubtitleFontSize(newSize);
 
-                      double dy = details.focalPoint.dy - _startFocalPoint.dy;
-                      double newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.8);
+                      final dy = details.focalPoint.dy - _startFocalPoint.dy;
+                      final newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.85);
                       s.setBottomPadding(newPadding);
-                    } else if (details.pointerCount == 1) {
-                      final isRight = details.focalPoint.dx > screenWidth / 2;
-                      final isHorizontal =
-                          details.focalPointDelta.dx.abs() > details.focalPointDelta.dy.abs();
+                      return;
+                    }
 
-                      if (details.focalPointDelta.distance < 1) return;
+                    // ── إصبع واحد ──
+                    if (details.pointerCount != 1) return;
+                    if (details.focalPointDelta.distance < 0.5) return;
 
-                      if (isHorizontal) {
-                        double seekFactor = (_duration.inMilliseconds * 0.25).clamp(50000, 500000).toDouble();
-                        double seekChangeMs = (details.focalPointDelta.dx / screenWidth) * seekFactor;
-                        _seekMsNotifier.value =
-                            (_seekMsNotifier.value + seekChangeMs).clamp(0.0, _duration.inMilliseconds.toDouble());
+                    final isRight = details.focalPoint.dx > screenWidth / 2;
+                    final dx = details.focalPointDelta.dx.abs();
+                    final dy = details.focalPointDelta.dy.abs();
+                    final isHorizontal = dx > dy;
 
-                        _showSeekNotifier.value = true;
-                        _showVolNotifier.value = false;
+                    if (isHorizontal) {
+                      // سحب أفقي → seek مرئي
+                      final seekFactor = (_duration.inMilliseconds * 0.25)
+                          .clamp(30000.0, 600000.0);
+                      final change = (details.focalPointDelta.dx / screenWidth) * seekFactor;
+                      _seekMsNotifier.value = (_seekMsNotifier.value + change)
+                          .clamp(0.0, _duration.inMilliseconds.toDouble());
+                      _showSeekNotifier.value = true;
+                      _showVolNotifier.value = false;
+                      _showBrightNotifier.value = false;
+                    } else {
+                      // سحب عمودي → صوت (يمين) أو سطوع (يسار)
+                      final delta = -details.focalPointDelta.dy / 180.0;
+                      if (isRight) {
+                        _onVolumeChanged(_volumeLevel + delta);
+                        _showVolNotifier.value = true;
                         _showBrightNotifier.value = false;
+                        _showSeekNotifier.value = false;
                       } else {
-                        double delta = -details.focalPointDelta.dy / 200.0;
-                        if (isRight) {
-                          _onVolumeChanged(_volumeLevel + delta);
-                          _showVolNotifier.value = true;
-                          _showSeekNotifier.value = false;
-                          _showBrightNotifier.value = false;
-                        } else {
-                          double newBright = (_brightnessNotifier.value + delta).clamp(0.0, 1.0);
-                          _brightnessNotifier.value = newBright;
-                          ScreenBrightness.instance.setApplicationScreenBrightness(newBright);
-
-                          _showBrightNotifier.value = true;
-                          _showVolNotifier.value = false;
-                          _showSeekNotifier.value = false;
-                        }
-                        _resetIndicatorTimer();
+                        final newBright = (_brightnessNotifier.value + delta).clamp(0.05, 1.0);
+                        _brightnessNotifier.value = newBright;
+                        ScreenBrightness.instance.setApplicationScreenBrightness(newBright);
+                        _showBrightNotifier.value = true;
+                        _showVolNotifier.value = false;
+                        _showSeekNotifier.value = false;
                       }
+                      _resetIndicatorTimer();
                     }
                   },
                   onScaleEnd: (details) {
                     if (_isLocked) return;
+                    _subtitleGestureActive = false;
                     if (_showSeekNotifier.value) {
                       _player.seek(Duration(milliseconds: _seekMsNotifier.value.toInt()));
                       _showSeekNotifier.value = false;
@@ -759,6 +803,53 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     );
                   },
                 ),
+
+                if (_seekHintText != null)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.72),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Text(
+                        _seekHintText!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // تلميح جاستر الإصبعين عند الإيقاف
+                if (!_isPlaying && !_subtitleGestureActive && _showControls)
+                  Positioned(
+                    bottom: 90,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.black45,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.pinch_rounded, color: Colors.white54, size: 16),
+                            SizedBox(width: 6),
+                            Text(
+                              'إصبعان لتعديل الترجمة',
+                              style: TextStyle(color: Colors.white54, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
 
                 if (_fitOverlayText != null)
                   Positioned(
@@ -878,6 +969,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _saveTimer?.cancel();
     _indicatorTimer?.cancel();
     _fitOverlayTimer?.cancel();
+    _seekHintTimer?.cancel();
     try {
       ScreenBrightness.instance.resetApplicationScreenBrightness();
     } catch (_) {}

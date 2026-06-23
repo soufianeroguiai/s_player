@@ -31,7 +31,7 @@ dependencies:
   # 🎨 UI
   material_symbols_icons: ^4.2951.0
   flex_color_picker: ^3.8.0
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
 
   # ⚙️ Utilities
   share_plus: ^13.1.0
