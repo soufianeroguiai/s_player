@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart'; // ✅ الإضافة
 import 'theme/app_theme.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
@@ -19,6 +20,7 @@ void main() async {
     return true;
   };
 
+  // 1. تهيئة MediaKit
   try {
     MediaKit.ensureInitialized();
   } catch (e) {
@@ -26,6 +28,15 @@ void main() async {
     return;
   }
 
+  // 2. تهيئة FFmpegKitExtended (جديد)
+  try {
+    await FFmpegKitExtended.initialize();
+  } catch (e) {
+    runApp(ErrorApp('فشل تهيئة FFmpeg:\n$e'));
+    return;
+  }
+
+  // باقي الإعدادات
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,

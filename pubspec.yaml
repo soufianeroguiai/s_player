@@ -20,10 +20,12 @@ dependencies:
   file_picker: ^12.0.0-beta.7
   photo_manager: ^3.9.0
   path_provider: ^2.1.6
-  ffmpeg_kit_flutter_new_min: ^3.1.0
 
   # 🔐 Permissions
   permission_handler: ^12.0.3
+
+  # 🎞️ FFmpeg Extended (يدعم كل الصيغ بما فيها HEVC 10‑bit)
+  ffmpeg_kit_extended_flutter: ^0.5.8
 
   # 📦 State
   provider: ^6.1.5+1
@@ -49,3 +51,9 @@ flutter:
 
   assets:
     - assets/
+
+# تكوين FFmpeg Extended (ضبط البناء)
+ffmpeg_kit_extended_config:
+  type: "full"   # يحوي كل المرمزات (يدعم HEVC 10‑bit)
+  gpl: true      # تفعيل مكتبات GPL مثل libx265
+  small: false   # نأخذ النسخة الكاملة لضمان التوافق الأقصى

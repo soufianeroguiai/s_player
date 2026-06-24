@@ -1,0 +1,6 @@
+-keep class com.arthenica.** { *; }
+-keepclassmembers class com.arthenica.** { *; }
+-keep class com.akashskypatel.** { *; }
+-keepclassmembers class com.akashskypatel.** { *; }
+-dontwarn com.arthenica.**
+-dontwarn com.akashskypatel.**

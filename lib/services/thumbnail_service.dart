@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
@@ -68,14 +67,14 @@ class ThumbnailService {
         }
       }
 
-      // FFmpeg فقط – بدون photo_manager
-      final bytes = await _fromFFmpeg(path, cacheFile.path);
+      // توليد الصورة باستخدام FFmpeg
+      final bytes = await _ffmpegThumb(video.path, cacheFile.path);
       if (bytes != null && bytes.isNotEmpty) {
         if (!await cacheFile.exists()) {
           await cacheFile.writeAsBytes(bytes);
         }
         _notifiers[path]?.value = bytes;
-        _errors[path]?.value = null;
+        _errors[path]?.value = null; // نجاح
       } else {
         _errors[path]?.value ??= 'فشل استخراج الصورة (FFmpeg)';
       }
@@ -86,33 +85,28 @@ class ThumbnailService {
     }
   }
 
-  Future<Uint8List?> _fromFFmpeg(String videoPath, String savePath) async {
-    try {
-      final file = File(videoPath);
-      if (!await file.exists()) {
-        _errors[videoPath]?.value = 'الملف غير موجود';
-        return null;
-      }
-
-      final command =
-          '-y -i "$videoPath" -ss 5 -vframes 1 -s 360x240 -q:v 2 "$savePath"';
-      final session = await FFmpegKit.execute(command);
-      final returnCode = await session.getReturnCode();
-
-      if (ReturnCode.isSuccess(returnCode)) {
-        final outputFile = File(savePath);
-        if (await outputFile.exists()) {
-          return await outputFile.readAsBytes();
-        }
-      } else {
-        final logs = await session.getOutput();
-        _errors[videoPath]?.value = 'FFmpeg: ${logs ?? "فشل غير معروف"}';
-      }
-      return null;
-    } catch (e) {
-      _errors[videoPath]?.value = 'FFmpeg خطأ: $e';
+  Future<Uint8List?> _ffmpegThumb(String videoPath, String savePath) async {
+    final file = File(videoPath);
+    if (!await file.exists()) {
+      _errors[videoPath]?.value = 'الملف غير موجود';
       return null;
     }
+
+    // أمر FFmpeg لاستخراج إطار JPEG من الثانية 5
+    final command = '-y -i "$videoPath" -ss 5 -vframes 1 -s 360x240 -q:v 2 "$savePath"';
+    final session = await FFmpegKitExtended.execute(command);
+    final returnCode = await session.getReturnCode();
+
+    if (ReturnCode.isSuccess(returnCode)) {
+      final outputFile = File(savePath);
+      if (await outputFile.exists()) {
+        return await outputFile.readAsBytes();
+      }
+    } else {
+      final output = await session.getOutput();
+      _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل غير معروف"}';
+    }
+    return null;
   }
 
   Future<File> _cacheFile(String videoPath) async {

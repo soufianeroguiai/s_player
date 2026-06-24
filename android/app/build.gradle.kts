@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "com.sr.player"
-        minSdk = 21
+        minSdk = 26                     // ✅ تم رفعه إلى 26 لتوافق ffmpeg_kit_extended_flutter
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -28,6 +28,11 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("debug")
         }
     }
