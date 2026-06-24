@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:photo_manager/photo_manager.dart';
+import 'package:ffmpeg_kit_flutter_full/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_full/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
@@ -68,25 +68,8 @@ class ThumbnailService {
         }
       }
 
-      Uint8List? bytes;
-
-      // 1. photo_manager (سريع)
-      if (video.id != path) {
-        try {
-          bytes = await _fromPhotoManager(video.id);
-        } catch (_) {}
-      }
-
-      // 2. media_kit
-      if (bytes == null) {
-        final result = await _fromMediaKit(video.path, cacheFile.path);
-        if (result.error != null) {
-          _errors[path]?.value = result.error;
-        } else {
-          bytes = result.bytes;
-        }
-      }
-
+      // FFmpeg فقط – بدون photo_manager أو media_kit
+      final bytes = await _fromFFmpeg(path, cacheFile.path);
       if (bytes != null && bytes.isNotEmpty) {
         if (!await cacheFile.exists()) {
           await cacheFile.writeAsBytes(bytes);
@@ -94,83 +77,41 @@ class ThumbnailService {
         _notifiers[path]?.value = bytes;
         _errors[path]?.value = null; // نجاح
       } else {
-        _errors[path]?.value ??= 'تعذر إنشاء صورة مصغرة';
+        _errors[path]?.value ??= 'فشل استخراج الصورة (FFmpeg)';
       }
     } catch (e) {
-      _errors[path]?.value = 'خطأ عام: $e';
+      _errors[path]?.value = 'خطأ: $e';
     } finally {
       _pending.remove(path);
     }
   }
 
-  Future<Uint8List?> _fromPhotoManager(String assetId) async {
-    final asset = await AssetEntity.fromId(assetId);
-    if (asset == null) return null;
-    return await asset.thumbnailDataWithSize(
-      const ThumbnailSize(360, 240),
-      quality: 85,
-    );
-  }
-
-  Future<({Uint8List? bytes, String? error})> _fromMediaKit(
-      String videoPath, String savePath) async {
-    final player = Player();
+  Future<Uint8List?> _fromFFmpeg(String videoPath, String savePath) async {
     try {
-      await player.open(Media(videoPath), play: false);
-
-      final duration = player.state.duration;
-      final bool hasDuration = duration.inMilliseconds > 0;
-
-      // إذا كانت المدة معروفة، ننتقل إلى الثانية 5 أو 30% من المدة
-      if (hasDuration) {
-        final seekPos = duration.inSeconds > 10
-            ? const Duration(seconds: 5)
-            : duration * 0.3;
-        await player.seek(seekPos);
-      } else {
-        // بدون مدة، نعتمد على التشغيل المباشر
-        // نبدأ اللعب فوراً (بدون تقديم) ونتوقف بسرعة
-        await player.play();
-        await Future.delayed(const Duration(milliseconds: 300));
-        await player.pause();
+      final file = File(videoPath);
+      if (!await file.exists()) {
+        _errors[videoPath]?.value = 'الملف غير موجود';
+        return null;
       }
 
-      // انتظار لتحضير الإطار
-      await Future.delayed(const Duration(milliseconds: 500));
+      // أمر FFmpeg لاستخراج إطار JPEG واحد من الثانية 5
+      final command = '-y -i "$videoPath" -ss 5 -vframes 1 -s 360x240 -q:v 2 "$savePath"';
+      final session = await FFmpegKit.execute(command);
+      final returnCode = await session.getReturnCode();
 
-      // التقاط لقطة JPEG
-      Uint8List? screenshotBytes;
-      try {
-        screenshotBytes = await player.screenshot(format: 'image/jpeg');
-      } catch (_) {}
-
-      if (screenshotBytes != null && screenshotBytes.isNotEmpty) {
-        final file = File(savePath);
-        await file.writeAsBytes(screenshotBytes);
-        return (bytes: screenshotBytes, error: null);
-      }
-
-      // الخطة البديلة: إذا لم تنجح اللقطة الأولى، نجرب تشغيل-إيقاف-لقطة
-      if (!hasDuration || screenshotBytes == null) {
-        await player.play();
-        await Future.delayed(const Duration(milliseconds: 300));
-        await player.pause();
-        await Future.delayed(const Duration(milliseconds: 500));
-        try {
-          screenshotBytes = await player.screenshot(format: 'image/jpeg');
-        } catch (_) {}
-        if (screenshotBytes != null && screenshotBytes.isNotEmpty) {
-          final file = File(savePath);
-          await file.writeAsBytes(screenshotBytes);
-          return (bytes: screenshotBytes, error: null);
+      if (ReturnCode.isSuccess(returnCode)) {
+        final outputFile = File(savePath);
+        if (await outputFile.exists()) {
+          return await outputFile.readAsBytes();
         }
+      } else {
+        final logs = await session.getOutput();
+        _errors[videoPath]?.value = 'FFmpeg: ${logs ?? "فشل غير معروف"}';
       }
-
-      return (bytes: null, error: 'تعذر التقاط إطار (حاول مجدداً)');
+      return null;
     } catch (e) {
-      return (bytes: null, error: 'media_kit: $e');
-    } finally {
-      player.dispose();
+      _errors[videoPath]?.value = 'FFmpeg خطأ: $e';
+      return null;
     }
   }
 
