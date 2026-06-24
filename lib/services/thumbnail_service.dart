@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:ffmpeg_kit_flutter_full/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_full/return_code.dart';
+import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
@@ -68,14 +68,14 @@ class ThumbnailService {
         }
       }
 
-      // FFmpeg فقط – بدون photo_manager أو media_kit
+      // FFmpeg فقط – بدون photo_manager
       final bytes = await _fromFFmpeg(path, cacheFile.path);
       if (bytes != null && bytes.isNotEmpty) {
         if (!await cacheFile.exists()) {
           await cacheFile.writeAsBytes(bytes);
         }
         _notifiers[path]?.value = bytes;
-        _errors[path]?.value = null; // نجاح
+        _errors[path]?.value = null;
       } else {
         _errors[path]?.value ??= 'فشل استخراج الصورة (FFmpeg)';
       }
@@ -94,8 +94,8 @@ class ThumbnailService {
         return null;
       }
 
-      // أمر FFmpeg لاستخراج إطار JPEG واحد من الثانية 5
-      final command = '-y -i "$videoPath" -ss 5 -vframes 1 -s 360x240 -q:v 2 "$savePath"';
+      final command =
+          '-y -i "$videoPath" -ss 5 -vframes 1 -s 360x240 -q:v 2 "$savePath"';
       final session = await FFmpegKit.execute(command);
       final returnCode = await session.getReturnCode();
 
