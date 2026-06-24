@@ -94,17 +94,16 @@ class ThumbnailService {
     }
 
     String inputPath = videoPath;
-    File? symlink;
+    Link? symlink;  // ✅ استخدمنا Link بدلاً من File
 
-    // إنشاء رابط قصير إذا كان المسار طويلاً جداً (> 200 حرف)
+    // إنشاء رابط رمزي قصير إذا كان المسار طويلاً جداً (> 200 حرف)
     if (videoPath.length > 200) {
       try {
         final tmpDir = await getTemporaryDirectory();
         final linkPath = '${tmpDir.path}/tv_${_shortHash(videoPath)}.vid';
-        symlink = File(linkPath);
+        symlink = Link(linkPath);
         if (!await symlink.exists()) {
-          // createSymbolicLink يتطلب عدم وجود الملف مسبقاً
-          await file.createSymbolicLink(linkPath);
+          await symlink.create(videoPath);  // ✅ الطريقة الصحيحة في Dart
         }
         inputPath = linkPath;
       } catch (_) {
