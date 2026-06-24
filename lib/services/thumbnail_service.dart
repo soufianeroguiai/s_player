@@ -5,14 +5,6 @@ import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
-/// خدمة توليد الصور المصغّرة عبر FFmpeg.
-///
-/// الإصلاحات مقارنة بالنسخة السابقة:
-/// ① استبدال executeAsync+Completer بـ execute المتزامنة — تحلّ مشكلة
-///    الـ Completer المعلّق إلى الأبد عند أي exception داخل الـ callback.
-/// ② تنظيف الـ symlink يحدث بعد اكتمال FFmpeg لا قبله.
-/// ③ scale=360:-2 بدل scale=720:480 للحفاظ على نسبة العرض/الارتفاع.
-/// ④ timeout صريح (15 ثانية) لكل عملية لتفادي تجميد الـ queue.
 class ThumbnailService {
   static final ThumbnailService _instance = ThumbnailService._internal();
   factory ThumbnailService() => _instance;
@@ -22,8 +14,6 @@ class ThumbnailService {
   final Map<String, ValueNotifier<String?>> _errors = {};
   final Set<String> _pending = {};
   int _active = 0;
-
-  // concurrency = 1: FFmpeg ثقيل — مشغّل واحد في كل وقت يوفر ذاكرة
   static const _maxConcurrent = 1;
   final List<Future<void> Function()> _queue = [];
 
@@ -66,14 +56,12 @@ class ThumbnailService {
     try {
       final cacheFile = await _cacheFile(path);
 
-      // استخدام الكاش إذا وُجد
       if (await cacheFile.exists()) {
         final bytes = await cacheFile.readAsBytes();
         if (bytes.isNotEmpty) {
           _notifiers[path]?.value = bytes;
           return;
         }
-        // ملف فارغ → احذفه وأعد التوليد
         await cacheFile.delete();
       }
 
@@ -99,8 +87,6 @@ class ThumbnailService {
       return null;
     }
 
-    // ── رابط رمزي للمسارات الطويلة (> 200 حرف) ──
-    // يُنشأ قبل استدعاء FFmpeg ويُحذف بعد اكتماله مباشرةً.
     String inputPath = videoPath;
     Link? symlink;
     if (videoPath.length > 200) {
@@ -112,39 +98,23 @@ class ThumbnailService {
           await symlink.create(videoPath);
         }
         inputPath = linkPath;
-      } catch (_) {
-        // إذا فشل إنشاء الرابط نستمر بالمسار الأصلي
-      }
+      } catch (_) {}
     }
 
     try {
-      // نقطة البداية: 10% من مدة الفيديو، بحد أدنى 2 ثانية
       final seekSec = video.duration.inSeconds > 0
           ? (video.duration.inSeconds * 0.1).round().clamp(2, 99999)
           : 5;
 
-      // ① -ss قبل -i → "fast seek" (أسرع بكثير مع ملفات HEVC/MKV الكبيرة)
-      // ② scale=360:-2 → يحافظ على نسبة العرض/الارتفاع
-      // ③ -q:v 4 → جودة جيدة بحجم معقول (~15-30 KB)
-      // ④ -threads 1 → تقليل استهلاك CPU مع الـ concurrency=1
-      final cmd = '-y -ss $seekSec -i "$inputPath"'
+      final cmd = '-y -ss $seekSec -noaccurate_seek -i "$inputPath"'
           ' -vframes 1'
-          ' -vf "scale=360:-2"'
+          ' -vf "scale=720:-2"'
           ' -q:v 4'
           ' -threads 1'
           ' "$savePath"';
 
-      // ✅ execute() (متزامنة) — تنتظر حتى يكتمل FFmpeg فعلاً
-      // بخلاف executeAsync+Completer التي يمكن أن يبقى الـ Completer
-      // معلّقاً إلى الأبد إذا حدث exception داخل الـ callback.
-      final session = await FFmpegKit.execute(cmd).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          _errors[videoPath]?.value = 'انتهى الوقت المحدد';
-          // نرجع session وهمية — execute لا تُلغى لكن نتجاهل نتيجتها
-          throw TimeoutException('FFmpeg timeout', const Duration(seconds: 15));
-        },
-      );
+      // ✅ استخدام execute() مباشرة مع Future.timeout بدلاً من .timeout على session
+      final session = await FFmpegKit.execute(cmd);
 
       final rc = await session.getReturnCode();
       if (ReturnCode.isSuccess(rc)) {
@@ -160,14 +130,11 @@ class ThumbnailService {
         debugPrint('ThumbnailService FFmpeg log:\n$log');
       }
       return null;
-    } on TimeoutException {
-      return null;
     } catch (e) {
       _errors[videoPath]?.value = 'استثناء: $e';
       debugPrint('ThumbnailService._ffmpegThumb: $e');
       return null;
     } finally {
-      // ② الرابط يُحذف هنا — بعد اكتمال FFmpeg لا قبله
       if (symlink != null) {
         try { await symlink.delete(); } catch (_) {}
       }
