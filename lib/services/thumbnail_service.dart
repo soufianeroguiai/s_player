@@ -2,33 +2,39 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:video_thumbnail_gen/video_thumbnail_gen.dart'; // ✅ الاستيراد الصحيح
+import 'package:video_thumbnail_gen/video_thumbnail_gen.dart';
 import '../models/video_item.dart';
 
-/// يولّد ويخزّن الصور المصغّرة لفيديوهات المكتبة.
-///
-/// ترتيب الأولوية:
-/// 1. ذاكرة التخزين المؤقت (ملف JPEG محلي) — فوري
-/// 2. photo_manager (AssetEntity) — سريع وnative للـ MP4
-/// 3. video_thumbnail_gen — يدعم MKV/HEVC/أي صيغة يدعمها ffmpeg
 class ThumbnailService {
   static final ThumbnailService _instance = ThumbnailService._internal();
   factory ThumbnailService() => _instance;
   ThumbnailService._internal();
 
   final Map<String, ValueNotifier<Uint8List?>> _notifiers = {};
+  final Map<String, ValueNotifier<String?>> _errors = {}; // ✅ خطأ مخصص لكل فيديو
   final Set<String> _pending = {};
   int _active = 0;
   static const _maxConcurrent = 3;
   final List<Future<void> Function()> _queue = [];
 
+  /// يرجع notifier للصورة المصغرة
   ValueNotifier<Uint8List?> getNotifier(VideoItem video) {
     final path = video.path;
     if (!_notifiers.containsKey(path)) {
       _notifiers[path] = ValueNotifier(null);
+      _errors[path] = ValueNotifier(null);
       _enqueue(video);
     }
     return _notifiers[path]!;
+  }
+
+  /// يرجع notifier لآخر خطأ (إن وجد)
+  ValueNotifier<String?> getErrorNotifier(VideoItem video) {
+    final path = video.path;
+    if (!_errors.containsKey(path)) {
+      _errors[path] = ValueNotifier(null);
+    }
+    return _errors[path]!;
   }
 
   void _enqueue(VideoItem video) {
@@ -52,8 +58,10 @@ class ThumbnailService {
     if (_pending.contains(path)) return;
     _pending.add(path);
 
+    // إعادة تعيين الخطأ في البداية
+    _errors[path]?.value = null;
+
     try {
-      // 1. ذاكرة التخزين المؤقت
       final cacheFile = await _cacheFile(path);
       if (await cacheFile.exists()) {
         final bytes = await cacheFile.readAsBytes();
@@ -65,12 +73,14 @@ class ThumbnailService {
 
       Uint8List? bytes;
 
-      // 2. photo_manager — سريع للـ MP4/WebM (لها AssetEntity حقيقي)
       if (video.id != path) {
-        bytes = await _fromPhotoManager(video.id);
+        try {
+          bytes = await _fromPhotoManager(video.id);
+        } catch (e) {
+          _errors[path]?.value = 'photo_manager: $e';
+        }
       }
 
-      // 3. video_thumbnail_gen — يدعم MKV/HEVC وأي صيغة
       bytes ??= await _fromVideoThumbnailGen(path, cacheFile.path);
 
       if (bytes != null && bytes.isNotEmpty) {
@@ -78,45 +88,57 @@ class ThumbnailService {
           await cacheFile.writeAsBytes(bytes);
         }
         _notifiers[path]?.value = bytes;
+      } else {
+        // إذا لم نضع خطأ بعد، فهذا يعني أن الطرق كلها فشلت بصمت
+        if (_errors[path]?.value == null) {
+          _errors[path]?.value = 'All methods returned null';
+        }
       }
     } catch (e) {
-      debugPrint('ThumbnailService: $e');
+      _errors[path]?.value = 'ThumbnailService: $e';
     } finally {
       _pending.remove(path);
     }
   }
 
   Future<Uint8List?> _fromPhotoManager(String assetId) async {
-    try {
-      final asset = await AssetEntity.fromId(assetId);
-      if (asset == null) return null;
-      return await asset.thumbnailDataWithSize(
-        const ThumbnailSize(360, 240),
-        quality: 85,
-      );
-    } catch (e) {
-      debugPrint('ThumbnailService/photo_manager: $e');
-      return null;
-    }
+    final asset = await AssetEntity.fromId(assetId);
+    if (asset == null) return null;
+    return await asset.thumbnailDataWithSize(
+      const ThumbnailSize(360, 240),
+      quality: 85,
+    );
   }
 
   Future<Uint8List?> _fromVideoThumbnailGen(String videoPath, String savePath) async {
+    // ✅ نرجع الخطأ مباشرة إذا الملف غير موجود أو فشل
+    final file = File(videoPath);
+    if (!await file.exists()) {
+      _errors[videoPath]?.value = 'File not found: $videoPath';
+      return null;
+    }
+
     try {
-      // ✅ استخدام الوظيفة الصحيحة من المكتبة حسب التوثيق
       final thumbPath = await VideoThumbnail.thumbnailFile(
         video: videoPath,
-        thumbnailPath: savePath, // يمكن أن يكون مسار ملف كامل أو مجلد
+        thumbnailPath: savePath,
         imageFormat: ImageFormat.JPEG,
         maxWidth: 360,
         quality: 85,
         timeMs: 5000,
       );
-      if (thumbPath == null) return null;
-      final file = File(thumbPath);
-      if (!await file.exists()) return null;
-      return await file.readAsBytes();
+      if (thumbPath == null) {
+        _errors[videoPath]?.value = 'video_thumbnail_gen returned null (timeMs may be > duration?)';
+        return null;
+      }
+      final thumbFile = File(thumbPath);
+      if (!await thumbFile.exists()) {
+        _errors[videoPath]?.value = 'Thumbnail file not created: $thumbPath';
+        return null;
+      }
+      return await thumbFile.readAsBytes();
     } catch (e) {
-      debugPrint('ThumbnailService/video_thumbnail_gen: $e');
+      _errors[videoPath]?.value = 'video_thumbnail_gen error: $e';
       return null;
     }
   }
@@ -134,5 +156,6 @@ class ThumbnailService {
     }
     _notifiers.forEach((_, n) => n.value = null);
     _notifiers.clear();
+    _errors.clear();
   }
 }

@@ -17,7 +17,8 @@ class VideoThumbnailLoader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notifier = ThumbnailService().getNotifier(video);
+    final thumbnailNotifier = ThumbnailService().getNotifier(video);
+    final errorNotifier = ThumbnailService().getErrorNotifier(video);
 
     return SizedBox(
       width: width,
@@ -25,16 +26,20 @@ class VideoThumbnailLoader extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: ValueListenableBuilder<Uint8List?>(
-          valueListenable: notifier,
+          valueListenable: thumbnailNotifier,
           builder: (context, bytes, child) {
-            if (bytes == null) {
-              return _placeholder();
+            if (bytes != null) {
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => _buildPlaceholder(errorNotifier),
+              );
             }
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (_, __, ___) => _placeholder(),
+            // لا توجد صورة بعد ← نعرض خطأ التوليد إن وُجد
+            return ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (context, errorText, _) => _buildPlaceholder(errorText),
             );
           },
         ),
@@ -42,7 +47,23 @@ class VideoThumbnailLoader extends StatelessWidget {
     );
   }
 
-  Widget _placeholder() {
+  Widget _buildPlaceholder(String? errorText) {
+    if (errorText != null && errorText.isNotEmpty) {
+      // عرض نص الخطأ داخل الصندوق الرمادي
+      return Container(
+        color: const Color(0xFF1A1A1A),
+        padding: const EdgeInsets.all(4),
+        alignment: Alignment.center,
+        child: Text(
+          errorText,
+          style: const TextStyle(color: Colors.redAccent, fontSize: 8, height: 1.2),
+          textAlign: TextAlign.center,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }
+    // الرمز الافتراضي عند عدم وجود خطأ بعد
     return Container(
       color: Colors.grey[900],
       child: const Center(
