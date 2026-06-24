@@ -70,14 +70,14 @@ class ThumbnailService {
 
       Uint8List? bytes;
 
-      // 1. photo_manager (سريع للملفات العادية)
+      // 1. photo_manager (سريع)
       if (video.id != path) {
         try {
           bytes = await _fromPhotoManager(video.id);
         } catch (_) {}
       }
 
-      // 2. media_kit (لجميع الصيغ)
+      // 2. media_kit
       if (bytes == null) {
         final result = await _fromMediaKit(video.path, cacheFile.path);
         if (result.error != null) {
@@ -116,22 +116,29 @@ class ThumbnailService {
       String videoPath, String savePath) async {
     final player = Player();
     try {
-      // فتح الفيديو بدون تشغيل
       await player.open(Media(videoPath), play: false);
 
       final duration = player.state.duration;
-      if (duration.inMilliseconds <= 0) {
-        return (bytes: null, error: 'المدة غير معروفة');
+      final bool hasDuration = duration.inMilliseconds > 0;
+
+      // إذا كانت المدة معروفة، ننتقل إلى الثانية 5 أو 30% من المدة
+      if (hasDuration) {
+        final seekPos = duration.inSeconds > 10
+            ? const Duration(seconds: 5)
+            : duration * 0.3;
+        await player.seek(seekPos);
+      } else {
+        // بدون مدة، نعتمد على التشغيل المباشر
+        // نبدأ اللعب فوراً (بدون تقديم) ونتوقف بسرعة
+        await player.play();
+        await Future.delayed(const Duration(milliseconds: 300));
+        await player.pause();
       }
 
-      // التقديم إلى الثانية 5 أو 30% من المدة
-      final seekPos = duration.inSeconds > 10
-          ? const Duration(seconds: 5)
-          : duration * 0.3;
-      await player.seek(seekPos);
+      // انتظار لتحضير الإطار
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      // الخطوة 1: محاولة لقطة مباشرة مع انتظار طويل (1.5 ثانية)
-      await Future.delayed(const Duration(milliseconds: 1500));
+      // التقاط لقطة JPEG
       Uint8List? screenshotBytes;
       try {
         screenshotBytes = await player.screenshot(format: 'image/jpeg');
@@ -143,19 +150,20 @@ class ThumbnailService {
         return (bytes: screenshotBytes, error: null);
       }
 
-      // الخطوة 2: تشغيل لجزء من الثانية، إيقاف، ثم لقطة
-      await player.play();
-      await Future.delayed(const Duration(milliseconds: 300));
-      await player.pause();
-      await Future.delayed(const Duration(milliseconds: 500));
-      try {
-        screenshotBytes = await player.screenshot(format: 'image/jpeg');
-      } catch (_) {}
-
-      if (screenshotBytes != null && screenshotBytes.isNotEmpty) {
-        final file = File(savePath);
-        await file.writeAsBytes(screenshotBytes);
-        return (bytes: screenshotBytes, error: null);
+      // الخطة البديلة: إذا لم تنجح اللقطة الأولى، نجرب تشغيل-إيقاف-لقطة
+      if (!hasDuration || screenshotBytes == null) {
+        await player.play();
+        await Future.delayed(const Duration(milliseconds: 300));
+        await player.pause();
+        await Future.delayed(const Duration(milliseconds: 500));
+        try {
+          screenshotBytes = await player.screenshot(format: 'image/jpeg');
+        } catch (_) {}
+        if (screenshotBytes != null && screenshotBytes.isNotEmpty) {
+          final file = File(savePath);
+          await file.writeAsBytes(screenshotBytes);
+          return (bytes: screenshotBytes, error: null);
+        }
       }
 
       return (bytes: null, error: 'تعذر التقاط إطار (حاول مجدداً)');
