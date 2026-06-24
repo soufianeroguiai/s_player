@@ -113,10 +113,9 @@ class ThumbnailService {
           ' -threads 1'
           ' "$savePath"';
 
-      // ✅ استخدام execute() مباشرة مع Future.timeout بدلاً من .timeout على session
       final session = await FFmpegKit.execute(cmd);
-
       final rc = await session.getReturnCode();
+
       if (ReturnCode.isSuccess(rc)) {
         final out = File(savePath);
         if (await out.exists()) {
@@ -126,7 +125,7 @@ class ThumbnailService {
         _errors[videoPath]?.value = 'الملف الناتج فارغ';
       } else {
         final log = await session.getOutput();
-        _errors[videoPath]?.value = 'FFmpeg فشل (${rc?.getValue()})';
+        _errors[videoPath]?.value = 'FFmpeg فشل (${rc})';
         debugPrint('ThumbnailService FFmpeg log:\n$log');
       }
       return null;
