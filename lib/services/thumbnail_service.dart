@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -16,7 +15,7 @@ class ThumbnailService {
   final Map<String, ValueNotifier<String?>> _errors = {};
   final Set<String> _pending = {};
   int _active = 0;
-  static const _maxConcurrent = 1; // مفرد لضمان أقصى سرعة
+  static const _maxConcurrent = 1;
   final List<Future<void> Function()> _queue = [];
 
   ValueNotifier<Uint8List?> getNotifier(VideoItem video) {
@@ -94,48 +93,81 @@ class ThumbnailService {
       return null;
     }
 
-    // ⚡ ثانية ذكية: 10% من المدة، وإلا الثانية 5 كافتراض
-    final int seekSec = video.duration.inSeconds > 0
-        ? (video.duration.inSeconds * 0.1).round().clamp(1, 99999)
-        : 5;
+    String inputPath = videoPath;
+    File? symlink;
 
-    // ⚡ أمر فائق السرعة: JPEG، دقة ثابتة 720×480، جودة جيدة
-    final command =
-        '-y -ss $seekSec -noaccurate_seek -i "$videoPath" -vframes 1 -vf "scale=720:480" -q:v 5 -an "$savePath"';
+    // إنشاء رابط قصير إذا كان المسار طويلاً جداً (> 200 حرف)
+    if (videoPath.length > 200) {
+      try {
+        final tmpDir = await getTemporaryDirectory();
+        final linkPath = '${tmpDir.path}/tv_${_shortHash(videoPath)}.vid';
+        symlink = File(linkPath);
+        if (!await symlink.exists()) {
+          // createSymbolicLink يتطلب عدم وجود الملف مسبقاً
+          await file.createSymbolicLink(linkPath);
+        }
+        inputPath = linkPath;
+      } catch (_) {
+        // إذا فشل نستمر بالمسار الأصلي
+      }
+    }
 
-    final completer = Completer<Uint8List?>();
+    try {
+      final int seekSec = video.duration.inSeconds > 0
+          ? (video.duration.inSeconds * 0.1).round().clamp(1, 99999)
+          : 5;
 
-    await FFmpegKit.executeAsync(
-      command,
-      onComplete: (session) async {
-        final returnCode = await session.getReturnCode();
-        if (ReturnCode.isSuccess(returnCode)) {
-          final outputFile = File(savePath);
-          if (await outputFile.exists()) {
-            completer.complete(await outputFile.readAsBytes());
+      final command =
+          '-y -ss $seekSec -noaccurate_seek -i "$inputPath" -vframes 1 -vf "scale=720:480" -q:v 5 -an "$savePath"';
+
+      final completer = Completer<Uint8List?>();
+
+      await FFmpegKit.executeAsync(
+        command,
+        onComplete: (session) async {
+          final returnCode = await session.getReturnCode();
+          if (ReturnCode.isSuccess(returnCode)) {
+            final outputFile = File(savePath);
+            if (await outputFile.exists()) {
+              completer.complete(await outputFile.readAsBytes());
+            } else {
+              completer.complete(null);
+            }
           } else {
+            final output = await session.getOutput();
+            _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل"}';
             completer.complete(null);
           }
-        } else {
-          final output = await session.getOutput();
-          _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل"}';
-          completer.complete(null);
-        }
-      },
-    );
+        },
+      );
 
-    return completer.future;
+      return completer.future;
+    } finally {
+      // تنظيف الرابط المؤقت
+      if (symlink != null) {
+        try { await symlink.delete(); } catch (_) {}
+      }
+    }
   }
 
-  // ✅ تخزين دائم سريع (لا يمسح بعد الخروج)
+  /// تخزين دائم باسم قصير لا يتجاوز 12 حرفاً
   Future<File> _cacheFile(String videoPath) async {
     final dir = await getApplicationDocumentsDirectory();
     final thumbDir = Directory('${dir.path}/thumbnails');
     if (!await thumbDir.exists()) {
       await thumbDir.create(recursive: true);
     }
-    final safeName = base64Url.encode(utf8.encode(videoPath));
-    return File('${thumbDir.path}/$safeName.jpg');
+    final name = _shortHash(videoPath);
+    return File('${thumbDir.path}/$name.jpg');
+  }
+
+  /// هاش بسيط قصير يعتمد على محتوى المسار
+  String _shortHash(String input) {
+    int hash = 0;
+    for (int i = 0; i < input.length; i++) {
+      hash = (hash * 31 + input.codeUnitAt(i)) & 0x7FFFFFFF;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
   }
 
   Future<void> clearCache() async {

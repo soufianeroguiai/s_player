@@ -1,0 +1,1699 @@
+===== lib/providers/settings_provider.dart =====
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// يخزّن جميع تفضيلات المستخدم (المظهر، الصوت، الترجمة، المكتبة)
+/// ويحمّلها/يحفظها تلقائياً عبر SharedPreferences.
+///
+/// ملاحظة: تمت إزالة الإعدادات التي لم تكن مرتبطة بأي تنفيذ فعلي
+/// في المشغل (audioOutput, audioPlayerEngine, audioRate, audioPassthrough,
+/// bluetoothAudioDelayMs, pauseOnHeadphonesDisconnect, fadeInStart,
+/// fadeInSeek, showVolumePanel, defaultVolume, subtitleHwAcceleration,
+/// subtitleFontsFolder) لأنها كانت تُحفظ دون أي تأثير حقيقي على التشغيل.
+/// كل إعداد متبقٍ هنا مطبَّق فعلياً في PlayerScreen.
+class SettingsProvider extends ChangeNotifier {
+  // ──────────────────────────────────────────────
+  // المظهر العام
+  // ──────────────────────────────────────────────
+  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode get themeMode => _themeMode;
+
+  // ──────────────────────────────────────────────
+  // المشغل
+  // ──────────────────────────────────────────────
+  bool _rememberPosition = true;
+  bool get rememberPosition => _rememberPosition;
+
+  bool _autoPlay = true;
+  bool get autoPlay => _autoPlay;
+
+  double _defaultSpeed = 1.0;
+  double get defaultSpeed => _defaultSpeed;
+
+  // ──────────────────────────────────────────────
+  // المكتبة
+  // ──────────────────────────────────────────────
+  bool _gridView = false;
+  bool get gridView => _gridView;
+
+  String _sortBy = 'date';
+  String get sortBy => _sortBy;
+
+  bool _sortDesc = true;
+  bool get sortDesc => _sortDesc;
+
+  // ──────────────────────────────────────────────
+  // الترجمة — العرض والتخصيص
+  // ──────────────────────────────────────────────
+  bool _showSubtitlesByDefault = true;
+  bool get showSubtitlesByDefault => _showSubtitlesByDefault;
+
+  double _subtitleFontSize = 30.0;
+  double get subtitleFontSize => _subtitleFontSize;
+
+  int _subtitleColorValue = 0xFFFFFFFF;
+  Color get subtitleColor => Color(_subtitleColorValue);
+
+  double _subtitleBgOpacity = 0.0;
+  double get subtitleBgOpacity => _subtitleBgOpacity;
+
+  Color _subtitleBgColor = const Color(0xFF000000);
+  Color get subtitleBgColor => _subtitleBgColor;
+
+  Color _outlineColor = const Color(0xFF000000);
+  Color get outlineColor => _outlineColor;
+
+  double _outlineWidth = 2.0;
+  double get outlineWidth => _outlineWidth;
+
+  bool _outlineEnabled = true;
+  bool get outlineEnabled => _outlineEnabled;
+
+  int _fontWeightIndex = 2;
+  int get fontWeightIndex => _fontWeightIndex;
+
+  double _bottomPadding = 48.0;
+  double get bottomPadding => _bottomPadding;
+
+  double _horizontalMargin = 24.0;
+  double get horizontalMargin => _horizontalMargin;
+
+  String _fontFamily = 'Roboto';
+  String get fontFamily => _fontFamily;
+
+  String _subtitleFolder = '';
+  String get subtitleFolder => _subtitleFolder;
+
+  String _subtitleEncoding = 'UTF-8';
+  String get subtitleEncoding => _subtitleEncoding;
+
+  String _preferredSubtitleLanguage = 'ara';
+  String get preferredSubtitleLanguage => _preferredSubtitleLanguage;
+
+  double _defaultSubtitleSync = 0.0;
+  double get defaultSubtitleSync => _defaultSubtitleSync;
+
+  bool _subtitleItalic = false;
+  bool get subtitleItalic => _subtitleItalic;
+
+  bool _subtitleRTL = false;
+  bool get subtitleRTL => _subtitleRTL;
+
+  // ──────────────────────────────────────────────
+  // ظل الأحرف (Text Shadow)
+  // ──────────────────────────────────────────────
+  bool _textShadowEnabled = false;
+  bool get textShadowEnabled => _textShadowEnabled;
+
+  Color _textShadowColor = const Color(0xFF000000);
+  Color get textShadowColor => _textShadowColor;
+
+  double _textShadowBlurRadius = 4.0;
+  double get textShadowBlurRadius => _textShadowBlurRadius;
+
+  double _textShadowOffsetX = 1.0;
+  double get textShadowOffsetX => _textShadowOffsetX;
+
+  double _textShadowOffsetY = 1.0;
+  double get textShadowOffsetY => _textShadowOffsetY;
+
+  // ──────────────────────────────────────────────
+  // ظل الصندوق المحيط بنص الترجمة (Box Shadow)
+  // ──────────────────────────────────────────────
+  bool _boxShadowEnabled = false;
+  bool get boxShadowEnabled => _boxShadowEnabled;
+
+  Color _boxShadowColor = const Color(0xFF000000);
+  Color get boxShadowColor => _boxShadowColor;
+
+  double _boxShadowBlurRadius = 4.0;
+  double get boxShadowBlurRadius => _boxShadowBlurRadius;
+
+  double _boxShadowOffsetX = 1.0;
+  double get boxShadowOffsetX => _boxShadowOffsetX;
+
+  double _boxShadowOffsetY = 1.0;
+  double get boxShadowOffsetY => _boxShadowOffsetY;
+
+  // ──────────────────────────────────────────────
+  // الصوت
+  // ──────────────────────────────────────────────
+  double _defaultAudioBoost = 100.0;
+  double get defaultAudioBoost => _defaultAudioBoost;
+
+  String _preferredAudioLanguage = 'ara';
+  String get preferredAudioLanguage => _preferredAudioLanguage;
+
+  // --- Load ---
+  Future<void> load() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final themeIndex = p.getInt('themeMode') ?? 1;
+      _themeMode = themeIndex >= 0 && themeIndex < ThemeMode.values.length
+          ? ThemeMode.values[themeIndex]
+          : ThemeMode.dark;
+      _rememberPosition = p.getBool('rememberPosition') ?? true;
+      _autoPlay = p.getBool('autoPlay') ?? true;
+      _defaultSpeed = p.getDouble('defaultSpeed') ?? 1.0;
+      _showSubtitlesByDefault = p.getBool('showSubtitles') ?? true;
+      _gridView = p.getBool('gridView') ?? false;
+      _sortBy = p.getString('sortBy') ?? 'date';
+      _sortDesc = p.getBool('sortDesc') ?? true;
+      _subtitleFontSize = p.getDouble('subtitleFontSize') ?? 30.0;
+      _subtitleColorValue = p.getInt('subtitleColorValue') ?? 0xFFFFFFFF;
+      _subtitleBgOpacity = p.getDouble('subtitleBgOpacity') ?? 0.0;
+      _subtitleBgColor = Color(p.getInt('subtitleBgColor') ?? 0xFF000000);
+      _outlineColor = Color(p.getInt('outlineColor') ?? 0xFF000000);
+      _outlineWidth = p.getDouble('outlineWidth') ?? 2.0;
+      _outlineEnabled = p.getBool('outlineEnabled') ?? true;
+
+      _textShadowEnabled = p.getBool('textShadowEnabled') ?? false;
+      _textShadowColor = Color(p.getInt('textShadowColor') ?? 0xFF000000);
+      _textShadowBlurRadius = p.getDouble('textShadowBlurRadius') ?? 4.0;
+      _textShadowOffsetX = p.getDouble('textShadowOffsetX') ?? 1.0;
+      _textShadowOffsetY = p.getDouble('textShadowOffsetY') ?? 1.0;
+
+      _boxShadowEnabled = p.getBool('boxShadowEnabled') ?? false;
+      _boxShadowColor = Color(p.getInt('boxShadowColor') ?? 0xFF000000);
+      _boxShadowBlurRadius = p.getDouble('boxShadowBlurRadius') ?? 4.0;
+      _boxShadowOffsetX = p.getDouble('boxShadowOffsetX') ?? 1.0;
+      _boxShadowOffsetY = p.getDouble('boxShadowOffsetY') ?? 1.0;
+
+      _fontWeightIndex = p.getInt('fontWeightIndex') ?? 2;
+      _bottomPadding = p.getDouble('bottomPadding') ?? 48.0;
+      _horizontalMargin = p.getDouble('horizontalMargin') ?? 24.0;
+      _fontFamily = p.getString('fontFamily') ?? 'Roboto';
+      _subtitleFolder = p.getString('subtitleFolder') ?? '';
+      _subtitleEncoding = p.getString('subtitleEncoding') ?? 'UTF-8';
+      _preferredSubtitleLanguage =
+          p.getString('preferredSubtitleLanguage') ?? 'ara';
+      _defaultSubtitleSync = p.getDouble('defaultSubtitleSync') ?? 0.0;
+      _subtitleItalic = p.getBool('subtitleItalic') ?? false;
+      _subtitleRTL = p.getBool('subtitleRTL') ?? false;
+      _defaultAudioBoost = p.getDouble('defaultAudioBoost') ?? 100.0;
+      _preferredAudioLanguage = p.getString('preferredAudioLanguage') ?? 'ara';
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Settings load error: $e');
+    }
+  }
+
+  // --- Save ---
+  Future<void> _save() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('themeMode', _themeMode.index);
+    await p.setBool('rememberPosition', _rememberPosition);
+    await p.setBool('autoPlay', _autoPlay);
+    await p.setDouble('defaultSpeed', _defaultSpeed);
+    await p.setBool('showSubtitles', _showSubtitlesByDefault);
+    await p.setBool('gridView', _gridView);
+    await p.setString('sortBy', _sortBy);
+    await p.setBool('sortDesc', _sortDesc);
+    await p.setDouble('subtitleFontSize', _subtitleFontSize);
+    await p.setInt('subtitleColorValue', _subtitleColorValue);
+    await p.setDouble('subtitleBgOpacity', _subtitleBgOpacity);
+    await p.setInt('subtitleBgColor', _subtitleBgColor.toARGB32());
+    await p.setInt('outlineColor', _outlineColor.toARGB32());
+    await p.setDouble('outlineWidth', _outlineWidth);
+    await p.setBool('outlineEnabled', _outlineEnabled);
+
+    await p.setBool('textShadowEnabled', _textShadowEnabled);
+    await p.setInt('textShadowColor', _textShadowColor.toARGB32());
+    await p.setDouble('textShadowBlurRadius', _textShadowBlurRadius);
+    await p.setDouble('textShadowOffsetX', _textShadowOffsetX);
+    await p.setDouble('textShadowOffsetY', _textShadowOffsetY);
+
+    await p.setBool('boxShadowEnabled', _boxShadowEnabled);
+    await p.setInt('boxShadowColor', _boxShadowColor.toARGB32());
+    await p.setDouble('boxShadowBlurRadius', _boxShadowBlurRadius);
+    await p.setDouble('boxShadowOffsetX', _boxShadowOffsetX);
+    await p.setDouble('boxShadowOffsetY', _boxShadowOffsetY);
+
+    await p.setInt('fontWeightIndex', _fontWeightIndex);
+    await p.setDouble('bottomPadding', _bottomPadding);
+    await p.setDouble('horizontalMargin', _horizontalMargin);
+    await p.setString('fontFamily', _fontFamily);
+    await p.setString('subtitleFolder', _subtitleFolder);
+    await p.setString('subtitleEncoding', _subtitleEncoding);
+    await p.setString('preferredSubtitleLanguage', _preferredSubtitleLanguage);
+    await p.setDouble('defaultSubtitleSync', _defaultSubtitleSync);
+    await p.setBool('subtitleItalic', _subtitleItalic);
+    await p.setBool('subtitleRTL', _subtitleRTL);
+    await p.setDouble('defaultAudioBoost', _defaultAudioBoost);
+    await p.setString('preferredAudioLanguage', _preferredAudioLanguage);
+  }
+
+  // ──────────────────────────────────────────────
+  // Setters
+  // ──────────────────────────────────────────────
+  void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
+  void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
+  void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
+  void setDefaultSpeed(double v) { _defaultSpeed = v; notifyListeners(); _save(); }
+  void setShowSubtitlesByDefault(bool v) { _showSubtitlesByDefault = v; notifyListeners(); _save(); }
+  void setGridView(bool v) { _gridView = v; notifyListeners(); _save(); }
+  void setSortBy(String v) { _sortBy = v; notifyListeners(); _save(); }
+  void setSortDesc(bool v) { _sortDesc = v; notifyListeners(); _save(); }
+  void setSubtitleFontSize(double v) { _subtitleFontSize = v; notifyListeners(); _save(); }
+  void setSubtitleColor(Color c) { _subtitleColorValue = c.toARGB32(); notifyListeners(); _save(); }
+  void setSubtitleBgOpacity(double v) { _subtitleBgOpacity = v; notifyListeners(); _save(); }
+  void setSubtitleBgColor(Color c) { _subtitleBgColor = c; notifyListeners(); _save(); }
+  void setOutlineColor(Color c) { _outlineColor = c; notifyListeners(); _save(); }
+  void setOutlineWidth(double v) { _outlineWidth = v; notifyListeners(); _save(); }
+  void setOutlineEnabled(bool v) { _outlineEnabled = v; notifyListeners(); _save(); }
+
+  void setTextShadowEnabled(bool v) { _textShadowEnabled = v; notifyListeners(); _save(); }
+  void setTextShadowColor(Color c) { _textShadowColor = c; notifyListeners(); _save(); }
+  void setTextShadowBlurRadius(double v) { _textShadowBlurRadius = v; notifyListeners(); _save(); }
+  void setTextShadowOffsetX(double v) { _textShadowOffsetX = v; notifyListeners(); _save(); }
+  void setTextShadowOffsetY(double v) { _textShadowOffsetY = v; notifyListeners(); _save(); }
+
+  void setBoxShadowEnabled(bool v) { _boxShadowEnabled = v; notifyListeners(); _save(); }
+  void setBoxShadowColor(Color c) { _boxShadowColor = c; notifyListeners(); _save(); }
+  void setBoxShadowBlurRadius(double v) { _boxShadowBlurRadius = v; notifyListeners(); _save(); }
+  void setBoxShadowOffsetX(double v) { _boxShadowOffsetX = v; notifyListeners(); _save(); }
+  void setBoxShadowOffsetY(double v) { _boxShadowOffsetY = v; notifyListeners(); _save(); }
+
+  void setFontWeightIndex(int v) { _fontWeightIndex = v; notifyListeners(); _save(); }
+  void setBottomPadding(double v) { _bottomPadding = v; notifyListeners(); _save(); }
+  void setHorizontalMargin(double v) { _horizontalMargin = v; notifyListeners(); _save(); }
+  void setFontFamily(String v) { _fontFamily = v; notifyListeners(); _save(); }
+  void setSubtitleFolder(String v) { _subtitleFolder = v; notifyListeners(); _save(); }
+  void setSubtitleEncoding(String v) { _subtitleEncoding = v; notifyListeners(); _save(); }
+  void setPreferredSubtitleLanguage(String v) { _preferredSubtitleLanguage = v; notifyListeners(); _save(); }
+  void setDefaultSubtitleSync(double v) { _defaultSubtitleSync = v; notifyListeners(); _save(); }
+  void setSubtitleItalic(bool v) { _subtitleItalic = v; notifyListeners(); _save(); }
+  void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); _save(); }
+  void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); _save(); }
+  void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); _save(); }
+}
+
+===== lib/providers/library_provider.dart =====
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/video_item.dart';
+
+/// يدير مكتبة الفيديوهات: المسح عبر photo_manager، التخزين المؤقت
+/// المحلي، قائمة "الأخيرة"، ومواضع الاستئناف لكل فيديو.
+class LibraryProvider extends ChangeNotifier {
+  List<VideoItem> _videos = [];
+  List<String> _recentPaths = [];
+  Set<String> _hiddenPaths = {};
+  bool _loading = false;
+  String? _error;
+
+  List<VideoItem> get videos => _videos.where((v) => !_hiddenPaths.contains(v.path)).toList();
+  List<VideoItem> get allVideos => _videos; // بما فيها المخفية
+  List<String> get recentPaths => _recentPaths;
+  Set<String> get hiddenPaths => _hiddenPaths;
+  bool get loading => _loading;
+  String? get error => _error;
+
+  Map<String, List<VideoItem>> get byFolder {
+    final map = <String, List<VideoItem>>{};
+    for (final v in videos) {
+      map.putIfAbsent(v.folder, () => []).add(v);
+    }
+    return map;
+  }
+
+  Future<void> loadHidden() async {
+    final p = await SharedPreferences.getInstance();
+    _hiddenPaths = Set<String>.from(p.getStringList('hidden_paths') ?? []);
+    notifyListeners();
+  }
+
+  Future<void> hideVideo(String path) async {
+    _hiddenPaths.add(path);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('hidden_paths', _hiddenPaths.toList());
+    notifyListeners();
+  }
+
+  Future<void> unhideVideo(String path) async {
+    _hiddenPaths.remove(path);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('hidden_paths', _hiddenPaths.toList());
+    notifyListeners();
+  }
+
+  Future<void> clearHidden() async {
+    _hiddenPaths.clear();
+    final p = await SharedPreferences.getInstance();
+    await p.remove('hidden_paths');
+    notifyListeners();
+  }
+
+  Future<void> loadCachedVideos() async {
+    try {
+      await loadHidden();
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final List<dynamic> jsonList = json.decode(jsonString);
+        _videos = jsonList
+            .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('فشل تحميل الذاكرة المؤقتة: $e');
+    }
+  }
+
+  Future<void> _saveVideosToCache() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      final jsonList = _videos.map((v) => v.toJson()).toList();
+      await file.writeAsString(json.encode(jsonList));
+    } catch (e) {
+      debugPrint('فشل حفظ الذاكرة المؤقتة: $e');
+    }
+  }
+
+  Future<VideoItem?> _buildVideoItem(AssetEntity asset, String albumName) async {
+    try {
+      final file = await asset.file;
+      if (file == null) return null;
+
+      String name = asset.title ?? '';
+      if (name.isEmpty || name.length < 2) {
+        name = file.path.split('/').last;
+        final dotIndex = name.lastIndexOf('.');
+        if (dotIndex != -1) {
+          name = name.substring(0, dotIndex);
+        }
+        if (name.length < 2) {
+          name = '$albumName ${asset.id}';
+        }
+      }
+
+      return VideoItem(
+        id: asset.id,
+        path: file.path,
+        name: name,
+        size: file.lengthSync(),
+        modified: asset.modifiedDateTime,
+        folder: albumName,
+        duration: asset.videoDuration,
+        subtitleTypes: const [],
+      );
+    } catch (e) {
+      debugPrint('خطأ في بناء عنصر الفيديو: $e');
+      return null;
+    }
+  }
+
+  Future<void> scan() async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth && !ps.hasAccess) {
+        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.';
+        _loading = false;
+        notifyListeners();
+        return;
+      }
+
+      final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
+      final List<VideoItem> result = [];
+
+      const batchSize = 12;
+      for (final album in albums) {
+        final count = await album.assetCountAsync;
+        final assets = await album.getAssetListRange(start: 0, end: count);
+
+        for (var i = 0; i < assets.length; i += batchSize) {
+          final batch = assets.skip(i).take(batchSize);
+          final items = await Future.wait(
+            batch.map((asset) => _buildVideoItem(asset, album.name)),
+          );
+          result.addAll(items.whereType<VideoItem>());
+        }
+      }
+
+      result.sort((a, b) => b.modified.compareTo(a.modified));
+      _videos = result;
+      await _saveVideosToCache();
+    } catch (e) {
+      _error = 'فشل المسح: $e';
+    }
+
+    _loading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadRecent() async {
+    final p = await SharedPreferences.getInstance();
+    _recentPaths = p.getStringList('recent_paths') ?? [];
+    notifyListeners();
+  }
+
+  Future<void> addRecent(String path) async {
+    _recentPaths.remove(path);
+    _recentPaths.insert(0, path);
+    if (_recentPaths.length > 30) _recentPaths.removeLast();
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('recent_paths', _recentPaths);
+    notifyListeners();
+  }
+
+  Future<void> clearRecent() async {
+    _recentPaths.clear();
+    final p = await SharedPreferences.getInstance();
+    await p.remove('recent_paths');
+    notifyListeners();
+  }
+
+  /// يحفظ آخر موضع تشغيل لملف معيّن. يُستخدم مسار الملف نفسه كجزء
+  /// من المفتاح (بدل الاعتماد فقط على hashCode) لتفادي أي احتمال
+  /// تصادم أو عدم ثبات بين تشغيلات مختلفة لتطبيق دارت.
+  Future<void> savePosition(String path, Duration pos) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('pos_$path', pos.inMilliseconds);
+  }
+
+  Future<Duration?> getPosition(String path) async {
+    final p = await SharedPreferences.getInstance();
+    final ms = p.getInt('pos_$path');
+    if (ms == null || ms == 0) return null;
+    return Duration(milliseconds: ms);
+  }
+}
+
+===== lib/services/thumbnail_service.dart =====
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/video_item.dart';
+
+class ThumbnailService {
+  static final ThumbnailService _instance = ThumbnailService._internal();
+  factory ThumbnailService() => _instance;
+  ThumbnailService._internal();
+
+  final Map<String, ValueNotifier<Uint8List?>> _notifiers = {};
+  final Map<String, ValueNotifier<String?>> _errors = {};
+  final Set<String> _pending = {};
+  int _active = 0;
+  static const _maxConcurrent = 1; // مفرد لضمان أقصى سرعة
+  final List<Future<void> Function()> _queue = [];
+
+  ValueNotifier<Uint8List?> getNotifier(VideoItem video) {
+    final path = video.path;
+    if (!_notifiers.containsKey(path)) {
+      _notifiers[path] = ValueNotifier(null);
+      _errors[path] = ValueNotifier(null);
+      _enqueue(video);
+    }
+    return _notifiers[path]!;
+  }
+
+  ValueNotifier<String?> getErrorNotifier(VideoItem video) {
+    final path = video.path;
+    if (!_errors.containsKey(path)) {
+      _errors[path] = ValueNotifier(null);
+    }
+    return _errors[path]!;
+  }
+
+  void _enqueue(VideoItem video) {
+    _queue.add(() => _generate(video));
+    _drain();
+  }
+
+  void _drain() {
+    while (_active < _maxConcurrent && _queue.isNotEmpty) {
+      final task = _queue.removeAt(0);
+      _active++;
+      task().whenComplete(() {
+        _active--;
+        _drain();
+      });
+    }
+  }
+
+  Future<void> _generate(VideoItem video) async {
+    final path = video.path;
+    if (_pending.contains(path)) return;
+    _pending.add(path);
+    _errors[path]?.value = null;
+
+    try {
+      final cacheFile = await _cacheFile(path);
+      if (await cacheFile.exists()) {
+        final bytes = await cacheFile.readAsBytes();
+        if (bytes.isNotEmpty) {
+          _notifiers[path]?.value = bytes;
+          return;
+        }
+      }
+
+      final bytes = await _ffmpegThumb(video, cacheFile.path);
+      if (bytes != null && bytes.isNotEmpty) {
+        if (!await cacheFile.exists()) {
+          await cacheFile.writeAsBytes(bytes);
+        }
+        _notifiers[path]?.value = bytes;
+        _errors[path]?.value = null;
+      } else {
+        _errors[path]?.value ??= 'فشل استخراج الصورة';
+      }
+    } catch (e) {
+      _errors[path]?.value = 'خطأ: $e';
+    } finally {
+      _pending.remove(path);
+    }
+  }
+
+  Future<Uint8List?> _ffmpegThumb(VideoItem video, String savePath) async {
+    final videoPath = video.path;
+    final file = File(videoPath);
+    if (!await file.exists()) {
+      _errors[videoPath]?.value = 'الملف غير موجود';
+      return null;
+    }
+
+    // ⚡ ثانية ذكية: 10% من المدة، وإلا الثانية 5 كافتراض
+    final int seekSec = video.duration.inSeconds > 0
+        ? (video.duration.inSeconds * 0.1).round().clamp(1, 99999)
+        : 5;
+
+    // ⚡ أمر فائق السرعة: JPEG، دقة ثابتة 720×480، جودة جيدة
+    final command =
+        '-y -ss $seekSec -noaccurate_seek -i "$videoPath" -vframes 1 -vf "scale=720:480" -q:v 5 -an "$savePath"';
+
+    final completer = Completer<Uint8List?>();
+
+    await FFmpegKit.executeAsync(
+      command,
+      onComplete: (session) async {
+        final returnCode = await session.getReturnCode();
+        if (ReturnCode.isSuccess(returnCode)) {
+          final outputFile = File(savePath);
+          if (await outputFile.exists()) {
+            completer.complete(await outputFile.readAsBytes());
+          } else {
+            completer.complete(null);
+          }
+        } else {
+          final output = await session.getOutput();
+          _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل"}';
+          completer.complete(null);
+        }
+      },
+    );
+
+    return completer.future;
+  }
+
+  // ✅ تخزين دائم سريع (لا يمسح بعد الخروج)
+  Future<File> _cacheFile(String videoPath) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (!await thumbDir.exists()) {
+      await thumbDir.create(recursive: true);
+    }
+    final safeName = base64Url.encode(utf8.encode(videoPath));
+    return File('${thumbDir.path}/$safeName.jpg');
+  }
+
+  Future<void> clearCache() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (await thumbDir.exists()) {
+      await thumbDir.delete(recursive: true);
+    }
+    _notifiers.forEach((_, n) => n.value = null);
+    _notifiers.clear();
+    _errors.clear();
+  }
+}
+===== lib/services/subtitle_service.dart =====
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'subtitle_encodings.dart';
+
+class SubtitleEntry {
+  final Duration start;
+  final Duration end;
+  final String text;
+  SubtitleEntry({required this.start, required this.end, required this.text});
+}
+
+class SubtitleService {
+  /// يكتشف تلقائياً ملف .srt/.ssa/.ass بجانب ملف الفيديو.
+  static String? findSrt(String videoPath) {
+    final base = videoPath.replaceAll(RegExp(r'\.[^.]+$'), '');
+    for (final ext in ['.srt', '.SRT', '.ssa', '.SSA', '.ass', '.ASS']) {
+      final f = File('$base$ext');
+      if (f.existsSync()) return f.path;
+    }
+    return null;
+  }
+
+  /// يحمّل ويحلّل ملف ترجمة، باستخدام [encodingName] المحدَّد من
+  /// إعدادات المستخدم (UTF-8 بشكل افتراضي). يُنفَّذ التحليل في
+  /// isolate منفصل عبر compute لتفادي تجميد واجهة المستخدم مع
+  /// الملفات الكبيرة. الدالة الممرَّرة لـ compute يجب أن تكون
+  /// top-level (وليست method داخل كلاس)، لذا التحليل الفعلي معرَّف
+  /// خارج هذا الكلاس في نفس الملف (انظر parseSubtitleContent أسفله).
+  static Future<List<SubtitleEntry>> load(
+    String path, {
+    String encodingName = 'UTF-8',
+  }) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final ext = path.split('.').last.toLowerCase();
+      final entries = await compute(parseSubtitleContent, {
+        'bytes': bytes,
+        'ext': ext,
+        'encoding': encodingName,
+      });
+      return entries;
+    } catch (_) {
+      return [];
+    }
+  }
+}
+
+// ──────────────────────────────────────────────
+// دوال التحليل (top-level) — منفصلة عن الكلاس عمداً لضمان توافقها
+// الكامل مع compute()، الذي يتطلب دالة top-level أو static.
+// ──────────────────────────────────────────────
+
+List<SubtitleEntry> parseSubtitleContent(Map<String, dynamic> params) {
+  final bytes = params['bytes'] as List<int>;
+  final ext = params['ext'] as String;
+  final encodingName = params['encoding'] as String;
+  final content = SubtitleEncodings.decode(bytes, encodingName);
+
+  if (ext == 'ssa' || ext == 'ass') {
+    return _parseSsa(content);
+  } else {
+    return _parseSrt(content);
+  }
+}
+
+// --- SRT Parser ---
+List<SubtitleEntry> _parseSrt(String content) {
+  final entries = <SubtitleEntry>[];
+  final blocks = content.trim().split(RegExp(r'\r?\n\r?\n'));
+
+  for (final block in blocks) {
+    final lines = block.trim().split(RegExp(r'\r?\n'));
+    if (lines.length < 3) continue;
+    try {
+      final timeLine = lines[1];
+      final parts = timeLine.split(' --> ');
+      if (parts.length != 2) continue;
+
+      final start = _parseTime(parts[0].trim());
+      final end = _parseTime(parts[1].trim().split(' ').first);
+      final text = lines
+          .sublist(2)
+          .join('\n')
+          .replaceAll(RegExp(r'<[^>]*>'), '')
+          .trim();
+
+      if (text.isNotEmpty) {
+        entries.add(SubtitleEntry(start: start, end: end, text: text));
+      }
+    } catch (_) {}
+  }
+  return entries;
+}
+
+// --- SSA/ASS Parser ---
+List<SubtitleEntry> _parseSsa(String content) {
+  final entries = <SubtitleEntry>[];
+  bool inEvents = false;
+
+  final lines = content.split(RegExp(r'\r?\n'));
+  int formatIndex = -1;
+
+  for (final line in lines) {
+    final trimmed = line.trim();
+
+    if (trimmed.startsWith('[Events]')) {
+      inEvents = true;
+      continue;
+    }
+
+    if (trimmed.startsWith('[') && !trimmed.startsWith('[Events]')) {
+      inEvents = false;
+      continue;
+    }
+
+    if (!inEvents) continue;
+
+    if (trimmed.startsWith('Format:')) {
+      final fields = trimmed.substring(7).split(',').map((e) => e.trim()).toList();
+      formatIndex = fields.indexOf('Text');
+      continue;
+    }
+
+    if (trimmed.startsWith('Dialogue:')) {
+      if (formatIndex < 0) continue;
+
+      final parts = _splitDialogue(trimmed.substring(9));
+      if (parts.length <= formatIndex) continue;
+
+      try {
+        final start = _parseSsaTime(parts[1]);
+        final end = _parseSsaTime(parts[2]);
+
+        final rawText = parts.sublist(formatIndex).join(',');
+        final cleanText = _cleanSsaText(rawText);
+
+        if (cleanText.isNotEmpty) {
+          entries.add(SubtitleEntry(start: start, end: end, text: cleanText));
+        }
+      } catch (_) {}
+    }
+  }
+
+  return entries;
+}
+
+List<String> _splitDialogue(String line) {
+  final parts = <String>[];
+  int depth = 0;
+  final current = StringBuffer();
+
+  for (int i = 0; i < line.length; i++) {
+    final char = line[i];
+    if (char == '{') depth++;
+    if (char == '}') depth--;
+
+    if (char == ',' && depth == 0) {
+      parts.add(current.toString().trim());
+      current.clear();
+    } else {
+      current.write(char);
+    }
+  }
+  parts.add(current.toString().trim());
+  return parts;
+}
+
+String _cleanSsaText(String text) {
+  var cleaned = text.replaceAll(RegExp(r'\{[^}]*\}'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\\[Nn]'), '\n');
+  cleaned = cleaned.trim();
+  return cleaned;
+}
+
+Duration _parseSsaTime(String s) {
+  s = s.trim();
+  final parts = s.split(':');
+  final hours = int.tryParse(parts[0]) ?? 0;
+  final minutes = int.tryParse(parts[1]) ?? 0;
+  final secParts = parts[2].split('.');
+  final seconds = int.tryParse(secParts[0]) ?? 0;
+  final centiseconds = int.tryParse(secParts[1]) ?? 0;
+  return Duration(
+    hours: hours,
+    minutes: minutes,
+    seconds: seconds,
+    milliseconds: centiseconds * 10,
+  );
+}
+
+Duration _parseTime(String s) {
+  final normalized = s.replaceAll(',', '.');
+  final dotIndex = normalized.lastIndexOf('.');
+  int ms = 0;
+  String hms = normalized;
+
+  if (dotIndex != -1) {
+    ms = int.tryParse(
+            normalized.substring(dotIndex + 1).padRight(3, '0').substring(0, 3)) ??
+        0;
+    hms = normalized.substring(0, dotIndex);
+  }
+
+  final parts = hms.split(':');
+  final h = int.tryParse(parts[0]) ?? 0;
+  final m = int.tryParse(parts[1]) ?? 0;
+  final sec = int.tryParse(parts[2]) ?? 0;
+  return Duration(hours: h, minutes: m, seconds: sec, milliseconds: ms);
+}
+
+===== lib/services/pip_service.dart =====
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+/// يدير الدخول إلى وضع "صورة داخل صورة" (PiP) على أندرويد، ويعكس
+/// الحالة الحقيقية القادمة من النظام (وليس قيمة محلية مفترَضة).
+class PipService {
+  static const _channel = MethodChannel('com.splayer.app/pip');
+  static bool _listenerAttached = false;
+
+  /// تعكس آخر حالة PiP أبلغ عنها أندرويد فعلياً عبر
+  /// onPictureInPictureModeChanged. يجب الاستماع إليها بدل افتراض
+  /// أن enter() نجحت دائماً، لأن أندرويد قد يرفض الطلب (مثلاً إذا
+  /// كانت الميزة معطّلة في إعدادات النظام).
+  static final ValueNotifier<bool> isInPipMode = ValueNotifier(false);
+
+  static void _ensureListener() {
+    if (_listenerAttached) return;
+    _listenerAttached = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onPipModeChanged') {
+        isInPipMode.value = call.arguments as bool? ?? false;
+      }
+    });
+  }
+
+  static Future<void> enter() async {
+    _ensureListener();
+    try {
+      await _channel.invokeMethod('enterPip');
+      // لا نُحدِّث isInPipMode هنا يدوياً؛ الحالة الموثوقة تصل عبر
+      // onPipModeChanged من Android بعد لحظات قصيرة من نجاح الطلب.
+    } catch (e) {
+      debugPrint('فشل الدخول إلى وضع PiP: $e');
+    }
+  }
+}
+
+===== lib/services/subtitle_encodings.dart =====
+import 'dart:convert';
+import 'dart:typed_data';
+
+/// يفك ترميز محتوى نصي (مثل ملفات SRT) بأحد الترميزات الشائعة في
+/// ملفات الترجمة العربية القديمة. مكتوب يدوياً بدل الاعتماد على حزمة
+/// خارجية، لأن جداول هذين الترميزين صغيرة وثابتة (256 بايت كحد أقصى).
+class SubtitleEncodings {
+  static const _supported = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
+
+  static List<String> get supportedNames => _supported;
+
+  static String decode(List<int> bytes, String encodingName) {
+    switch (encodingName) {
+      case 'UTF-16':
+        return _decodeUtf16(bytes);
+      case 'Windows-1256':
+        return _decodeSingleByte(bytes, _windows1256Table);
+      case 'ISO-8859-6':
+        return _decodeSingleByte(bytes, _iso88596Table);
+      case 'UTF-8':
+      default:
+        return utf8.decode(bytes, allowMalformed: true);
+    }
+  }
+
+  static String _decodeUtf16(List<int> bytes) {
+    final bytesList = Uint8List.fromList(bytes);
+    if (bytesList.length >= 2 &&
+        bytesList[0] == 0xFF &&
+        bytesList[1] == 0xFE) {
+      return const Utf8Decoder(allowMalformed: true)
+          .convert(_utf16LeToUtf8Bytes(bytesList.sublist(2)));
+    }
+    if (bytesList.length >= 2 &&
+        bytesList[0] == 0xFE &&
+        bytesList[1] == 0xFF) {
+      return String.fromCharCodes(_utf16BeCodeUnits(bytesList.sublist(2)));
+    }
+    // بلا BOM: نفترض little-endian (الأكثر شيوعاً على ويندوز).
+    return String.fromCharCodes(_utf16LeCodeUnits(bytesList));
+  }
+
+  static List<int> _utf16LeCodeUnits(Uint8List bytes) {
+    final units = <int>[];
+    for (var i = 0; i + 1 < bytes.length; i += 2) {
+      units.add(bytes[i] | (bytes[i + 1] << 8));
+    }
+    return units;
+  }
+
+  static List<int> _utf16BeCodeUnits(Uint8List bytes) {
+    final units = <int>[];
+    for (var i = 0; i + 1 < bytes.length; i += 2) {
+      units.add((bytes[i] << 8) | bytes[i + 1]);
+    }
+    return units;
+  }
+
+  static List<int> _utf16LeToUtf8Bytes(Uint8List bytes) {
+    return utf8.encode(String.fromCharCodes(_utf16LeCodeUnits(bytes)));
+  }
+
+  static String _decodeSingleByte(List<int> bytes, List<int> table) {
+    final buffer = StringBuffer();
+    for (final b in bytes) {
+      if (b < 0x80) {
+        buffer.writeCharCode(b);
+      } else {
+        final mapped = table[b - 0x80];
+        buffer.writeCharCode(mapped == 0 ? 0xFFFD : mapped);
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// جدول Windows-1256 للنطاق 0x80-0xFF (تعيين Unicode لكل بايت).
+  static const List<int> _windows1256Table = [
+    0x20AC, 0x067E, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, // 80-87
+    0x02C6, 0x2030, 0x0679, 0x2039, 0x0152, 0x0686, 0x0698, 0x0688, // 88-8F
+    0x06AF, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, // 90-97
+    0x06A9, 0x2122, 0x0691, 0x203A, 0x0153, 0x200C, 0x200D, 0x06BA, // 98-9F
+    0x00A0, 0x060C, 0x00A2, 0x00A3, 0x00A4, 0x00A5, 0x00A6, 0x00A7, // A0-A7
+    0x00A8, 0x00A9, 0x06BE, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00AF, // A8-AF
+    0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7, // B0-B7
+    0x00B8, 0x00B9, 0x061B, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x061F, // B8-BF
+    0x06C1, 0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627, // C0-C7
+    0x0628, 0x0629, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F, // C8-CF
+    0x0630, 0x0631, 0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x00D7, // D0-D7
+    0x0637, 0x0638, 0x0639, 0x063A, 0x0640, 0x0641, 0x0642, 0x0643, // D8-DF
+    0x00E0, 0x0644, 0x00E2, 0x0645, 0x0646, 0x0647, 0x0648, 0x00E7, // E0-E7
+    0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x0649, 0x064A, 0x00EE, 0x00EF, // E8-EF
+    0x064B, 0x064C, 0x064D, 0x064E, 0x00F4, 0x064F, 0x0650, 0x00F7, // F0-F7
+    0x0651, 0x00F9, 0x0652, 0x00FB, 0x00FC, 0x200E, 0x200F, 0x06D2, // F8-FF
+  ];
+
+  /// جدول ISO-8859-6 للنطاق 0x80-0xFF (0 يعني غير مُعرَّف في المعيار).
+  static const List<int> _iso88596Table = [
+    0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, // 80-87
+    0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, // 88-8F
+    0x0090, 0x0091, 0x0092, 0x0093, 0x0094, 0x0095, 0x0096, 0x0097, // 90-97
+    0x0098, 0x0099, 0x009A, 0x009B, 0x009C, 0x009D, 0x009E, 0x009F, // 98-9F
+    0x00A0, 0, 0, 0, 0x00A4, 0, 0, 0, // A0-A7
+    0, 0, 0, 0, 0x060C, 0x00AD, 0, 0, // A8-AF
+    0, 0, 0, 0, 0, 0, 0, 0, // B0-B7
+    0, 0, 0, 0x061B, 0, 0, 0, 0x061F, // B8-BF
+    0, 0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627, // C0-C7
+    0x0628, 0x0629, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F, // C8-CF
+    0x0630, 0x0631, 0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x0637, // D0-D7
+    0x0638, 0x0639, 0x063A, 0, 0, 0, 0, 0, // D8-DF
+    0x0640, 0x0641, 0x0642, 0x0643, 0x0644, 0x0645, 0x0646, 0x0647, // E0-E7
+    0x0648, 0x0649, 0x064A, 0x064B, 0x064C, 0x064D, 0x064E, 0x064F, // E8-EF
+    0x0650, 0x0651, 0x0652, 0, 0, 0, 0, 0, // F0-F7
+    0, 0, 0, 0, 0, 0, 0, 0, // F8-FF
+  ];
+}
+
+===== lib/app/permission_gate.dart =====
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+/// شاشة تطلب الصلاحيات الضرورية (الوصول لمكتبة الفيديوهات) قبل
+/// الدخول للتطبيق.
+class PermissionGate extends StatefulWidget {
+  final Widget child;
+  const PermissionGate({super.key, required this.child});
+
+  @override
+  State<PermissionGate> createState() => _PermissionGateState();
+}
+
+class _PermissionGateState extends State<PermissionGate> {
+  bool _checking = true;
+  bool _allGranted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    setState(() => _checking = true);
+
+    final mediaStatus = await Permission.videos.request();
+    final storageStatus = await Permission.storage.request();
+
+    setState(() {
+      _allGranted = mediaStatus.isGranted || storageStatus.isGranted;
+      _checking = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checking) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 20),
+            Text('جاري طلب الصلاحيات...', style: TextStyle(color: Colors.white70, fontSize: 16)),
+          ]),
+        ),
+      );
+    }
+
+    if (!_allGranted) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.folder_off_rounded, color: Colors.white38, size: 80),
+              const SizedBox(height: 24),
+              const Text(
+                'الصلاحيات مطلوبة',
+                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'يحتاج التطبيق إلى إذن الوصول إلى الوسائط لعرض الفيديوهات.',
+                style: TextStyle(color: Colors.white60, fontSize: 15),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: _requestPermissions,
+                icon: const Icon(Icons.security_rounded),
+                label: const Text('منح الصلاحيات'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => setState(() => _allGranted = true),
+                child: const Text('تخطي', style: TextStyle(color: Colors.white38)),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return widget.child;
+  }
+}
+
+===== lib/main.dart =====
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart'; // ✅ الإضافة
+import 'theme/app_theme.dart';
+import 'providers/settings_provider.dart';
+import 'providers/library_provider.dart';
+import 'app/permission_gate.dart';
+import 'screens/home/home_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (details) => FlutterError.presentError(details);
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('❌ خطأ غير معالج: $error');
+    runApp(ErrorApp(error.toString()));
+    return true;
+  };
+
+  // 1. تهيئة MediaKit
+  try {
+    MediaKit.ensureInitialized();
+  } catch (e) {
+    runApp(ErrorApp('فشل تهيئة MediaKit:\n$e'));
+    return;
+  }
+
+  // 2. تهيئة FFmpegKitExtended (جديد)
+  try {
+    await FFmpegKitExtended.initialize();
+  } catch (e) {
+    runApp(ErrorApp('فشل تهيئة FFmpeg:\n$e'));
+    return;
+  }
+
+  // باقي الإعدادات
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+  ));
+
+  SettingsProvider settings;
+  try {
+    settings = SettingsProvider();
+    await settings.load();
+  } catch (e) {
+    runApp(ErrorApp('فشل تحميل الإعدادات:\n$e'));
+    return;
+  }
+
+  runApp(MultiProvider(
+    providers: [
+      ChangeNotifierProvider.value(value: settings),
+      ChangeNotifierProvider(create: (_) => LibraryProvider()),
+    ],
+    child: const SPlayerApp(),
+  ));
+}
+
+class SPlayerApp extends StatelessWidget {
+  const SPlayerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    return MaterialApp(
+      title: 'SR Player',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: settings.themeMode,
+      home: const PermissionGate(child: HomeScreen()),
+    );
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  final String message;
+  const ErrorApp(this.message, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 24),
+              const Text('عذراً، حدث خطأ',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Text(message,
+                  style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.5),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () => main(),
+                icon: const Icon(Icons.refresh),
+                label: const Text('إعادة المحاولة'),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+===== lib/theme/app_theme.dart =====
+import 'package:flutter/material.dart';
+
+class AppTheme {
+  static const Color _seed = Color(0xFF1B6CA8);
+
+  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData light() => _build(Brightness.light);
+
+  static ThemeData _build(Brightness brightness) {
+    final cs = ColorScheme.fromSeed(
+      seedColor: _seed,
+      brightness: brightness,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: cs,
+      scaffoldBackgroundColor: cs.surface,
+
+      appBarTheme: AppBarTheme(
+        backgroundColor: cs.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        titleTextStyle: TextStyle(
+          color: cs.onSurface,
+          fontWeight: FontWeight.w700,
+          fontSize: 20,
+        ),
+        iconTheme: IconThemeData(color: cs.onSurfaceVariant),
+      ),
+
+      tabBarTheme: const TabBarThemeData(
+        labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+
+      cardTheme: CardThemeData(
+        color: cs.surfaceContainerLow,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+
+      listTileTheme: ListTileThemeData(
+        titleTextStyle: TextStyle(
+          color: cs.onSurface,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        subtitleTextStyle: TextStyle(
+          color: cs.onSurfaceVariant,
+          fontSize: 12,
+        ),
+        iconColor: cs.onSurfaceVariant,
+      ),
+
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: cs.primaryContainer,
+        foregroundColor: cs.onPrimaryContainer,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        elevation: 2,
+      ),
+
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: cs.surfaceContainerLow,
+        modalBackgroundColor: cs.surfaceContainerLow,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        showDragHandle: true,
+      ),
+
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: cs.inverseSurface,
+        contentTextStyle: TextStyle(color: cs.onInverseSurface),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+
+      dividerTheme: DividerThemeData(
+        color: cs.outlineVariant,
+        thickness: 1,
+        space: 1,
+      ),
+    );
+  }
+}
+
+===== lib/models/video_item.dart =====
+import 'package:flutter/foundation.dart';
+
+/// يمثل ملف فيديو واحد في مكتبة التطبيق.
+class VideoItem {
+  final String id;
+  final String path;
+  final String name;
+  final int size;
+  final DateTime modified;
+  final String folder;
+  final Duration duration;
+  String? thumbnailPath;
+  List<String> subtitleTypes;
+
+  /// يُحدَّث عند اكتشاف مسارات ترجمة مدمجة داخل الفيديو (SRT/ASS/SSA/VTT).
+  late final ValueNotifier<List<String>> subtitlesNotifier;
+
+  VideoItem({
+    required this.id,
+    required this.path,
+    required this.name,
+    required this.size,
+    required this.modified,
+    required this.folder,
+    required this.duration,
+    this.thumbnailPath,
+    this.subtitleTypes = const [],
+  }) {
+    subtitlesNotifier = ValueNotifier(subtitleTypes);
+  }
+
+  String get extension => path.split('.').last.toLowerCase();
+
+  String get formattedSize {
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(0)} KB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  String get formattedDuration {
+    final h = duration.inHours;
+    final m = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  String get formattedDate {
+    return '${modified.year}-${modified.month.toString().padLeft(2, '0')}-${modified.day.toString().padLeft(2, '0')}';
+  }
+
+  /// ينشئ [VideoItem] من مسار ملف موجود على القرص (يُستخدم للملفات
+  /// المفتوحة يدوياً أو الموجودة في قائمة "الأخيرة" والتي لم تعد ضمن
+  /// نتائج مسح مكتبة الوسائط). يستخدم المسار نفسه كمعرّف لأنه فريد
+  /// وثابت، بخلاف hashCode الذي لا يضمن الثبات بين تشغيلات مختلفة.
+  factory VideoItem.fromPath({
+    required String path,
+    required int size,
+    required DateTime modified,
+  }) {
+    final parts = path.split('/');
+    return VideoItem(
+      id: path,
+      path: path,
+      name: parts.last,
+      size: size,
+      modified: modified,
+      folder: parts.length > 1 ? parts[parts.length - 2] : '',
+      duration: Duration.zero,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'path': path,
+      'name': name,
+      'size': size,
+      'modified': modified.millisecondsSinceEpoch,
+      'folder': folder,
+      'duration': duration.inMilliseconds,
+      'thumbnailPath': thumbnailPath,
+      'subtitleTypes': subtitleTypes,
+    };
+  }
+
+  factory VideoItem.fromJson(Map<String, dynamic> json) {
+    return VideoItem(
+      id: json['id'] as String,
+      path: json['path'] as String,
+      name: json['name'] as String,
+      size: json['size'] as int,
+      modified: DateTime.fromMillisecondsSinceEpoch(json['modified'] as int),
+      folder: json['folder'] as String,
+      duration: Duration(milliseconds: json['duration'] as int),
+      thumbnailPath: json['thumbnailPath'] as String?,
+      subtitleTypes: (json['subtitleTypes'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+    );
+  }
+}
+
+===== lib/widgets/video_thumbnail_loader.dart =====
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import '../models/video_item.dart';
+import '../services/thumbnail_service.dart';
+
+class VideoThumbnailLoader extends StatelessWidget {
+  final VideoItem video;
+  final double width;
+  final double height;
+
+  const VideoThumbnailLoader({
+    super.key,
+    required this.video,
+    this.width = 120,
+    this.height = 80,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbnailNotifier = ThumbnailService().getNotifier(video);
+    final errorNotifier = ThumbnailService().getErrorNotifier(video);
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ValueListenableBuilder<Uint8List?>(
+          valueListenable: thumbnailNotifier,
+          builder: (context, bytes, child) {
+            if (bytes != null) {
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) =>
+                    _buildPlaceholder('فشل تحميل الصورة'),
+              );
+            }
+            return ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (context, errorText, _) =>
+                  _buildPlaceholder(errorText),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(String? errorText) {
+    if (errorText != null && errorText.isNotEmpty) {
+      return Container(
+        color: const Color(0xFF1A1A1A),
+        padding: const EdgeInsets.all(4),
+        alignment: Alignment.center,
+        child: Text(
+          errorText,
+          style: const TextStyle(
+            color: Colors.redAccent,
+            fontSize: 8,
+            height: 1.2,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }
+    return Container(
+      color: Colors.grey[900],
+      child: const Center(
+        child: Icon(Icons.video_file_rounded,
+            color: Colors.white30, size: 36),
+      ),
+    );
+  }
+}
+===== lib/widgets/video_card.dart =====
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../models/video_item.dart';
+import 'video_thumbnail_loader.dart';
+
+class VideoCard extends StatelessWidget {
+  final VideoItem video;
+  final VoidCallback onTap;
+  final VoidCallback? onMoreTap;
+
+  const VideoCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 90, height: 64,
+                child: Stack(fit: StackFit.expand, children: [
+                  VideoThumbnailLoader(video: video, width: 90, height: 64),
+                  Positioned(
+                    bottom: 4, right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.72),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(video.formattedDuration,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: _Info(video: video)),
+            if (onMoreTap != null)
+              IconButton(
+                icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 22),
+                onPressed: onMoreTap,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class VideoGridCard extends StatelessWidget {
+  final VideoItem video;
+  final VoidCallback onTap;
+  final VoidCallback? onMoreTap;
+
+  const VideoGridCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(fit: StackFit.expand, children: [
+                VideoThumbnailLoader(video: video, width: double.infinity, height: double.infinity),
+                Positioned(
+                  bottom: 6, right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.75),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(video.formattedDuration,
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(video.name,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: cs.onSurface, fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 3),
+                  Text(video.formattedSize, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 10)),
+                ])),
+                if (onMoreTap != null)
+                  IconButton(
+                    icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
+                    onPressed: onMoreTap,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Info extends StatelessWidget {
+  final VideoItem video;
+  const _Info({required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(video.name,
+          maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: cs.onSurface, fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3)),
+      const SizedBox(height: 6),
+      Row(children: [
+        _Tag(video.formattedSize, cs),
+        const SizedBox(width: 6),
+        _Tag(video.extension.toUpperCase(), cs, primary: true),
+        
+        // بطاقات عرض صيغ الترجمة المدمجة باللون الأخضر المميز
+        ValueListenableBuilder<List<String>>(
+          valueListenable: video.subtitlesNotifier,
+          builder: (context, subtitles, _) {
+            if (subtitles.isEmpty) return const SizedBox.shrink();
+            return Row(
+              children: subtitles.map((sub) => Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.green.withOpacity(0.35)),
+                  ),
+                  child: Text(sub, style: const TextStyle(
+                    color: Colors.green, fontSize: 8.5, fontWeight: FontWeight.w900
+                  )),
+                ),
+              )).toList(),
+            );
+          },
+        ),
+      ]),
+      const SizedBox(height: 4),
+      Row(children: [
+        Icon(Symbols.folder_rounded, size: 12, color: cs.onSurfaceVariant.withOpacity(0.6)),
+        const SizedBox(width: 4),
+        Expanded(child: Text(video.folder,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.6), fontSize: 11))),
+      ]),
+    ]);
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final String label;
+  final ColorScheme cs;
+  final bool primary;
+  const _Tag(this.label, this.cs, {this.primary = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: primary ? cs.primaryContainer.withOpacity(0.4) : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label, style: TextStyle(
+        color: primary ? cs.primary : cs.onSurfaceVariant,
+        fontSize: 10, fontWeight: FontWeight.w600,
+      )),
+    );
+  }
+}
+

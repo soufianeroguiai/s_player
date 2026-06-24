@@ -54,6 +54,14 @@ flutter:
 
 # تكوين FFmpeg Extended (ضبط البناء)
 ffmpeg_kit_extended_config:
-  type: "base"   # يحوي كل المرمزات (يدعم HEVC 10‑bit)
-  gpl: true      # تفعيل مكتبات GPL مثل libx265
-  small: true   # نأخذ النسخة الكاملة لضمان التوافق الأقصى
+  type: "base" # pre-bundled builds: debug, base, full, audio, video, video_hw
+  gpl: true # enable to include GPL libraries
+  small: true # enable to use smaller builds
+  # == OR ==
+  # -------------------------------------------------------------
+  # You can specify remote or local path to libffmpegkit libraries for each platform
+  # This allows you to deploy custom builds of libffmpegkit.
+  # See: https://github.com/akashskypatel/ffmpeg-kit-builders
+  # -------------------------------------------------------------
+  # windows: "path/to/ffmpeg-kit/libraries"
+  # ios: "https://path/to/bundle.xcframework.zip"
