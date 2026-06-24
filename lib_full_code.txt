@@ -1,0 +1,5217 @@
+===== lib/providers/settings_provider.dart =====
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// يخزّن جميع تفضيلات المستخدم (المظهر، الصوت، الترجمة، المكتبة)
+/// ويحمّلها/يحفظها تلقائياً عبر SharedPreferences.
+///
+/// ملاحظة: تمت إزالة الإعدادات التي لم تكن مرتبطة بأي تنفيذ فعلي
+/// في المشغل (audioOutput, audioPlayerEngine, audioRate, audioPassthrough,
+/// bluetoothAudioDelayMs, pauseOnHeadphonesDisconnect, fadeInStart,
+/// fadeInSeek, showVolumePanel, defaultVolume, subtitleHwAcceleration,
+/// subtitleFontsFolder) لأنها كانت تُحفظ دون أي تأثير حقيقي على التشغيل.
+/// كل إعداد متبقٍ هنا مطبَّق فعلياً في PlayerScreen.
+class SettingsProvider extends ChangeNotifier {
+  // ──────────────────────────────────────────────
+  // المظهر العام
+  // ──────────────────────────────────────────────
+  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode get themeMode => _themeMode;
+
+  // ──────────────────────────────────────────────
+  // المشغل
+  // ──────────────────────────────────────────────
+  bool _rememberPosition = true;
+  bool get rememberPosition => _rememberPosition;
+
+  bool _autoPlay = true;
+  bool get autoPlay => _autoPlay;
+
+  double _defaultSpeed = 1.0;
+  double get defaultSpeed => _defaultSpeed;
+
+  // ──────────────────────────────────────────────
+  // المكتبة
+  // ──────────────────────────────────────────────
+  bool _gridView = false;
+  bool get gridView => _gridView;
+
+  String _sortBy = 'date';
+  String get sortBy => _sortBy;
+
+  bool _sortDesc = true;
+  bool get sortDesc => _sortDesc;
+
+  // ──────────────────────────────────────────────
+  // الترجمة — العرض والتخصيص
+  // ──────────────────────────────────────────────
+  bool _showSubtitlesByDefault = true;
+  bool get showSubtitlesByDefault => _showSubtitlesByDefault;
+
+  double _subtitleFontSize = 30.0;
+  double get subtitleFontSize => _subtitleFontSize;
+
+  int _subtitleColorValue = 0xFFFFFFFF;
+  Color get subtitleColor => Color(_subtitleColorValue);
+
+  double _subtitleBgOpacity = 0.0;
+  double get subtitleBgOpacity => _subtitleBgOpacity;
+
+  Color _subtitleBgColor = const Color(0xFF000000);
+  Color get subtitleBgColor => _subtitleBgColor;
+
+  Color _outlineColor = const Color(0xFF000000);
+  Color get outlineColor => _outlineColor;
+
+  double _outlineWidth = 2.0;
+  double get outlineWidth => _outlineWidth;
+
+  bool _outlineEnabled = true;
+  bool get outlineEnabled => _outlineEnabled;
+
+  int _fontWeightIndex = 2;
+  int get fontWeightIndex => _fontWeightIndex;
+
+  double _bottomPadding = 48.0;
+  double get bottomPadding => _bottomPadding;
+
+  double _horizontalMargin = 24.0;
+  double get horizontalMargin => _horizontalMargin;
+
+  String _fontFamily = 'Roboto';
+  String get fontFamily => _fontFamily;
+
+  String _subtitleFolder = '';
+  String get subtitleFolder => _subtitleFolder;
+
+  String _subtitleEncoding = 'UTF-8';
+  String get subtitleEncoding => _subtitleEncoding;
+
+  String _preferredSubtitleLanguage = 'ara';
+  String get preferredSubtitleLanguage => _preferredSubtitleLanguage;
+
+  double _defaultSubtitleSync = 0.0;
+  double get defaultSubtitleSync => _defaultSubtitleSync;
+
+  bool _subtitleItalic = false;
+  bool get subtitleItalic => _subtitleItalic;
+
+  bool _subtitleRTL = false;
+  bool get subtitleRTL => _subtitleRTL;
+
+  // ──────────────────────────────────────────────
+  // ظل الأحرف (Text Shadow)
+  // ──────────────────────────────────────────────
+  bool _textShadowEnabled = false;
+  bool get textShadowEnabled => _textShadowEnabled;
+
+  Color _textShadowColor = const Color(0xFF000000);
+  Color get textShadowColor => _textShadowColor;
+
+  double _textShadowBlurRadius = 4.0;
+  double get textShadowBlurRadius => _textShadowBlurRadius;
+
+  double _textShadowOffsetX = 1.0;
+  double get textShadowOffsetX => _textShadowOffsetX;
+
+  double _textShadowOffsetY = 1.0;
+  double get textShadowOffsetY => _textShadowOffsetY;
+
+  // ──────────────────────────────────────────────
+  // ظل الصندوق المحيط بنص الترجمة (Box Shadow)
+  // ──────────────────────────────────────────────
+  bool _boxShadowEnabled = false;
+  bool get boxShadowEnabled => _boxShadowEnabled;
+
+  Color _boxShadowColor = const Color(0xFF000000);
+  Color get boxShadowColor => _boxShadowColor;
+
+  double _boxShadowBlurRadius = 4.0;
+  double get boxShadowBlurRadius => _boxShadowBlurRadius;
+
+  double _boxShadowOffsetX = 1.0;
+  double get boxShadowOffsetX => _boxShadowOffsetX;
+
+  double _boxShadowOffsetY = 1.0;
+  double get boxShadowOffsetY => _boxShadowOffsetY;
+
+  // ──────────────────────────────────────────────
+  // الصوت
+  // ──────────────────────────────────────────────
+  double _defaultAudioBoost = 100.0;
+  double get defaultAudioBoost => _defaultAudioBoost;
+
+  String _preferredAudioLanguage = 'ara';
+  String get preferredAudioLanguage => _preferredAudioLanguage;
+
+  // --- Load ---
+  Future<void> load() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final themeIndex = p.getInt('themeMode') ?? 1;
+      _themeMode = themeIndex >= 0 && themeIndex < ThemeMode.values.length
+          ? ThemeMode.values[themeIndex]
+          : ThemeMode.dark;
+      _rememberPosition = p.getBool('rememberPosition') ?? true;
+      _autoPlay = p.getBool('autoPlay') ?? true;
+      _defaultSpeed = p.getDouble('defaultSpeed') ?? 1.0;
+      _showSubtitlesByDefault = p.getBool('showSubtitles') ?? true;
+      _gridView = p.getBool('gridView') ?? false;
+      _sortBy = p.getString('sortBy') ?? 'date';
+      _sortDesc = p.getBool('sortDesc') ?? true;
+      _subtitleFontSize = p.getDouble('subtitleFontSize') ?? 30.0;
+      _subtitleColorValue = p.getInt('subtitleColorValue') ?? 0xFFFFFFFF;
+      _subtitleBgOpacity = p.getDouble('subtitleBgOpacity') ?? 0.0;
+      _subtitleBgColor = Color(p.getInt('subtitleBgColor') ?? 0xFF000000);
+      _outlineColor = Color(p.getInt('outlineColor') ?? 0xFF000000);
+      _outlineWidth = p.getDouble('outlineWidth') ?? 2.0;
+      _outlineEnabled = p.getBool('outlineEnabled') ?? true;
+
+      _textShadowEnabled = p.getBool('textShadowEnabled') ?? false;
+      _textShadowColor = Color(p.getInt('textShadowColor') ?? 0xFF000000);
+      _textShadowBlurRadius = p.getDouble('textShadowBlurRadius') ?? 4.0;
+      _textShadowOffsetX = p.getDouble('textShadowOffsetX') ?? 1.0;
+      _textShadowOffsetY = p.getDouble('textShadowOffsetY') ?? 1.0;
+
+      _boxShadowEnabled = p.getBool('boxShadowEnabled') ?? false;
+      _boxShadowColor = Color(p.getInt('boxShadowColor') ?? 0xFF000000);
+      _boxShadowBlurRadius = p.getDouble('boxShadowBlurRadius') ?? 4.0;
+      _boxShadowOffsetX = p.getDouble('boxShadowOffsetX') ?? 1.0;
+      _boxShadowOffsetY = p.getDouble('boxShadowOffsetY') ?? 1.0;
+
+      _fontWeightIndex = p.getInt('fontWeightIndex') ?? 2;
+      _bottomPadding = p.getDouble('bottomPadding') ?? 48.0;
+      _horizontalMargin = p.getDouble('horizontalMargin') ?? 24.0;
+      _fontFamily = p.getString('fontFamily') ?? 'Roboto';
+      _subtitleFolder = p.getString('subtitleFolder') ?? '';
+      _subtitleEncoding = p.getString('subtitleEncoding') ?? 'UTF-8';
+      _preferredSubtitleLanguage =
+          p.getString('preferredSubtitleLanguage') ?? 'ara';
+      _defaultSubtitleSync = p.getDouble('defaultSubtitleSync') ?? 0.0;
+      _subtitleItalic = p.getBool('subtitleItalic') ?? false;
+      _subtitleRTL = p.getBool('subtitleRTL') ?? false;
+      _defaultAudioBoost = p.getDouble('defaultAudioBoost') ?? 100.0;
+      _preferredAudioLanguage = p.getString('preferredAudioLanguage') ?? 'ara';
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Settings load error: $e');
+    }
+  }
+
+  // --- Save ---
+  Future<void> _save() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('themeMode', _themeMode.index);
+    await p.setBool('rememberPosition', _rememberPosition);
+    await p.setBool('autoPlay', _autoPlay);
+    await p.setDouble('defaultSpeed', _defaultSpeed);
+    await p.setBool('showSubtitles', _showSubtitlesByDefault);
+    await p.setBool('gridView', _gridView);
+    await p.setString('sortBy', _sortBy);
+    await p.setBool('sortDesc', _sortDesc);
+    await p.setDouble('subtitleFontSize', _subtitleFontSize);
+    await p.setInt('subtitleColorValue', _subtitleColorValue);
+    await p.setDouble('subtitleBgOpacity', _subtitleBgOpacity);
+    await p.setInt('subtitleBgColor', _subtitleBgColor.toARGB32());
+    await p.setInt('outlineColor', _outlineColor.toARGB32());
+    await p.setDouble('outlineWidth', _outlineWidth);
+    await p.setBool('outlineEnabled', _outlineEnabled);
+
+    await p.setBool('textShadowEnabled', _textShadowEnabled);
+    await p.setInt('textShadowColor', _textShadowColor.toARGB32());
+    await p.setDouble('textShadowBlurRadius', _textShadowBlurRadius);
+    await p.setDouble('textShadowOffsetX', _textShadowOffsetX);
+    await p.setDouble('textShadowOffsetY', _textShadowOffsetY);
+
+    await p.setBool('boxShadowEnabled', _boxShadowEnabled);
+    await p.setInt('boxShadowColor', _boxShadowColor.toARGB32());
+    await p.setDouble('boxShadowBlurRadius', _boxShadowBlurRadius);
+    await p.setDouble('boxShadowOffsetX', _boxShadowOffsetX);
+    await p.setDouble('boxShadowOffsetY', _boxShadowOffsetY);
+
+    await p.setInt('fontWeightIndex', _fontWeightIndex);
+    await p.setDouble('bottomPadding', _bottomPadding);
+    await p.setDouble('horizontalMargin', _horizontalMargin);
+    await p.setString('fontFamily', _fontFamily);
+    await p.setString('subtitleFolder', _subtitleFolder);
+    await p.setString('subtitleEncoding', _subtitleEncoding);
+    await p.setString('preferredSubtitleLanguage', _preferredSubtitleLanguage);
+    await p.setDouble('defaultSubtitleSync', _defaultSubtitleSync);
+    await p.setBool('subtitleItalic', _subtitleItalic);
+    await p.setBool('subtitleRTL', _subtitleRTL);
+    await p.setDouble('defaultAudioBoost', _defaultAudioBoost);
+    await p.setString('preferredAudioLanguage', _preferredAudioLanguage);
+  }
+
+  // ──────────────────────────────────────────────
+  // Setters
+  // ──────────────────────────────────────────────
+  void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
+  void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
+  void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
+  void setDefaultSpeed(double v) { _defaultSpeed = v; notifyListeners(); _save(); }
+  void setShowSubtitlesByDefault(bool v) { _showSubtitlesByDefault = v; notifyListeners(); _save(); }
+  void setGridView(bool v) { _gridView = v; notifyListeners(); _save(); }
+  void setSortBy(String v) { _sortBy = v; notifyListeners(); _save(); }
+  void setSortDesc(bool v) { _sortDesc = v; notifyListeners(); _save(); }
+  void setSubtitleFontSize(double v) { _subtitleFontSize = v; notifyListeners(); _save(); }
+  void setSubtitleColor(Color c) { _subtitleColorValue = c.toARGB32(); notifyListeners(); _save(); }
+  void setSubtitleBgOpacity(double v) { _subtitleBgOpacity = v; notifyListeners(); _save(); }
+  void setSubtitleBgColor(Color c) { _subtitleBgColor = c; notifyListeners(); _save(); }
+  void setOutlineColor(Color c) { _outlineColor = c; notifyListeners(); _save(); }
+  void setOutlineWidth(double v) { _outlineWidth = v; notifyListeners(); _save(); }
+  void setOutlineEnabled(bool v) { _outlineEnabled = v; notifyListeners(); _save(); }
+
+  void setTextShadowEnabled(bool v) { _textShadowEnabled = v; notifyListeners(); _save(); }
+  void setTextShadowColor(Color c) { _textShadowColor = c; notifyListeners(); _save(); }
+  void setTextShadowBlurRadius(double v) { _textShadowBlurRadius = v; notifyListeners(); _save(); }
+  void setTextShadowOffsetX(double v) { _textShadowOffsetX = v; notifyListeners(); _save(); }
+  void setTextShadowOffsetY(double v) { _textShadowOffsetY = v; notifyListeners(); _save(); }
+
+  void setBoxShadowEnabled(bool v) { _boxShadowEnabled = v; notifyListeners(); _save(); }
+  void setBoxShadowColor(Color c) { _boxShadowColor = c; notifyListeners(); _save(); }
+  void setBoxShadowBlurRadius(double v) { _boxShadowBlurRadius = v; notifyListeners(); _save(); }
+  void setBoxShadowOffsetX(double v) { _boxShadowOffsetX = v; notifyListeners(); _save(); }
+  void setBoxShadowOffsetY(double v) { _boxShadowOffsetY = v; notifyListeners(); _save(); }
+
+  void setFontWeightIndex(int v) { _fontWeightIndex = v; notifyListeners(); _save(); }
+  void setBottomPadding(double v) { _bottomPadding = v; notifyListeners(); _save(); }
+  void setHorizontalMargin(double v) { _horizontalMargin = v; notifyListeners(); _save(); }
+  void setFontFamily(String v) { _fontFamily = v; notifyListeners(); _save(); }
+  void setSubtitleFolder(String v) { _subtitleFolder = v; notifyListeners(); _save(); }
+  void setSubtitleEncoding(String v) { _subtitleEncoding = v; notifyListeners(); _save(); }
+  void setPreferredSubtitleLanguage(String v) { _preferredSubtitleLanguage = v; notifyListeners(); _save(); }
+  void setDefaultSubtitleSync(double v) { _defaultSubtitleSync = v; notifyListeners(); _save(); }
+  void setSubtitleItalic(bool v) { _subtitleItalic = v; notifyListeners(); _save(); }
+  void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); _save(); }
+  void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); _save(); }
+  void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); _save(); }
+}
+
+===== lib/providers/library_provider.dart =====
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/video_item.dart';
+
+/// يدير مكتبة الفيديوهات: المسح عبر photo_manager، التخزين المؤقت
+/// المحلي، قائمة "الأخيرة"، ومواضع الاستئناف لكل فيديو.
+class LibraryProvider extends ChangeNotifier {
+  List<VideoItem> _videos = [];
+  List<String> _recentPaths = [];
+  Set<String> _hiddenPaths = {};
+  bool _loading = false;
+  String? _error;
+
+  List<VideoItem> get videos => _videos.where((v) => !_hiddenPaths.contains(v.path)).toList();
+  List<VideoItem> get allVideos => _videos; // بما فيها المخفية
+  List<String> get recentPaths => _recentPaths;
+  Set<String> get hiddenPaths => _hiddenPaths;
+  bool get loading => _loading;
+  String? get error => _error;
+
+  Map<String, List<VideoItem>> get byFolder {
+    final map = <String, List<VideoItem>>{};
+    for (final v in videos) {
+      map.putIfAbsent(v.folder, () => []).add(v);
+    }
+    return map;
+  }
+
+  Future<void> loadHidden() async {
+    final p = await SharedPreferences.getInstance();
+    _hiddenPaths = Set<String>.from(p.getStringList('hidden_paths') ?? []);
+    notifyListeners();
+  }
+
+  Future<void> hideVideo(String path) async {
+    _hiddenPaths.add(path);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('hidden_paths', _hiddenPaths.toList());
+    notifyListeners();
+  }
+
+  Future<void> unhideVideo(String path) async {
+    _hiddenPaths.remove(path);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('hidden_paths', _hiddenPaths.toList());
+    notifyListeners();
+  }
+
+  Future<void> clearHidden() async {
+    _hiddenPaths.clear();
+    final p = await SharedPreferences.getInstance();
+    await p.remove('hidden_paths');
+    notifyListeners();
+  }
+
+  Future<void> loadCachedVideos() async {
+    try {
+      await loadHidden();
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final List<dynamic> jsonList = json.decode(jsonString);
+        _videos = jsonList
+            .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('فشل تحميل الذاكرة المؤقتة: $e');
+    }
+  }
+
+  Future<void> _saveVideosToCache() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      final jsonList = _videos.map((v) => v.toJson()).toList();
+      await file.writeAsString(json.encode(jsonList));
+    } catch (e) {
+      debugPrint('فشل حفظ الذاكرة المؤقتة: $e');
+    }
+  }
+
+  Future<VideoItem?> _buildVideoItem(AssetEntity asset, String albumName) async {
+    try {
+      final file = await asset.file;
+      if (file == null) return null;
+
+      String name = asset.title ?? '';
+      if (name.isEmpty || name.length < 2) {
+        name = file.path.split('/').last;
+        final dotIndex = name.lastIndexOf('.');
+        if (dotIndex != -1) {
+          name = name.substring(0, dotIndex);
+        }
+        if (name.length < 2) {
+          name = '$albumName ${asset.id}';
+        }
+      }
+
+      return VideoItem(
+        id: asset.id,
+        path: file.path,
+        name: name,
+        size: file.lengthSync(),
+        modified: asset.modifiedDateTime,
+        folder: albumName,
+        duration: asset.videoDuration,
+        subtitleTypes: const [],
+      );
+    } catch (e) {
+      debugPrint('خطأ في بناء عنصر الفيديو: $e');
+      return null;
+    }
+  }
+
+  Future<void> scan() async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth && !ps.hasAccess) {
+        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.';
+        _loading = false;
+        notifyListeners();
+        return;
+      }
+
+      final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
+      final List<VideoItem> result = [];
+
+      const batchSize = 12;
+      for (final album in albums) {
+        final count = await album.assetCountAsync;
+        final assets = await album.getAssetListRange(start: 0, end: count);
+
+        for (var i = 0; i < assets.length; i += batchSize) {
+          final batch = assets.skip(i).take(batchSize);
+          final items = await Future.wait(
+            batch.map((asset) => _buildVideoItem(asset, album.name)),
+          );
+          result.addAll(items.whereType<VideoItem>());
+        }
+      }
+
+      result.sort((a, b) => b.modified.compareTo(a.modified));
+      _videos = result;
+      await _saveVideosToCache();
+    } catch (e) {
+      _error = 'فشل المسح: $e';
+    }
+
+    _loading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadRecent() async {
+    final p = await SharedPreferences.getInstance();
+    _recentPaths = p.getStringList('recent_paths') ?? [];
+    notifyListeners();
+  }
+
+  Future<void> addRecent(String path) async {
+    _recentPaths.remove(path);
+    _recentPaths.insert(0, path);
+    if (_recentPaths.length > 30) _recentPaths.removeLast();
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('recent_paths', _recentPaths);
+    notifyListeners();
+  }
+
+  Future<void> clearRecent() async {
+    _recentPaths.clear();
+    final p = await SharedPreferences.getInstance();
+    await p.remove('recent_paths');
+    notifyListeners();
+  }
+
+  /// يحفظ آخر موضع تشغيل لملف معيّن. يُستخدم مسار الملف نفسه كجزء
+  /// من المفتاح (بدل الاعتماد فقط على hashCode) لتفادي أي احتمال
+  /// تصادم أو عدم ثبات بين تشغيلات مختلفة لتطبيق دارت.
+  Future<void> savePosition(String path, Duration pos) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('pos_$path', pos.inMilliseconds);
+  }
+
+  Future<Duration?> getPosition(String path) async {
+    final p = await SharedPreferences.getInstance();
+    final ms = p.getInt('pos_$path');
+    if (ms == null || ms == 0) return null;
+    return Duration(milliseconds: ms);
+  }
+}
+
+===== lib/services/thumbnail_service.dart =====
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/video_item.dart';
+
+class ThumbnailService {
+  static final ThumbnailService _instance = ThumbnailService._internal();
+  factory ThumbnailService() => _instance;
+  ThumbnailService._internal();
+
+  final Map<String, ValueNotifier<Uint8List?>> _notifiers = {};
+  final Map<String, ValueNotifier<String?>> _errors = {};
+  final Set<String> _pending = {};
+  int _active = 0;
+  static const _maxConcurrent = 1; // مفرد لضمان أقصى سرعة
+  final List<Future<void> Function()> _queue = [];
+
+  ValueNotifier<Uint8List?> getNotifier(VideoItem video) {
+    final path = video.path;
+    if (!_notifiers.containsKey(path)) {
+      _notifiers[path] = ValueNotifier(null);
+      _errors[path] = ValueNotifier(null);
+      _enqueue(video);
+    }
+    return _notifiers[path]!;
+  }
+
+  ValueNotifier<String?> getErrorNotifier(VideoItem video) {
+    final path = video.path;
+    if (!_errors.containsKey(path)) {
+      _errors[path] = ValueNotifier(null);
+    }
+    return _errors[path]!;
+  }
+
+  void _enqueue(VideoItem video) {
+    _queue.add(() => _generate(video));
+    _drain();
+  }
+
+  void _drain() {
+    while (_active < _maxConcurrent && _queue.isNotEmpty) {
+      final task = _queue.removeAt(0);
+      _active++;
+      task().whenComplete(() {
+        _active--;
+        _drain();
+      });
+    }
+  }
+
+  Future<void> _generate(VideoItem video) async {
+    final path = video.path;
+    if (_pending.contains(path)) return;
+    _pending.add(path);
+    _errors[path]?.value = null;
+
+    try {
+      final cacheFile = await _cacheFile(path);
+      if (await cacheFile.exists()) {
+        final bytes = await cacheFile.readAsBytes();
+        if (bytes.isNotEmpty) {
+          _notifiers[path]?.value = bytes;
+          return;
+        }
+      }
+
+      final bytes = await _ffmpegThumb(video, cacheFile.path);
+      if (bytes != null && bytes.isNotEmpty) {
+        if (!await cacheFile.exists()) {
+          await cacheFile.writeAsBytes(bytes);
+        }
+        _notifiers[path]?.value = bytes;
+        _errors[path]?.value = null;
+      } else {
+        _errors[path]?.value ??= 'فشل استخراج الصورة';
+      }
+    } catch (e) {
+      _errors[path]?.value = 'خطأ: $e';
+    } finally {
+      _pending.remove(path);
+    }
+  }
+
+  Future<Uint8List?> _ffmpegThumb(VideoItem video, String savePath) async {
+    final videoPath = video.path;
+    final file = File(videoPath);
+    if (!await file.exists()) {
+      _errors[videoPath]?.value = 'الملف غير موجود';
+      return null;
+    }
+
+    // ⚡ ثانية ذكية: 10% من المدة، وإلا الثانية 5 كافتراض
+    final int seekSec = video.duration.inSeconds > 0
+        ? (video.duration.inSeconds * 0.1).round().clamp(1, 99999)
+        : 5;
+
+    // ⚡ أمر فائق السرعة: JPEG، دقة ثابتة 720×480، جودة جيدة
+    final command =
+        '-y -ss $seekSec -noaccurate_seek -i "$videoPath" -vframes 1 -vf "scale=720:480" -q:v 5 -an "$savePath"';
+
+    final completer = Completer<Uint8List?>();
+
+    await FFmpegKit.executeAsync(
+      command,
+      onComplete: (session) async {
+        final returnCode = await session.getReturnCode();
+        if (ReturnCode.isSuccess(returnCode)) {
+          final outputFile = File(savePath);
+          if (await outputFile.exists()) {
+            completer.complete(await outputFile.readAsBytes());
+          } else {
+            completer.complete(null);
+          }
+        } else {
+          final output = await session.getOutput();
+          _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل"}';
+          completer.complete(null);
+        }
+      },
+    );
+
+    return completer.future;
+  }
+
+  // ✅ تخزين دائم سريع (لا يمسح بعد الخروج)
+  Future<File> _cacheFile(String videoPath) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (!await thumbDir.exists()) {
+      await thumbDir.create(recursive: true);
+    }
+    final safeName = base64Url.encode(utf8.encode(videoPath));
+    return File('${thumbDir.path}/$safeName.jpg');
+  }
+
+  Future<void> clearCache() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (await thumbDir.exists()) {
+      await thumbDir.delete(recursive: true);
+    }
+    _notifiers.forEach((_, n) => n.value = null);
+    _notifiers.clear();
+    _errors.clear();
+  }
+}
+===== lib/services/subtitle_service.dart =====
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'subtitle_encodings.dart';
+
+class SubtitleEntry {
+  final Duration start;
+  final Duration end;
+  final String text;
+  SubtitleEntry({required this.start, required this.end, required this.text});
+}
+
+class SubtitleService {
+  /// يكتشف تلقائياً ملف .srt/.ssa/.ass بجانب ملف الفيديو.
+  static String? findSrt(String videoPath) {
+    final base = videoPath.replaceAll(RegExp(r'\.[^.]+$'), '');
+    for (final ext in ['.srt', '.SRT', '.ssa', '.SSA', '.ass', '.ASS']) {
+      final f = File('$base$ext');
+      if (f.existsSync()) return f.path;
+    }
+    return null;
+  }
+
+  /// يحمّل ويحلّل ملف ترجمة، باستخدام [encodingName] المحدَّد من
+  /// إعدادات المستخدم (UTF-8 بشكل افتراضي). يُنفَّذ التحليل في
+  /// isolate منفصل عبر compute لتفادي تجميد واجهة المستخدم مع
+  /// الملفات الكبيرة. الدالة الممرَّرة لـ compute يجب أن تكون
+  /// top-level (وليست method داخل كلاس)، لذا التحليل الفعلي معرَّف
+  /// خارج هذا الكلاس في نفس الملف (انظر parseSubtitleContent أسفله).
+  static Future<List<SubtitleEntry>> load(
+    String path, {
+    String encodingName = 'UTF-8',
+  }) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final ext = path.split('.').last.toLowerCase();
+      final entries = await compute(parseSubtitleContent, {
+        'bytes': bytes,
+        'ext': ext,
+        'encoding': encodingName,
+      });
+      return entries;
+    } catch (_) {
+      return [];
+    }
+  }
+}
+
+// ──────────────────────────────────────────────
+// دوال التحليل (top-level) — منفصلة عن الكلاس عمداً لضمان توافقها
+// الكامل مع compute()، الذي يتطلب دالة top-level أو static.
+// ──────────────────────────────────────────────
+
+List<SubtitleEntry> parseSubtitleContent(Map<String, dynamic> params) {
+  final bytes = params['bytes'] as List<int>;
+  final ext = params['ext'] as String;
+  final encodingName = params['encoding'] as String;
+  final content = SubtitleEncodings.decode(bytes, encodingName);
+
+  if (ext == 'ssa' || ext == 'ass') {
+    return _parseSsa(content);
+  } else {
+    return _parseSrt(content);
+  }
+}
+
+// --- SRT Parser ---
+List<SubtitleEntry> _parseSrt(String content) {
+  final entries = <SubtitleEntry>[];
+  final blocks = content.trim().split(RegExp(r'\r?\n\r?\n'));
+
+  for (final block in blocks) {
+    final lines = block.trim().split(RegExp(r'\r?\n'));
+    if (lines.length < 3) continue;
+    try {
+      final timeLine = lines[1];
+      final parts = timeLine.split(' --> ');
+      if (parts.length != 2) continue;
+
+      final start = _parseTime(parts[0].trim());
+      final end = _parseTime(parts[1].trim().split(' ').first);
+      final text = lines
+          .sublist(2)
+          .join('\n')
+          .replaceAll(RegExp(r'<[^>]*>'), '')
+          .trim();
+
+      if (text.isNotEmpty) {
+        entries.add(SubtitleEntry(start: start, end: end, text: text));
+      }
+    } catch (_) {}
+  }
+  return entries;
+}
+
+// --- SSA/ASS Parser ---
+List<SubtitleEntry> _parseSsa(String content) {
+  final entries = <SubtitleEntry>[];
+  bool inEvents = false;
+
+  final lines = content.split(RegExp(r'\r?\n'));
+  int formatIndex = -1;
+
+  for (final line in lines) {
+    final trimmed = line.trim();
+
+    if (trimmed.startsWith('[Events]')) {
+      inEvents = true;
+      continue;
+    }
+
+    if (trimmed.startsWith('[') && !trimmed.startsWith('[Events]')) {
+      inEvents = false;
+      continue;
+    }
+
+    if (!inEvents) continue;
+
+    if (trimmed.startsWith('Format:')) {
+      final fields = trimmed.substring(7).split(',').map((e) => e.trim()).toList();
+      formatIndex = fields.indexOf('Text');
+      continue;
+    }
+
+    if (trimmed.startsWith('Dialogue:')) {
+      if (formatIndex < 0) continue;
+
+      final parts = _splitDialogue(trimmed.substring(9));
+      if (parts.length <= formatIndex) continue;
+
+      try {
+        final start = _parseSsaTime(parts[1]);
+        final end = _parseSsaTime(parts[2]);
+
+        final rawText = parts.sublist(formatIndex).join(',');
+        final cleanText = _cleanSsaText(rawText);
+
+        if (cleanText.isNotEmpty) {
+          entries.add(SubtitleEntry(start: start, end: end, text: cleanText));
+        }
+      } catch (_) {}
+    }
+  }
+
+  return entries;
+}
+
+List<String> _splitDialogue(String line) {
+  final parts = <String>[];
+  int depth = 0;
+  final current = StringBuffer();
+
+  for (int i = 0; i < line.length; i++) {
+    final char = line[i];
+    if (char == '{') depth++;
+    if (char == '}') depth--;
+
+    if (char == ',' && depth == 0) {
+      parts.add(current.toString().trim());
+      current.clear();
+    } else {
+      current.write(char);
+    }
+  }
+  parts.add(current.toString().trim());
+  return parts;
+}
+
+String _cleanSsaText(String text) {
+  var cleaned = text.replaceAll(RegExp(r'\{[^}]*\}'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\\[Nn]'), '\n');
+  cleaned = cleaned.trim();
+  return cleaned;
+}
+
+Duration _parseSsaTime(String s) {
+  s = s.trim();
+  final parts = s.split(':');
+  final hours = int.tryParse(parts[0]) ?? 0;
+  final minutes = int.tryParse(parts[1]) ?? 0;
+  final secParts = parts[2].split('.');
+  final seconds = int.tryParse(secParts[0]) ?? 0;
+  final centiseconds = int.tryParse(secParts[1]) ?? 0;
+  return Duration(
+    hours: hours,
+    minutes: minutes,
+    seconds: seconds,
+    milliseconds: centiseconds * 10,
+  );
+}
+
+Duration _parseTime(String s) {
+  final normalized = s.replaceAll(',', '.');
+  final dotIndex = normalized.lastIndexOf('.');
+  int ms = 0;
+  String hms = normalized;
+
+  if (dotIndex != -1) {
+    ms = int.tryParse(
+            normalized.substring(dotIndex + 1).padRight(3, '0').substring(0, 3)) ??
+        0;
+    hms = normalized.substring(0, dotIndex);
+  }
+
+  final parts = hms.split(':');
+  final h = int.tryParse(parts[0]) ?? 0;
+  final m = int.tryParse(parts[1]) ?? 0;
+  final sec = int.tryParse(parts[2]) ?? 0;
+  return Duration(hours: h, minutes: m, seconds: sec, milliseconds: ms);
+}
+
+===== lib/services/pip_service.dart =====
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+/// يدير الدخول إلى وضع "صورة داخل صورة" (PiP) على أندرويد، ويعكس
+/// الحالة الحقيقية القادمة من النظام (وليس قيمة محلية مفترَضة).
+class PipService {
+  static const _channel = MethodChannel('com.splayer.app/pip');
+  static bool _listenerAttached = false;
+
+  /// تعكس آخر حالة PiP أبلغ عنها أندرويد فعلياً عبر
+  /// onPictureInPictureModeChanged. يجب الاستماع إليها بدل افتراض
+  /// أن enter() نجحت دائماً، لأن أندرويد قد يرفض الطلب (مثلاً إذا
+  /// كانت الميزة معطّلة في إعدادات النظام).
+  static final ValueNotifier<bool> isInPipMode = ValueNotifier(false);
+
+  static void _ensureListener() {
+    if (_listenerAttached) return;
+    _listenerAttached = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onPipModeChanged') {
+        isInPipMode.value = call.arguments as bool? ?? false;
+      }
+    });
+  }
+
+  static Future<void> enter() async {
+    _ensureListener();
+    try {
+      await _channel.invokeMethod('enterPip');
+      // لا نُحدِّث isInPipMode هنا يدوياً؛ الحالة الموثوقة تصل عبر
+      // onPipModeChanged من Android بعد لحظات قصيرة من نجاح الطلب.
+    } catch (e) {
+      debugPrint('فشل الدخول إلى وضع PiP: $e');
+    }
+  }
+}
+
+===== lib/services/subtitle_encodings.dart =====
+import 'dart:convert';
+import 'dart:typed_data';
+
+/// يفك ترميز محتوى نصي (مثل ملفات SRT) بأحد الترميزات الشائعة في
+/// ملفات الترجمة العربية القديمة. مكتوب يدوياً بدل الاعتماد على حزمة
+/// خارجية، لأن جداول هذين الترميزين صغيرة وثابتة (256 بايت كحد أقصى).
+class SubtitleEncodings {
+  static const _supported = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
+
+  static List<String> get supportedNames => _supported;
+
+  static String decode(List<int> bytes, String encodingName) {
+    switch (encodingName) {
+      case 'UTF-16':
+        return _decodeUtf16(bytes);
+      case 'Windows-1256':
+        return _decodeSingleByte(bytes, _windows1256Table);
+      case 'ISO-8859-6':
+        return _decodeSingleByte(bytes, _iso88596Table);
+      case 'UTF-8':
+      default:
+        return utf8.decode(bytes, allowMalformed: true);
+    }
+  }
+
+  static String _decodeUtf16(List<int> bytes) {
+    final bytesList = Uint8List.fromList(bytes);
+    if (bytesList.length >= 2 &&
+        bytesList[0] == 0xFF &&
+        bytesList[1] == 0xFE) {
+      return const Utf8Decoder(allowMalformed: true)
+          .convert(_utf16LeToUtf8Bytes(bytesList.sublist(2)));
+    }
+    if (bytesList.length >= 2 &&
+        bytesList[0] == 0xFE &&
+        bytesList[1] == 0xFF) {
+      return String.fromCharCodes(_utf16BeCodeUnits(bytesList.sublist(2)));
+    }
+    // بلا BOM: نفترض little-endian (الأكثر شيوعاً على ويندوز).
+    return String.fromCharCodes(_utf16LeCodeUnits(bytesList));
+  }
+
+  static List<int> _utf16LeCodeUnits(Uint8List bytes) {
+    final units = <int>[];
+    for (var i = 0; i + 1 < bytes.length; i += 2) {
+      units.add(bytes[i] | (bytes[i + 1] << 8));
+    }
+    return units;
+  }
+
+  static List<int> _utf16BeCodeUnits(Uint8List bytes) {
+    final units = <int>[];
+    for (var i = 0; i + 1 < bytes.length; i += 2) {
+      units.add((bytes[i] << 8) | bytes[i + 1]);
+    }
+    return units;
+  }
+
+  static List<int> _utf16LeToUtf8Bytes(Uint8List bytes) {
+    return utf8.encode(String.fromCharCodes(_utf16LeCodeUnits(bytes)));
+  }
+
+  static String _decodeSingleByte(List<int> bytes, List<int> table) {
+    final buffer = StringBuffer();
+    for (final b in bytes) {
+      if (b < 0x80) {
+        buffer.writeCharCode(b);
+      } else {
+        final mapped = table[b - 0x80];
+        buffer.writeCharCode(mapped == 0 ? 0xFFFD : mapped);
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// جدول Windows-1256 للنطاق 0x80-0xFF (تعيين Unicode لكل بايت).
+  static const List<int> _windows1256Table = [
+    0x20AC, 0x067E, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, // 80-87
+    0x02C6, 0x2030, 0x0679, 0x2039, 0x0152, 0x0686, 0x0698, 0x0688, // 88-8F
+    0x06AF, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, // 90-97
+    0x06A9, 0x2122, 0x0691, 0x203A, 0x0153, 0x200C, 0x200D, 0x06BA, // 98-9F
+    0x00A0, 0x060C, 0x00A2, 0x00A3, 0x00A4, 0x00A5, 0x00A6, 0x00A7, // A0-A7
+    0x00A8, 0x00A9, 0x06BE, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00AF, // A8-AF
+    0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7, // B0-B7
+    0x00B8, 0x00B9, 0x061B, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x061F, // B8-BF
+    0x06C1, 0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627, // C0-C7
+    0x0628, 0x0629, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F, // C8-CF
+    0x0630, 0x0631, 0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x00D7, // D0-D7
+    0x0637, 0x0638, 0x0639, 0x063A, 0x0640, 0x0641, 0x0642, 0x0643, // D8-DF
+    0x00E0, 0x0644, 0x00E2, 0x0645, 0x0646, 0x0647, 0x0648, 0x00E7, // E0-E7
+    0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x0649, 0x064A, 0x00EE, 0x00EF, // E8-EF
+    0x064B, 0x064C, 0x064D, 0x064E, 0x00F4, 0x064F, 0x0650, 0x00F7, // F0-F7
+    0x0651, 0x00F9, 0x0652, 0x00FB, 0x00FC, 0x200E, 0x200F, 0x06D2, // F8-FF
+  ];
+
+  /// جدول ISO-8859-6 للنطاق 0x80-0xFF (0 يعني غير مُعرَّف في المعيار).
+  static const List<int> _iso88596Table = [
+    0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, // 80-87
+    0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, // 88-8F
+    0x0090, 0x0091, 0x0092, 0x0093, 0x0094, 0x0095, 0x0096, 0x0097, // 90-97
+    0x0098, 0x0099, 0x009A, 0x009B, 0x009C, 0x009D, 0x009E, 0x009F, // 98-9F
+    0x00A0, 0, 0, 0, 0x00A4, 0, 0, 0, // A0-A7
+    0, 0, 0, 0, 0x060C, 0x00AD, 0, 0, // A8-AF
+    0, 0, 0, 0, 0, 0, 0, 0, // B0-B7
+    0, 0, 0, 0x061B, 0, 0, 0, 0x061F, // B8-BF
+    0, 0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627, // C0-C7
+    0x0628, 0x0629, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F, // C8-CF
+    0x0630, 0x0631, 0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x0637, // D0-D7
+    0x0638, 0x0639, 0x063A, 0, 0, 0, 0, 0, // D8-DF
+    0x0640, 0x0641, 0x0642, 0x0643, 0x0644, 0x0645, 0x0646, 0x0647, // E0-E7
+    0x0648, 0x0649, 0x064A, 0x064B, 0x064C, 0x064D, 0x064E, 0x064F, // E8-EF
+    0x0650, 0x0651, 0x0652, 0, 0, 0, 0, 0, // F0-F7
+    0, 0, 0, 0, 0, 0, 0, 0, // F8-FF
+  ];
+}
+
+===== lib/app/permission_gate.dart =====
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+/// شاشة تطلب الصلاحيات الضرورية (الوصول لمكتبة الفيديوهات) قبل
+/// الدخول للتطبيق.
+class PermissionGate extends StatefulWidget {
+  final Widget child;
+  const PermissionGate({super.key, required this.child});
+
+  @override
+  State<PermissionGate> createState() => _PermissionGateState();
+}
+
+class _PermissionGateState extends State<PermissionGate> {
+  bool _checking = true;
+  bool _allGranted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    setState(() => _checking = true);
+
+    final mediaStatus = await Permission.videos.request();
+    final storageStatus = await Permission.storage.request();
+
+    setState(() {
+      _allGranted = mediaStatus.isGranted || storageStatus.isGranted;
+      _checking = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checking) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 20),
+            Text('جاري طلب الصلاحيات...', style: TextStyle(color: Colors.white70, fontSize: 16)),
+          ]),
+        ),
+      );
+    }
+
+    if (!_allGranted) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.folder_off_rounded, color: Colors.white38, size: 80),
+              const SizedBox(height: 24),
+              const Text(
+                'الصلاحيات مطلوبة',
+                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'يحتاج التطبيق إلى إذن الوصول إلى الوسائط لعرض الفيديوهات.',
+                style: TextStyle(color: Colors.white60, fontSize: 15),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: _requestPermissions,
+                icon: const Icon(Icons.security_rounded),
+                label: const Text('منح الصلاحيات'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => setState(() => _allGranted = true),
+                child: const Text('تخطي', style: TextStyle(color: Colors.white38)),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return widget.child;
+  }
+}
+
+===== lib/main.dart =====
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart'; // ✅ الإضافة
+import 'theme/app_theme.dart';
+import 'providers/settings_provider.dart';
+import 'providers/library_provider.dart';
+import 'app/permission_gate.dart';
+import 'screens/home/home_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (details) => FlutterError.presentError(details);
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('❌ خطأ غير معالج: $error');
+    runApp(ErrorApp(error.toString()));
+    return true;
+  };
+
+  // 1. تهيئة MediaKit
+  try {
+    MediaKit.ensureInitialized();
+  } catch (e) {
+    runApp(ErrorApp('فشل تهيئة MediaKit:\n$e'));
+    return;
+  }
+
+  // 2. تهيئة FFmpegKitExtended (جديد)
+  try {
+    await FFmpegKitExtended.initialize();
+  } catch (e) {
+    runApp(ErrorApp('فشل تهيئة FFmpeg:\n$e'));
+    return;
+  }
+
+  // باقي الإعدادات
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+  ));
+
+  SettingsProvider settings;
+  try {
+    settings = SettingsProvider();
+    await settings.load();
+  } catch (e) {
+    runApp(ErrorApp('فشل تحميل الإعدادات:\n$e'));
+    return;
+  }
+
+  runApp(MultiProvider(
+    providers: [
+      ChangeNotifierProvider.value(value: settings),
+      ChangeNotifierProvider(create: (_) => LibraryProvider()),
+    ],
+    child: const SPlayerApp(),
+  ));
+}
+
+class SPlayerApp extends StatelessWidget {
+  const SPlayerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    return MaterialApp(
+      title: 'SR Player',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: settings.themeMode,
+      home: const PermissionGate(child: HomeScreen()),
+    );
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  final String message;
+  const ErrorApp(this.message, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 24),
+              const Text('عذراً، حدث خطأ',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Text(message,
+                  style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.5),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () => main(),
+                icon: const Icon(Icons.refresh),
+                label: const Text('إعادة المحاولة'),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+===== lib/theme/app_theme.dart =====
+import 'package:flutter/material.dart';
+
+class AppTheme {
+  static const Color _seed = Color(0xFF1B6CA8);
+
+  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData light() => _build(Brightness.light);
+
+  static ThemeData _build(Brightness brightness) {
+    final cs = ColorScheme.fromSeed(
+      seedColor: _seed,
+      brightness: brightness,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: cs,
+      scaffoldBackgroundColor: cs.surface,
+
+      appBarTheme: AppBarTheme(
+        backgroundColor: cs.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        titleTextStyle: TextStyle(
+          color: cs.onSurface,
+          fontWeight: FontWeight.w700,
+          fontSize: 20,
+        ),
+        iconTheme: IconThemeData(color: cs.onSurfaceVariant),
+      ),
+
+      tabBarTheme: const TabBarThemeData(
+        labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+
+      cardTheme: CardThemeData(
+        color: cs.surfaceContainerLow,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+
+      listTileTheme: ListTileThemeData(
+        titleTextStyle: TextStyle(
+          color: cs.onSurface,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        subtitleTextStyle: TextStyle(
+          color: cs.onSurfaceVariant,
+          fontSize: 12,
+        ),
+        iconColor: cs.onSurfaceVariant,
+      ),
+
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: cs.primaryContainer,
+        foregroundColor: cs.onPrimaryContainer,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        elevation: 2,
+      ),
+
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: cs.surfaceContainerLow,
+        modalBackgroundColor: cs.surfaceContainerLow,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        showDragHandle: true,
+      ),
+
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: cs.inverseSurface,
+        contentTextStyle: TextStyle(color: cs.onInverseSurface),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+
+      dividerTheme: DividerThemeData(
+        color: cs.outlineVariant,
+        thickness: 1,
+        space: 1,
+      ),
+    );
+  }
+}
+
+===== lib/models/video_item.dart =====
+import 'package:flutter/foundation.dart';
+
+/// يمثل ملف فيديو واحد في مكتبة التطبيق.
+class VideoItem {
+  final String id;
+  final String path;
+  final String name;
+  final int size;
+  final DateTime modified;
+  final String folder;
+  final Duration duration;
+  String? thumbnailPath;
+  List<String> subtitleTypes;
+
+  /// يُحدَّث عند اكتشاف مسارات ترجمة مدمجة داخل الفيديو (SRT/ASS/SSA/VTT).
+  late final ValueNotifier<List<String>> subtitlesNotifier;
+
+  VideoItem({
+    required this.id,
+    required this.path,
+    required this.name,
+    required this.size,
+    required this.modified,
+    required this.folder,
+    required this.duration,
+    this.thumbnailPath,
+    this.subtitleTypes = const [],
+  }) {
+    subtitlesNotifier = ValueNotifier(subtitleTypes);
+  }
+
+  String get extension => path.split('.').last.toLowerCase();
+
+  String get formattedSize {
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(0)} KB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  String get formattedDuration {
+    final h = duration.inHours;
+    final m = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  String get formattedDate {
+    return '${modified.year}-${modified.month.toString().padLeft(2, '0')}-${modified.day.toString().padLeft(2, '0')}';
+  }
+
+  /// ينشئ [VideoItem] من مسار ملف موجود على القرص (يُستخدم للملفات
+  /// المفتوحة يدوياً أو الموجودة في قائمة "الأخيرة" والتي لم تعد ضمن
+  /// نتائج مسح مكتبة الوسائط). يستخدم المسار نفسه كمعرّف لأنه فريد
+  /// وثابت، بخلاف hashCode الذي لا يضمن الثبات بين تشغيلات مختلفة.
+  factory VideoItem.fromPath({
+    required String path,
+    required int size,
+    required DateTime modified,
+  }) {
+    final parts = path.split('/');
+    return VideoItem(
+      id: path,
+      path: path,
+      name: parts.last,
+      size: size,
+      modified: modified,
+      folder: parts.length > 1 ? parts[parts.length - 2] : '',
+      duration: Duration.zero,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'path': path,
+      'name': name,
+      'size': size,
+      'modified': modified.millisecondsSinceEpoch,
+      'folder': folder,
+      'duration': duration.inMilliseconds,
+      'thumbnailPath': thumbnailPath,
+      'subtitleTypes': subtitleTypes,
+    };
+  }
+
+  factory VideoItem.fromJson(Map<String, dynamic> json) {
+    return VideoItem(
+      id: json['id'] as String,
+      path: json['path'] as String,
+      name: json['name'] as String,
+      size: json['size'] as int,
+      modified: DateTime.fromMillisecondsSinceEpoch(json['modified'] as int),
+      folder: json['folder'] as String,
+      duration: Duration(milliseconds: json['duration'] as int),
+      thumbnailPath: json['thumbnailPath'] as String?,
+      subtitleTypes: (json['subtitleTypes'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+    );
+  }
+}
+
+===== lib/screens/settings/settings_dialogs.dart =====
+import 'package:flutter/material.dart';
+import '../../providers/settings_provider.dart';
+import 'settings_widgets.dart';
+
+void showBoostDialog(BuildContext ctx, SettingsProvider s) {
+  showDialog(
+    context: ctx,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('تضخيم الصوت الافتراضي (%)'),
+        content: Slider(
+          value: s.defaultAudioBoost,
+          min: 50,
+          max: 200,
+          divisions: 30,
+          label: '${s.defaultAudioBoost.round()}%',
+          onChanged: (v) {
+            s.setDefaultAudioBoost(v);
+            setDialogState(() {});
+          },
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('موافق'))],
+      ),
+    ),
+  );
+}
+
+void showAudioLanguagePicker(BuildContext ctx, SettingsProvider s) {
+  final langs = {'ara': 'العربية', 'eng': 'الإنجليزية', 'fra': 'الفرنسية', 'spa': 'الإسبانية'};
+  showDialog(
+    context: ctx,
+    builder: (context) => SimpleDialog(
+      title: const Text('اختر لغة الصوت المفضلة'),
+      children: langs.entries
+          .map((e) => RadioListTile<String>(
+                title: Text(e.value),
+                value: e.key,
+                groupValue: s.preferredAudioLanguage,
+                onChanged: (v) {
+                  s.setPreferredAudioLanguage(v!);
+                  Navigator.pop(context);
+                },
+              ))
+          .toList(),
+    ),
+  );
+}
+
+void showEncodingPicker(BuildContext ctx, SettingsProvider s) {
+  // هذه القائمة تطابق تماماً الترميزات المدعومة فعلياً في
+  // SubtitleEncodings — أي إضافة هنا يجب أن تُضاف هناك أولاً.
+  const encodings = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
+  showDialog(
+    context: ctx,
+    builder: (context) => SimpleDialog(
+      title: const Text('اختر ترميز الأحرف'),
+      children: encodings
+          .map((enc) => RadioListTile<String>(
+                title: Text(enc),
+                value: enc,
+                groupValue: s.subtitleEncoding,
+                onChanged: (v) {
+                  s.setSubtitleEncoding(v!);
+                  Navigator.pop(context);
+                },
+              ))
+          .toList(),
+    ),
+  );
+}
+
+void showSubtitleLanguagePicker(BuildContext ctx, SettingsProvider s) {
+  final langs = {
+    'ara': 'العربية',
+    'eng': 'الإنجليزية',
+    'fra': 'الفرنسية',
+    'spa': 'الإسبانية',
+    'deu': 'الألمانية',
+    'ita': 'الإيطالية',
+  };
+  showDialog(
+    context: ctx,
+    builder: (context) => SimpleDialog(
+      title: const Text('اختر لغة الترجمة المفضلة'),
+      children: langs.entries
+          .map((e) => RadioListTile<String>(
+                title: Text(e.value),
+                value: e.key,
+                groupValue: s.preferredSubtitleLanguage,
+                onChanged: (v) {
+                  s.setPreferredSubtitleLanguage(v!);
+                  Navigator.pop(context);
+                },
+              ))
+          .toList(),
+    ),
+  );
+}
+
+void showSyncDialog(BuildContext ctx, SettingsProvider s) {
+  final controller = TextEditingController(text: s.defaultSubtitleSync.toStringAsFixed(1));
+  showDialog(
+    context: ctx,
+    builder: (context) => AlertDialog(
+      title: const Text('المزامنة الافتراضية (ثواني)'),
+      content: TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+        decoration: const InputDecoration(hintText: 'مثال: -0.5 أو 1.0'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+        ElevatedButton(
+            onPressed: () {
+              final value = double.tryParse(controller.text);
+              if (value != null) s.setDefaultSubtitleSync(value);
+              Navigator.pop(context);
+            },
+            child: const Text('موافق')),
+      ],
+    ),
+  );
+}
+
+void showThemePicker(BuildContext ctx, SettingsProvider s) {
+  showBottomPicker<ThemeMode>(
+    ctx,
+    title: 'اختر المظهر',
+    currentValue: s.themeMode,
+    items: const [
+      (ThemeMode.dark, 'داكن', Icons.dark_mode_rounded),
+      (ThemeMode.light, 'فاتح', Icons.light_mode_rounded),
+      (ThemeMode.system, 'تلقائي', Icons.brightness_auto_rounded),
+    ],
+    onSelected: s.setThemeMode,
+  );
+}
+
+void showSpeedPicker(BuildContext ctx, SettingsProvider s) {
+  final cs = Theme.of(ctx).colorScheme;
+  showModalBottomSheet(
+    context: ctx,
+    builder: (_) => Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+            child: Text('سرعة التشغيل',
+                style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+        const Divider(height: 1),
+        ...[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((sp) => ListTile(
+              title: Text('${sp}x'),
+              trailing: s.defaultSpeed == sp ? Icon(Icons.check_rounded, color: cs.primary) : null,
+              onTap: () {
+                s.setDefaultSpeed(sp);
+                Navigator.pop(ctx);
+              },
+            )),
+      ]),
+    ),
+  );
+}
+
+void showSortPicker(BuildContext ctx, SettingsProvider s) {
+  showBottomPicker<String>(
+    ctx,
+    title: 'ترتيب حسب',
+    currentValue: s.sortBy,
+    items: const [
+      ('date', 'التاريخ', Icons.calendar_today_rounded),
+      ('name', 'الاسم', Icons.sort_by_alpha_rounded),
+      ('size', 'الحجم', Icons.data_usage_rounded),
+      ('duration', 'المدة', Icons.timer_rounded),
+    ],
+    onSelected: s.setSortBy,
+  );
+}
+
+===== lib/screens/settings/settings_widgets.dart =====
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+Widget settingsHeader(BuildContext ctx, String title, IconData icon) {
+  final cs = Theme.of(ctx).colorScheme;
+  return Padding(
+    padding: const EdgeInsets.only(left: 4, bottom: 10),
+    child: Row(children: [
+      Icon(icon, size: 18, color: cs.primary),
+      const SizedBox(width: 8),
+      Text(title, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 13)),
+    ]),
+  );
+}
+
+Widget settingsCard(BuildContext ctx, List<Widget> children) {
+  final cs = Theme.of(ctx).colorScheme;
+  return Container(
+    decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
+    clipBehavior: Clip.antiAlias,
+    child: Column(children: children),
+  );
+}
+
+Widget settingsDivider() => const Divider(height: 1, indent: 56);
+
+Widget settingsSwitchTile(
+  BuildContext ctx, {
+  required IconData icon,
+  required String title,
+  required String subtitle,
+  required bool value,
+  required void Function(bool) onChanged,
+}) {
+  final cs = Theme.of(ctx).colorScheme;
+  return ListTile(
+    leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+            color: value ? cs.primaryContainer : cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: value ? cs.onPrimaryContainer : cs.onSurfaceVariant, size: 22)),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: Switch(value: value, onChanged: onChanged),
+    onTap: () => onChanged(!value),
+  );
+}
+
+Widget settingsChoiceTile(
+  BuildContext ctx, {
+  required IconData icon,
+  required String title,
+  required String subtitle,
+  required VoidCallback onTap,
+}) {
+  final cs = Theme.of(ctx).colorScheme;
+  return ListTile(
+    leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: cs.onSurfaceVariant, size: 22)),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: Icon(Symbols.chevron_right_rounded, color: cs.onSurfaceVariant, size: 20),
+    onTap: onTap,
+  );
+}
+
+String langName(String code) {
+  const names = {
+    'ara': 'العربية',
+    'eng': 'الإنجليزية',
+    'fra': 'الفرنسية',
+    'spa': 'الإسبانية',
+    'deu': 'الألمانية',
+    'ita': 'الإيطالية',
+  };
+  return names[code] ?? code.toUpperCase();
+}
+
+String themeName(ThemeMode m) => switch (m) {
+      ThemeMode.dark => 'داكن',
+      ThemeMode.light => 'فاتح',
+      ThemeMode.system => 'تلقائي',
+    };
+
+String sortName(String s) => switch (s) {
+      'name' => 'الاسم',
+      'size' => 'الحجم',
+      'duration' => 'المدة',
+      _ => 'التاريخ',
+    };
+
+void showBottomPicker<T>(
+  BuildContext ctx, {
+  required String title,
+  required List<(T, String, IconData)> items,
+  required T currentValue,
+  required void Function(T) onSelected,
+}) {
+  final cs = Theme.of(ctx).colorScheme;
+  showModalBottomSheet(
+    context: ctx,
+    builder: (_) => Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+            child: Text(title, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+        const Divider(height: 1),
+        ...items.map((item) => ListTile(
+              leading: Icon(item.$3),
+              title: Text(item.$2),
+              trailing: currentValue == item.$1 ? Icon(Symbols.check_rounded, color: cs.primary) : null,
+              onTap: () {
+                onSelected(item.$1);
+                Navigator.pop(ctx);
+              },
+            )),
+      ]),
+    ),
+  );
+}
+
+===== lib/screens/settings/settings_screen.dart =====
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../../providers/settings_provider.dart';
+import 'settings_widgets.dart';
+import 'settings_dialogs.dart';
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الإعدادات'),
+        leading: IconButton(icon: const Icon(Symbols.arrow_back_rounded), onPressed: () => Navigator.pop(context)),
+      ),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        settingsHeader(context, 'المظهر', Symbols.palette_rounded),
+        settingsCard(context, [
+          settingsChoiceTile(context,
+              icon: Symbols.dark_mode_rounded,
+              title: 'المظهر',
+              subtitle: themeName(s.themeMode),
+              onTap: () => showThemePicker(context, s)),
+        ]),
+        const SizedBox(height: 20),
+        settingsHeader(context, 'المشغل', Symbols.play_circle_rounded),
+        settingsCard(context, [
+          settingsSwitchTile(context,
+              icon: Symbols.resume_rounded,
+              title: 'تذكر موضع التشغيل',
+              subtitle: 'متابعة من آخر موضع',
+              value: s.rememberPosition,
+              onChanged: s.setRememberPosition),
+          settingsDivider(),
+          settingsSwitchTile(context,
+              icon: Symbols.play_arrow_rounded,
+              title: 'تشغيل تلقائي',
+              subtitle: 'تشغيل الفيديو فور الفتح',
+              value: s.autoPlay,
+              onChanged: s.setAutoPlay),
+          settingsDivider(),
+          settingsChoiceTile(context,
+              icon: Symbols.speed_rounded,
+              title: 'سرعة التشغيل الافتراضية',
+              subtitle: '${s.defaultSpeed}x',
+              onTap: () => showSpeedPicker(context, s)),
+        ]),
+        const SizedBox(height: 20),
+        settingsHeader(context, 'الصوت', Symbols.graphic_eq_rounded),
+        settingsCard(context, [
+          settingsChoiceTile(context,
+              icon: Symbols.volume_up_rounded,
+              title: 'تضخيم الصوت الافتراضي',
+              subtitle: '${s.defaultAudioBoost.round()}%',
+              onTap: () => showBoostDialog(context, s)),
+          settingsDivider(),
+          settingsChoiceTile(context,
+              icon: Symbols.language_rounded,
+              title: 'لغة الصوت المفضلة',
+              subtitle: langName(s.preferredAudioLanguage),
+              onTap: () => showAudioLanguagePicker(context, s)),
+        ]),
+        const SizedBox(height: 20),
+        settingsHeader(context, 'الترجمة', Symbols.subtitles_rounded),
+        settingsCard(context, [
+          settingsSwitchTile(context,
+              icon: Symbols.subtitles_rounded,
+              title: 'إظهار الترجمة تلقائياً',
+              subtitle: 'تفعيل عند بدء التشغيل',
+              value: s.showSubtitlesByDefault,
+              onChanged: s.setShowSubtitlesByDefault),
+          settingsDivider(),
+          settingsChoiceTile(context,
+              icon: Symbols.folder_open_rounded,
+              title: 'مجلد الترجمة',
+              subtitle: s.subtitleFolder.isEmpty ? 'غير محدد' : s.subtitleFolder,
+              onTap: () async {
+                final result = await FilePicker.getDirectoryPath();
+                if (result != null) s.setSubtitleFolder(result);
+              }),
+          settingsDivider(),
+          settingsChoiceTile(context,
+              icon: Symbols.text_fields_rounded,
+              title: 'ترميز الأحرف',
+              subtitle: s.subtitleEncoding,
+              onTap: () => showEncodingPicker(context, s)),
+          settingsDivider(),
+          settingsChoiceTile(context,
+              icon: Symbols.language_rounded,
+              title: 'لغة الترجمة المفضلة',
+              subtitle: langName(s.preferredSubtitleLanguage),
+              onTap: () => showSubtitleLanguagePicker(context, s)),
+          settingsDivider(),
+          settingsChoiceTile(context,
+              icon: Symbols.timeline_rounded,
+              title: 'مزامنة افتراضية',
+              subtitle: '${s.defaultSubtitleSync.toStringAsFixed(1)} ثانية',
+              onTap: () => showSyncDialog(context, s)),
+          settingsDivider(),
+          settingsSwitchTile(context,
+              icon: Symbols.format_italic_rounded,
+              title: 'تأثير مائل',
+              subtitle: 'تفعيل الخط المائل للترجمة',
+              value: s.subtitleItalic,
+              onChanged: s.setSubtitleItalic),
+          settingsDivider(),
+          settingsSwitchTile(context,
+              icon: Symbols.format_textdirection_r_to_l_rounded,
+              title: 'اتجاه النص',
+              subtitle: s.subtitleRTL ? 'من اليمين إلى اليسار' : 'من اليسار إلى اليمين',
+              value: s.subtitleRTL,
+              onChanged: s.setSubtitleRTL),
+        ]),
+        const SizedBox(height: 20),
+        settingsHeader(context, 'حدّ ومظهر الترجمة', Symbols.format_color_text_rounded),
+        settingsCard(context, [
+          settingsSwitchTile(context,
+              icon: Symbols.border_color_rounded,
+              title: 'حدّ خارجي للنص',
+              subtitle: 'إطار حول كل حرف لتحسين الوضوح',
+              value: s.outlineEnabled,
+              onChanged: s.setOutlineEnabled),
+          if (s.outlineEnabled) ...[
+            settingsDivider(),
+            _colorRow(context, 'لون الحدّ', s.outlineColor, s.setOutlineColor),
+            settingsDivider(),
+            _sliderRow(context, 'سماكة الحدّ', s.outlineWidth, 0.5, 6.0, s.outlineWidth.toStringAsFixed(1),
+                s.setOutlineWidth),
+          ],
+          settingsDivider(),
+          settingsSwitchTile(context,
+              icon: Symbols.blur_on_rounded,
+              title: 'ظل الصندوق',
+              subtitle: 'ظل خلف نص الترجمة',
+              value: s.boxShadowEnabled,
+              onChanged: s.setBoxShadowEnabled),
+          if (s.boxShadowEnabled) ...[
+            settingsDivider(),
+            _colorRow(context, 'لون الظل', s.boxShadowColor, s.setBoxShadowColor),
+            settingsDivider(),
+            _sliderRow(context, 'حجم الظل', s.boxShadowBlurRadius, 0, 20, '${s.boxShadowBlurRadius.toInt()}',
+                s.setBoxShadowBlurRadius),
+          ],
+        ]),
+        const SizedBox(height: 20),
+        settingsHeader(context, 'المكتبة', Symbols.video_library_rounded),
+        settingsCard(context, [
+          settingsChoiceTile(context,
+              icon: Symbols.sort_rounded,
+              title: 'الترتيب الافتراضي',
+              subtitle: sortName(s.sortBy),
+              onTap: () => showSortPicker(context, s)),
+          settingsDivider(),
+          settingsSwitchTile(context,
+              icon: Symbols.arrow_downward_rounded,
+              title: 'ترتيب تنازلي',
+              subtitle: 'من الأحدث إلى الأقدم',
+              value: s.sortDesc,
+              onChanged: s.setSortDesc),
+          settingsDivider(),
+          settingsSwitchTile(context,
+              icon: Symbols.grid_view_rounded,
+              title: 'عرض الشبكة',
+              subtitle: 'عرض الفيديوهات كبطاقات',
+              value: s.gridView,
+              onChanged: s.setGridView),
+        ]),
+        const SizedBox(height: 20),
+        settingsHeader(context, 'عن التطبيق', Symbols.info_rounded),
+        settingsCard(context, [
+          ListTile(
+            leading: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
+                child: Icon(Symbols.play_arrow_rounded, color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            title: const Text('SR Player', style: TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: const Text('الإصدار 1.0.0'),
+          ),
+        ]),
+        const SizedBox(height: 32),
+      ]),
+    );
+  }
+
+  Widget _colorRow(BuildContext ctx, String label, Color color, ValueChanged<Color> onChanged) {
+    return ListTile(
+      title: Text(label),
+      trailing: GestureDetector(
+        onTap: () async {
+          final picked = await showColorPickerDialog(ctx, color);
+          onChanged(picked);
+        },
+        child: ColorIndicator(color: color, width: 30, height: 30, borderRadius: 8),
+      ),
+    );
+  }
+
+  Widget _sliderRow(
+      BuildContext ctx, String label, double value, double min, double max, String display, ValueChanged<double> onChanged) {
+    final cs = Theme.of(ctx).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
+              Text(display, style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+            ],
+          ),
+          Slider(value: value, min: min, max: max, onChanged: onChanged, activeColor: cs.primary),
+        ],
+      ),
+    );
+  }
+}
+
+===== lib/screens/info_screen.dart =====
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../models/video_item.dart';
+
+class InfoScreen extends StatelessWidget {
+  final VideoItem video;
+  const InfoScreen({super.key, required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(video.name), // عنوان ديناميكي باسم الفيديو
+        leading: IconButton(icon: const Icon(Symbols.arrow_back_rounded), onPressed: () => Navigator.pop(context)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(children: [
+          // أيقونة الفيديو
+          Container(
+            width: 100, height: 100,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [cs.primaryContainer, cs.secondaryContainer],
+                begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: Icon(Symbols.movie_rounded, color: cs.onPrimaryContainer, size: 52),
+          ),
+          const SizedBox(height: 16),
+          // اسم الملف
+          Text(video.name, textAlign: TextAlign.center,
+              style: TextStyle(color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 24),
+          // معلومات الملف
+          _section(context, 'معلومات الملف', [
+            _row(context, Symbols.storage_rounded, 'الحجم', video.formattedSize),
+            _row(context, Symbols.folder_rounded, 'المجلد', video.folder),
+            _row(context, Symbols.calendar_today_rounded, 'التاريخ', video.formattedDate),
+            _row(context, Symbols.label_rounded, 'الامتداد', video.extension.toUpperCase()),
+          ]),
+          const SizedBox(height: 16),
+          // معلومات الفيديو
+          _section(context, 'معلومات الفيديو', [
+            _row(context, Symbols.timer_rounded, 'المدة', video.formattedDuration),
+          ]),
+          const SizedBox(height: 16),
+          // مسار الملف
+          _section(context, 'المسار', [
+            Padding(padding: const EdgeInsets.all(16),
+              child: SelectableText(video.path,
+                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, height: 1.5))),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _section(BuildContext context, String title, List<Widget> children) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(padding: const EdgeInsets.only(left: 4, bottom: 10),
+        child: Text(title, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 13))),
+      Container(
+        decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: List.generate(children.length, (i) => Column(children: [
+          children[i],
+          if (i < children.length - 1) Divider(height: 1, indent: 56, color: cs.outlineVariant),
+        ]))),
+      ),
+    ]);
+  }
+
+  Widget _row(BuildContext context, IconData icon, String label, String value) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(children: [
+        Container(width: 36, height: 36,
+          decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: cs.onSurfaceVariant, size: 20)),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
+        const Spacer(),
+        Flexible(child: Text(value, style: TextStyle(color: cs.onSurface, fontSize: 13, fontWeight: FontWeight.w600),
+            overflow: TextOverflow.ellipsis)),
+      ]),
+    );
+  }
+}
+===== lib/screens/home/home_screen.dart =====
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../models/video_item.dart';
+import '../../providers/library_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../player/player_screen.dart';
+import '../settings/settings_screen.dart';
+import '../info_screen.dart';
+import 'home_tabs.dart';
+import 'home_search_delegate.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabs;
+  String? _selectedFolder;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initLibrary());
+  }
+
+  Future<void> _initLibrary() async {
+    final lib = context.read<LibraryProvider>();
+    await lib.loadCachedVideos();
+    if (!mounted) return;
+    await lib.scan();
+    await lib.loadRecent();
+  }
+
+  Future<void> _refreshLibrary() async {
+    await context.read<LibraryProvider>().scan();
+    await context.read<LibraryProvider>().loadRecent();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openPlayer(VideoItem video) async {
+    await context.read<LibraryProvider>().addRecent(video.path);
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(video: video)));
+  }
+
+  Future<void> _openByPath(String path) async {
+    if (!File(path).existsSync()) return;
+    final stat = File(path).statSync();
+    await _openPlayer(VideoItem.fromPath(path: path, size: stat.size, modified: stat.modified));
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.pickFiles(type: FileType.video);
+    if (result?.files.single.path != null) await _openByPath(result!.files.single.path!);
+  }
+
+  List<VideoItem> _sorted(List<VideoItem> list) {
+    final s = context.read<SettingsProvider>();
+    final sorted = List<VideoItem>.from(list);
+    switch (s.sortBy) {
+      case 'name':
+        sorted.sort((a, b) => a.name.compareTo(b.name));
+      case 'size':
+        sorted.sort((a, b) => a.size.compareTo(b.size));
+      case 'duration':
+        sorted.sort((a, b) => a.duration.compareTo(b.duration));
+      default:
+        sorted.sort((a, b) => a.modified.compareTo(b.modified));
+    }
+    return s.sortDesc ? sorted.reversed.toList() : sorted;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final settings = context.watch<SettingsProvider>();
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(children: [
+          Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
+              child: Icon(Symbols.play_arrow_rounded, color: cs.onPrimaryContainer, size: 22)),
+          const SizedBox(width: 10),
+          const Text('SR Player'),
+        ]),
+        bottom: TabBar(controller: _tabs, tabs: const [
+          Tab(text: 'الكل'),
+          Tab(text: 'الأخيرة'),
+          Tab(text: 'المجلدات'),
+        ]),
+        actions: [
+          IconButton(
+              icon: const Icon(Symbols.search_rounded),
+              onPressed: () => showSearch(
+                  context: context,
+                  delegate: VideoSearchDelegate(context.read<LibraryProvider>().videos, _openPlayer))),
+          IconButton(
+              icon: Icon(settings.gridView ? Symbols.view_list_rounded : Symbols.grid_view_rounded),
+              onPressed: () => settings.setGridView(!settings.gridView)),
+          IconButton(icon: const Icon(Symbols.sort_rounded), onPressed: () => _sortSheet(settings)),
+          IconButton(
+              icon: const Icon(Symbols.visibility_off_rounded),
+              tooltip: 'الملفات المخفية',
+              onPressed: _showHiddenVideos),
+          IconButton(
+              icon: const Icon(Symbols.settings_rounded),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
+        ],
+      ),
+      body: Consumer<LibraryProvider>(builder: (_, lib, __) {
+        if (lib.loading && lib.videos.isEmpty) {
+          return Center(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            CircularProgressIndicator(color: cs.primary),
+            const SizedBox(height: 16),
+            Text('جاري البحث...', style: TextStyle(color: cs.onSurfaceVariant)),
+          ]));
+        }
+        if (lib.error != null && lib.videos.isEmpty) {
+          return Center(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Symbols.error_rounded, size: 56, color: cs.error),
+            const SizedBox(height: 12),
+            Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+                onPressed: () => _initLibrary(),
+                icon: const Icon(Symbols.refresh_rounded),
+                label: const Text('إعادة المحاولة')),
+          ]));
+        }
+
+        return TabBarView(controller: _tabs, children: [
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: AllTab(
+              videos: _sorted(lib.videos),
+              selectedFolder: _selectedFolder,
+              folders: lib.byFolder.keys.toSet(),
+              onFolderChanged: (f) => setState(() => _selectedFolder = f),
+              onOpen: _openPlayer,
+              onMore: (v) => _menu(v),
+              gridView: settings.gridView,
+              loading: lib.loading,
+            ),
+          ),
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child:
+                RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
+          ),
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: FoldersTab(
+                byFolder: lib.byFolder,
+                onTap: (f) {
+                  setState(() => _selectedFolder = f);
+                  _tabs.animateTo(0);
+                }),
+          ),
+        ]);
+      }),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _pickFile,
+        icon: const Icon(Symbols.folder_open_rounded),
+        label: const Text('فتح ملف'),
+      ),
+    );
+  }
+
+  void _sortSheet(SettingsProvider s) {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+        context: context,
+        builder: (_) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+                    child: Text('ترتيب حسب',
+                        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+                const Divider(height: 1),
+                ...[
+                  ('date', 'التاريخ', Symbols.calendar_today_rounded),
+                  ('name', 'الاسم', Symbols.sort_by_alpha_rounded),
+                  ('size', 'الحجم', Symbols.data_usage_rounded),
+                  ('duration', 'المدة', Symbols.timer_rounded)
+                ].map((e) => ListTile(
+                    leading: Icon(e.$3),
+                    title: Text(e.$2),
+                    trailing: s.sortBy == e.$1 ? Icon(Symbols.check_rounded, color: cs.primary) : null,
+                    onTap: () {
+                      s.sortBy == e.$1 ? s.setSortDesc(!s.sortDesc) : s.setSortBy(e.$1);
+                      Navigator.pop(context);
+                    })),
+                const Divider(height: 1),
+                ListTile(
+                    leading: Icon(s.sortDesc ? Symbols.arrow_downward_rounded : Symbols.arrow_upward_rounded),
+                    title: Text(s.sortDesc ? 'تنازلي' : 'تصاعدي'),
+                    onTap: () {
+                      s.setSortDesc(!s.sortDesc);
+                      Navigator.pop(context);
+                    }),
+              ]),
+            ));
+  }
+
+  void _menu(VideoItem video) {
+    final cs = Theme.of(context).colorScheme;
+    final lib = context.read<LibraryProvider>();
+    final isHidden = lib.hiddenPaths.contains(video.path);
+
+    showModalBottomSheet(
+        context: context,
+        builder: (_) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                    child: Text(video.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14))),
+                const Divider(height: 1),
+                ListTile(
+                    leading: _mIcon(Symbols.play_arrow_rounded, cs.primaryContainer, cs.onPrimaryContainer),
+                    title: const Text('تشغيل'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openPlayer(video);
+                    }),
+                ListTile(
+                    leading: _mIcon(Symbols.info_rounded, cs.secondaryContainer, cs.onSecondaryContainer),
+                    title: const Text('معلومات'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: video)));
+                    }),
+                ListTile(
+                    leading: _mIcon(Symbols.share_rounded, cs.tertiaryContainer, cs.onTertiaryContainer),
+                    title: const Text('مشاركة'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Share.shareXFiles([XFile(video.path)], subject: video.name);
+                    }),
+                ListTile(
+                    leading: _mIcon(
+                      isHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded,
+                      isHidden ? cs.secondaryContainer : cs.errorContainer,
+                      isHidden ? cs.onSecondaryContainer : cs.onErrorContainer,
+                    ),
+                    title: Text(isHidden ? 'إلغاء الإخفاء' : 'إخفاء'),
+                    subtitle: Text(
+                      isHidden ? 'سيظهر في المكتبة مجدداً' : 'لن يظهر في القائمة الرئيسية',
+                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (isHidden) {
+                        lib.unhideVideo(video.path);
+                      } else {
+                        lib.hideVideo(video.path);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('تم إخفاء الفيديو'),
+                            action: SnackBarAction(
+                              label: 'تراجع',
+                              onPressed: () => lib.unhideVideo(video.path),
+                            ),
+                          ),
+                        );
+                      }
+                    }),
+              ]),
+            ));
+  }
+
+  void _showHiddenVideos() {
+    final lib = context.read<LibraryProvider>();
+    final hidden = lib.allVideos.where((v) => lib.hiddenPaths.contains(v.path)).toList();
+    final cs = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.95,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (ctx, scroll) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(children: [
+              Icon(Symbols.visibility_off_rounded, color: cs.primary, size: 20),
+              const SizedBox(width: 8),
+              Text('الملفات المخفية (${hidden.length})',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface)),
+              const Spacer(),
+              if (hidden.isNotEmpty)
+                TextButton(
+                  onPressed: () {
+                    lib.clearHidden();
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('إظهار الكل'),
+                ),
+            ]),
+          ),
+          const Divider(height: 1),
+          if (hidden.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Symbols.visibility_rounded, size: 48, color: cs.onSurfaceVariant),
+                  const SizedBox(height: 12),
+                  Text('لا يوجد ملفات مخفية', style: TextStyle(color: cs.onSurfaceVariant)),
+                ]),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                controller: scroll,
+                itemCount: hidden.length,
+                itemBuilder: (_, i) {
+                  final v = hidden[i];
+                  return ListTile(
+                    leading: Container(
+                      width: 48, height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Symbols.video_file_rounded, color: cs.onSurfaceVariant),
+                    ),
+                    title: Text(v.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(v.formattedSize, style: const TextStyle(fontSize: 12)),
+                    trailing: TextButton(
+                      onPressed: () => lib.unhideVideo(v.path),
+                      child: const Text('إظهار'),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _mIcon(IconData icon, Color bg, Color fg) => Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Icon(icon, color: fg, size: 22));
+}
+
+===== lib/screens/home/home_search_delegate.dart =====
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../../models/video_item.dart';
+import '../../widgets/video_card.dart';
+
+class VideoSearchDelegate extends SearchDelegate<VideoItem?> {
+  final List<VideoItem> videos;
+  final Future<void> Function(VideoItem) onOpen;
+  VideoSearchDelegate(this.videos, this.onOpen);
+
+  @override
+  String get searchFieldLabel => 'ابحث عن فيديو...';
+
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+        if (query.isNotEmpty) IconButton(icon: const Icon(Symbols.close_rounded), onPressed: () => query = ''),
+      ];
+
+  @override
+  Widget buildLeading(BuildContext context) =>
+      IconButton(icon: const Icon(Symbols.arrow_back_rounded), onPressed: () => close(context, null));
+
+  @override
+  Widget buildResults(BuildContext context) => _list(context);
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _list(context);
+
+  Widget _list(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final results =
+        query.isEmpty ? videos : videos.where((v) => v.name.toLowerCase().contains(query.toLowerCase())).toList();
+    if (results.isEmpty) return Center(child: Text('ما لقينا نتائج', style: TextStyle(color: cs.onSurfaceVariant)));
+    return ListView.builder(
+      itemCount: results.length,
+      itemBuilder: (_, i) => VideoCard(
+        video: results[i],
+        onTap: () {
+          close(context, results[i]);
+          onOpen(results[i]);
+        },
+      ),
+    );
+  }
+}
+
+===== lib/screens/home/home_tabs.dart =====
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../../models/video_item.dart';
+import '../../widgets/video_card.dart';
+
+class AllTab extends StatelessWidget {
+  final List<VideoItem> videos;
+  final String? selectedFolder;
+  final Set<String> folders;
+  final void Function(String?) onFolderChanged;
+  final void Function(VideoItem) onOpen;
+  final void Function(VideoItem) onMore;
+  final bool gridView;
+  final bool loading;
+
+  const AllTab({
+    super.key,
+    required this.videos,
+    required this.selectedFolder,
+    required this.folders,
+    required this.onFolderChanged,
+    required this.onOpen,
+    required this.onMore,
+    required this.gridView,
+    this.loading = false,
+  });
+
+  List<VideoItem> get filtered =>
+      selectedFolder == null ? videos : videos.where((v) => v.folder == selectedFolder).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final list = filtered;
+    return Column(children: [
+      if (folders.isNotEmpty) FolderChips(folders: folders, selected: selectedFolder, onChanged: onFolderChanged),
+      if (loading && videos.isNotEmpty) LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
+      Expanded(
+        child: list.isEmpty && !loading
+            ? const EmptyState('ما لقينا فيديوهات', Symbols.video_library_rounded)
+            : gridView
+                ? GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) =>
+                        VideoGridCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i])))
+                : ListView.builder(
+                    padding: const EdgeInsets.only(top: 4, bottom: 90),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) =>
+                        VideoCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i]))),
+      ),
+    ]);
+  }
+}
+
+class FolderChips extends StatelessWidget {
+  final Set<String> folders;
+  final String? selected;
+  final void Function(String?) onChanged;
+  const FolderChips({super.key, required this.folders, required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final list = folders.toList()..sort();
+    return Container(
+      height: 48,
+      color: cs.surface,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        children: [
+          _chip('الكل', selected == null, () => onChanged(null), cs),
+          ...list.map((f) => _chip(f, selected == f, () => onChanged(selected == f ? null : f), cs)),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String label, bool sel, VoidCallback onTap, ColorScheme cs) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        decoration: BoxDecoration(
+          color: sel ? cs.secondaryContainer : cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+              color: sel ? cs.onSecondaryContainer : cs.onSurfaceVariant,
+              fontSize: 13,
+              fontWeight: sel ? FontWeight.w600 : FontWeight.normal),
+        ),
+      ),
+    );
+  }
+}
+
+class RecentTab extends StatelessWidget {
+  final List<String> paths;
+  final List<VideoItem> all;
+  final void Function(String) onOpen;
+  final VoidCallback onClear;
+  const RecentTab({super.key, required this.paths, required this.all, required this.onOpen, required this.onClear});
+
+  List<VideoItem> get list {
+    final map = {for (final v in all) v.path: v};
+    return paths
+        .map((p) {
+          if (map.containsKey(p)) return map[p]!;
+          try {
+            if (!File(p).existsSync()) return null;
+            final stat = File(p).statSync();
+            return VideoItem.fromPath(path: p, size: stat.size, modified: stat.modified);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<VideoItem>()
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final items = list;
+    if (items.isEmpty) return const EmptyState('ما شفتي فيديو بعد', Symbols.history_rounded);
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+        child: Row(children: [
+          Icon(Symbols.history_rounded, size: 16, color: cs.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text('${items.length} ملف', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+          const Spacer(),
+          TextButton.icon(
+              onPressed: onClear,
+              icon: Icon(Symbols.delete_sweep_rounded, size: 16, color: cs.error),
+              label: Text('مسح', style: TextStyle(color: cs.error, fontSize: 12)),
+              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10))),
+        ]),
+      ),
+      Expanded(
+          child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 90),
+              itemCount: items.length,
+              itemBuilder: (_, i) => VideoCard(video: items[i], onTap: () => onOpen(items[i].path)))),
+    ]);
+  }
+}
+
+class FoldersTab extends StatelessWidget {
+  final Map<String, List<VideoItem>> byFolder;
+  final void Function(String) onTap;
+  const FoldersTab({super.key, required this.byFolder, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final keys = byFolder.keys.toList()..sort();
+    if (keys.isEmpty) return const EmptyState('ما لقينا مجلدات', Symbols.folder_off_rounded);
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+      itemCount: keys.length,
+      itemBuilder: (_, i) {
+        final folder = keys[i];
+        final videos = byFolder[folder]!;
+        final total = videos.fold<int>(0, (s, v) => s + v.size);
+        final size = total < 1024 * 1024 * 1024
+            ? '${(total / (1024 * 1024)).toStringAsFixed(0)} MB'
+            : '${(total / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(14)),
+                child: Icon(Symbols.folder_rounded, color: cs.onSecondaryContainer, size: 28)),
+            title: Text(folder, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 15)),
+            subtitle: Text('${videos.length} فيديو  •  $size', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+            trailing: Icon(Symbols.chevron_right_rounded, color: cs.onSurfaceVariant),
+            onTap: () => onTap(folder),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class EmptyState extends StatelessWidget {
+  final String msg;
+  final IconData icon;
+  const EmptyState(this.msg, this.icon, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(color: cs.surfaceContainerHigh, shape: BoxShape.circle),
+            child: Icon(icon, size: 48, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 20),
+        Text(msg, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 17, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Text('اضغط "فتح ملف" لاختيار فيديو', style: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.6), fontSize: 13)),
+      ]),
+    );
+  }
+}
+
+===== lib/screens/player/player_indicators.dart =====
+import 'package:flutter/material.dart';
+
+/// مؤشرات الصوت والسطوع العائمة — مصمّمة لتكون مرئية على أي خلفية
+/// (سواء كانت سوداء أو فاتحة) عبر حدّ ناصع + ظل واضح + لون مميّز.
+class PlayerIndicators {
+  static Widget buildFloatingIndicator({
+    required IconData icon,
+    required double displayValue,   // 0.0 → 1.0
+    required String labelText,
+    required Color color,
+  }) {
+    return _FloatingBar(
+      icon: icon,
+      value: displayValue.clamp(0.0, 1.0),
+      label: labelText,
+      color: color,
+    );
+  }
+}
+
+class _FloatingBar extends StatelessWidget {
+  final IconData icon;
+  final double value;
+  final String label;
+  final Color color;
+
+  const _FloatingBar({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 58,
+      height: 210,
+      decoration: BoxDecoration(
+        // خلفية داكنة شبه شفافة مع border واضح
+        color: const Color(0xCC111111),
+        borderRadius: BorderRadius.circular(29),
+        border: Border.all(color: color.withOpacity(0.7), width: 1.5),
+        boxShadow: [
+          // ظل ملوّن خارجي يجعل الـ indicator مرئياً حتى على خلفية سوداء
+          BoxShadow(
+            color: color.withOpacity(0.45),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+          // ظل أسود داخلي لرفع التباين
+          const BoxShadow(
+            color: Colors.black54,
+            blurRadius: 4,
+            spreadRadius: -2,
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // أيقونة علوية
+          Icon(icon, color: color, size: 20),
+
+          // شريط تقدم عمودي
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: _VerticalBar(value: value, color: color),
+            ),
+          ),
+
+          // النسبة المئوية
+          Text(
+            label,   // ✅ تم التصحيح: كان labelText خطأ
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              shadows: [
+                Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 4),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VerticalBar extends StatelessWidget {
+  final double value;
+  final Color color;
+  const _VerticalBar({required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (ctx, constraints) {
+      final totalH = constraints.maxHeight;
+      final filledH = totalH * value;
+      return Stack(alignment: Alignment.bottomCenter, children: [
+        // الخلفية (الجزء الفارغ)
+        Container(
+          width: 8,
+          height: totalH,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        // الجزء الممتلئ
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 8,
+          height: filledH.clamp(0, totalH),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [
+                color,
+                color.withOpacity(0.7),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: [
+              BoxShadow(color: color.withOpacity(0.5), blurRadius: 6),
+            ],
+          ),
+        ),
+      ]);
+    });
+  }
+}
+===== lib/screens/player/player_controls.dart =====
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+// ══════════════════════════════════════════════
+// الشريط العلوي — مبسّط: رجوع + اسم الفيديو + زرّا الصوت والترجمة
+// ══════════════════════════════════════════════
+class PlayerTopBar extends StatelessWidget {
+  final String videoName;
+  final VoidCallback onBack;
+  final VoidCallback onAudioMenu;
+  final VoidCallback onSubtitleMenu;
+  final bool showSubtitles;
+  // الخصائص التالية مُبقاة للتوافق لكن لم تعد تُظهر في TopBar
+  final VoidCallback? onToggleFit;
+  final VoidCallback? onToggleOrientation;
+  final VoidCallback? onPip;
+  final bool isLandscape;
+
+  const PlayerTopBar({
+    super.key,
+    required this.videoName,
+    required this.onBack,
+    required this.onAudioMenu,
+    required this.onSubtitleMenu,
+    required this.showSubtitles,
+    this.onToggleFit,
+    this.onToggleOrientation,
+    this.onPip,
+    this.isLandscape = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.black.withOpacity(0.75), Colors.transparent],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Row(children: [
+          IconButton(
+            icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white),
+            onPressed: onBack,
+          ),
+          Expanded(
+            child: Text(
+              videoName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+              ),
+            ),
+          ),
+          // زرّا الصوت والترجمة في الأعلى
+          _TopIconBtn(
+            icon: Symbols.graphic_eq_rounded,
+            onTap: onAudioMenu,
+          ),
+          _TopIconBtn(
+            icon: showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
+            onTap: onSubtitleMenu,
+            color: showSubtitles ? Colors.lightBlueAccent : Colors.white60,
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _TopIconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+  const _TopIconBtn({required this.icon, required this.onTap, this.color = Colors.white70});
+  @override
+  Widget build(BuildContext context) => IconButton(
+        icon: Icon(icon, color: color, size: 24),
+        onPressed: onTap,
+      );
+}
+
+// ══════════════════════════════════════════════
+// الشريط السفلي الشامل
+// ┌─────────────────────────────────────────┐
+// │  00:31 ═══════●══════════════════ 23:35 │
+// │    [PiP]  [◀10] [⏸] [10▶]  [Fit] [🔄] │
+// └─────────────────────────────────────────┘
+// ══════════════════════════════════════════════
+class PlayerBottomBar extends StatelessWidget {
+  final Duration position;
+  final Duration duration;
+  final ValueChanged<double> onSeek;
+  final Color primaryColor;
+  final bool isPlaying;
+  final VoidCallback onPlayPause;
+  final VoidCallback onSkipBack;
+  final VoidCallback onSkipForward;
+  final VoidCallback onToggleFit;
+  final VoidCallback onToggleLock;
+  final VoidCallback onPip;
+  final VoidCallback onToggleOrientation;
+  final bool isLandscape;
+
+  const PlayerBottomBar({
+    super.key,
+    required this.position,
+    required this.duration,
+    required this.onSeek,
+    required this.primaryColor,
+    required this.isPlaying,
+    required this.onPlayPause,
+    required this.onSkipBack,
+    required this.onSkipForward,
+    required this.onToggleFit,
+    required this.onToggleLock,
+    required this.onPip,
+    required this.onToggleOrientation,
+    this.isLandscape = true,
+  });
+
+  String _fmt(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Colors.black.withOpacity(0.85), Colors.transparent],
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // ── شريط التقدم الزمني ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Row(children: [
+                Text(_fmt(position),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                      activeTrackColor: primaryColor,
+                      inactiveTrackColor: Colors.white24,
+                      thumbColor: primaryColor,
+                      overlayColor: primaryColor.withOpacity(0.25),
+                    ),
+                    child: Slider(value: progress, onChanged: onSeek),
+                  ),
+                ),
+                Text(_fmt(duration),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ]),
+            ),
+
+            // ── صف الأزرار ──
+            SizedBox(
+              height: 52,
+              child: Row(children: [
+                // ── الطرف الأيسر: PiP + قفل ──
+                _BottomBtn(
+                  icon: Symbols.picture_in_picture_rounded,
+                  onTap: onPip,
+                  size: 22,
+                ),
+                _BottomBtn(
+                  icon: Symbols.lock_rounded,
+                  onTap: onToggleLock,
+                  size: 22,
+                ),
+
+                const Spacer(),
+
+                // ── وسط: تأخير + play/pause + تقديم ──
+                _BottomBtn(
+                  icon: Symbols.replay_10_rounded,
+                  onTap: onSkipBack,
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                _PlayBtn(isPlaying: isPlaying, onTap: onPlayPause, color: primaryColor),
+                const SizedBox(width: 8),
+                _BottomBtn(
+                  icon: Symbols.forward_10_rounded,
+                  onTap: onSkipForward,
+                  size: 28,
+                ),
+
+                const Spacer(),
+
+                // ── الطرف الأيمن: تدوير + تكبير/تصغير فيديو ──
+                _BottomBtn(
+                  icon: isLandscape
+                      ? Symbols.screen_rotation_rounded
+                      : Symbols.stay_current_portrait_rounded,
+                  onTap: onToggleOrientation,
+                  size: 22,
+                ),
+                _BottomBtn(
+                  icon: Symbols.aspect_ratio_rounded,
+                  onTap: onToggleFit,
+                  size: 22,
+                ),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayBtn extends StatelessWidget {
+  final bool isPlaying;
+  final VoidCallback onTap;
+  final Color color;
+  const _PlayBtn({required this.isPlaying, required this.onTap, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.85),
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 12)],
+        ),
+        child: Icon(
+          isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
+          color: Colors.white,
+          size: 32,
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final double size;
+  const _BottomBtn({required this.icon, required this.onTap, this.size = 24});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        child: Icon(icon, color: Colors.white70, size: size),
+      ),
+    );
+  }
+}
+
+/// زر تحكم مستقل (مُبقى للتوافق مع استدعاءات قديمة)
+class CtrlBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const CtrlBtn(this.icon, this.onTap, {super.key});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 50,
+          height: 50,
+          decoration:
+              BoxDecoration(color: Colors.white.withOpacity(0.12), shape: BoxShape.circle),
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+      );
+}
+
+===== lib/screens/player/player_screen.dart =====
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:screen_brightness/screen_brightness.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
+import '../../models/video_item.dart';
+import '../../providers/library_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../services/subtitle_service.dart';
+import '../../services/pip_service.dart';
+import 'player_indicators.dart';
+import 'player_controls.dart';
+import 'player_audio_panel.dart';
+import 'player_subtitle_panel.dart';
+import 'player_fit_mode.dart';
+import 'subtitle_style_builder.dart';
+
+enum ActiveMenu { none, subtitles, audio }
+
+class PlayerScreen extends StatefulWidget {
+  final VideoItem video;
+  const PlayerScreen({super.key, required this.video});
+  @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
+  late final Player _player;
+  late final VideoController _controller;
+
+  ActiveMenu _currentMenu = ActiveMenu.none;
+
+  // ── متغيرات جاستر الترجمة (إصبعين) ──
+  double _startSubtitleSize = 24.0;
+  double _startBottomPadding = 0.0;
+  Offset _startFocalPoint = Offset.zero;
+
+  // ── مستوى الصوت/التكبير المدمج (0% إلى 200%)، نفس المصدر المستخدَم
+  // من قِبل كلٍ من جاستر السحب العمودي ولوحة "تكبير الصوت" الجانبية،
+  // حتى لا يوجد مصدران منفصلان للحقيقة. القيمة الافتراضية الأولى
+  // تُؤخذ من Settings.defaultAudioBoost عند فتح الفيديو لأول مرة.
+  double _volumeLevel = 1.0;
+
+  bool _initialized = false;
+  bool _showControls = true;
+  bool _isLocked = false;
+  Timer? _hideTimer;
+  Timer? _saveTimer;
+  Timer? _indicatorTimer;
+
+  bool _showSubtitles = true;
+  List<SubtitleTrack> _subtitleTracks = [];
+  List<AudioTrack> _audioTracks = [];
+
+  double _speed = 1.0;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  bool _isPlaying = false;
+  bool _isLandscape = true;
+  VideoFitMode _fitMode = VideoFitMode.contain;
+  String? _fitOverlayText;
+  Timer? _fitOverlayTimer;
+
+  double _subtitleSync = 0.0;
+  bool _autoSubtitleSelected = false;
+  bool _autoAudioSelected = false;
+
+  /// هل جاستر الإصبعين نشط حالياً لتحريك الترجمة/تكبيرها
+  bool _subtitleGestureActive = false;
+
+  /// آخر إدخالات SRT الخام (قبل تطبيق إزاحة المزامنة)، تُستخدم لإعادة
+  /// بناء الترجمة بسرعة عند تغيير _subtitleSync دون إعادة قراءة الملف.
+  List<SubtitleEntry>? _lastSubtitleEntries;
+
+  final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
+  final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
+
+  final ValueNotifier<bool> _showVolNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> _showBrightNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> _showSeekNotifier = ValueNotifier(false);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WakelockPlus.enable();
+    PipService.isInPipMode.addListener(_onPipModeChanged);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() => _isLandscape = MediaQuery.of(context).orientation == Orientation.landscape);
+      }
+    });
+
+    _enterFullscreen();
+    final settings = context.read<SettingsProvider>();
+    _showSubtitles = settings.showSubtitlesByDefault;
+    _speed = settings.defaultSpeed;
+    _subtitleSync = settings.defaultSubtitleSync;
+    // قيمة افتراضية أولية من إعدادات تكبير الصوت؛ تُستبدَل بالقيمة
+    // المحفوظة محلياً لهذا التشغيل إن وُجدت (انظر _loadPersistedVolumeAndBrightness).
+    _volumeLevel = (settings.defaultAudioBoost / 100.0).clamp(0.0, 2.0);
+
+    _loadPersistedVolumeAndBrightness();
+
+    _player = Player();
+    _controller = VideoController(_player);
+    _initPlayer();
+    _loadFitMode();
+  }
+
+  void _onPipModeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadPersistedVolumeAndBrightness() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getDouble('player_volume_level');
+    if (saved != null) {
+      _volumeLevel = saved.clamp(0.0, 2.0);
+      if (mounted) setState(() {});
+    }
+    final bright = prefs.getDouble('player_brightness') ?? 0.7;
+    _brightnessNotifier.value = bright.clamp(0.1, 1.0);
+  }
+
+  Future<void> _savePersistedVolume() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('player_volume_level', _volumeLevel);
+  }
+
+  Future<void> _loadFitMode() async {
+    _fitMode = await VideoFitSettings.load();
+    if (mounted) setState(() {});
+  }
+
+  void _enterFullscreen() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _setOrientations();
+  }
+
+  void _setOrientations() {
+    if (_isLandscape) {
+      SystemChrome.setPreferredOrientations(
+          [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    } else {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+  }
+
+  void _toggleOrientation() {
+    setState(() => _isLandscape = !_isLandscape);
+    _setOrientations();
+  }
+
+  void _toggleLock() {
+    setState(() {
+      _isLocked = !_isLocked;
+      if (_isLocked) {
+        _showControls = false;
+        _currentMenu = ActiveMenu.none;
+      }
+    });
+  }
+
+  void _toggleFit() {
+    setState(() {
+      _fitMode = VideoFitMode.values[(_fitMode.index + 1) % VideoFitMode.values.length];
+      _showFitOverlay();
+    });
+    VideoFitSettings.save(_fitMode);
+  }
+
+  void _showFitOverlay() {
+    _fitOverlayText = modeName(_fitMode);
+    _fitOverlayTimer?.cancel();
+    _fitOverlayTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) setState(() => _fitOverlayText = null);
+    });
+  }
+
+  Future<void> _initPlayer() async {
+    final settings = context.read<SettingsProvider>();
+    try {
+      await _player.open(Media(widget.video.path), play: settings.autoPlay);
+      _player.setRate(_speed);
+      _player.setVolume(_volumeLevel * 100.0);
+
+      if (settings.rememberPosition) {
+        try {
+          final saved = await context.read<LibraryProvider>().getPosition(widget.video.path);
+          if (saved != null && saved.inSeconds > 0) await _player.seek(saved);
+        } catch (_) {}
+      }
+
+      _player.stream.position.listen((pos) {
+        if (!mounted) return;
+        setState(() => _position = pos);
+        if (settings.rememberPosition) {
+          _saveTimer?.cancel();
+          _saveTimer = Timer(const Duration(seconds: 5), () {
+            if (mounted) context.read<LibraryProvider>().savePosition(widget.video.path, _position);
+          });
+        }
+      });
+
+      _player.stream.duration.listen((dur) => mounted ? setState(() => _duration = dur) : null);
+      _player.stream.playing.listen((playing) => mounted ? setState(() => _isPlaying = playing) : null);
+
+      _player.stream.tracks.listen((tracks) {
+        if (!mounted) return;
+        setState(() {
+          _subtitleTracks = tracks.subtitle;
+          _audioTracks = tracks.audio;
+        });
+        _applyPreferredSubtitleLanguage(settings);
+        _applyPreferredAudioLanguage(settings);
+      });
+
+      try {
+        _brightnessNotifier.value = await ScreenBrightness.instance.application;
+        if (_brightnessNotifier.value < 0.1) _brightnessNotifier.value = 0.1;
+        await ScreenBrightness.instance.setApplicationScreenBrightness(_brightnessNotifier.value);
+      } catch (_) {
+        _brightnessNotifier.value = 0.7;
+      }
+
+      setState(() => _initialized = true);
+      _scheduleHide();
+      // محاولة تحميل ترجمة خارجية مجاورة للفيديو. تُطبَّق هذه بعد
+      // محاولة اختيار مسار ترجمة مدمج مفضّل (عبر تدفّق tracks أعلاه)
+      // لإعطاء الأولوية للترجمة الداخلية إن وُجدت بنفس اللغة المفضّلة.
+      await _loadSubtitleFromAdjacentFile(settings);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تشغيل الملف: $e')));
+        Navigator.pop(context);
+      }
+    }
+  }
+
+  Future<void> _loadSubtitleFromAdjacentFile(SettingsProvider s) async {
+    if (_autoSubtitleSelected && _showSubtitles) return;
+    final srtPath = SubtitleService.findSrt(widget.video.path);
+    if (srtPath != null) await _loadSrtFile(srtPath, s.subtitleEncoding, silent: true);
+  }
+
+  void _applyPreferredSubtitleLanguage(SettingsProvider s) {
+    if (_autoSubtitleSelected || _subtitleTracks.isEmpty) return;
+    for (final track in _subtitleTracks) {
+      if (track.language == s.preferredSubtitleLanguage) {
+        _player.setSubtitleTrack(track);
+        setState(() => _showSubtitles = true);
+        _autoSubtitleSelected = true;
+        return;
+      }
+    }
+    _autoSubtitleSelected = true;
+  }
+
+  /// يطبّق لغة الصوت المفضَّلة من الإعدادات إن وُجد مسار صوتي مطابق
+  /// ضمن مسارات الفيديو المتعددة. سابقاً كان هذا الإعداد محفوظاً دون
+  /// أي تأثير فعلي على اختيار المسار الصوتي.
+  void _applyPreferredAudioLanguage(SettingsProvider s) {
+    if (_autoAudioSelected || _audioTracks.isEmpty) return;
+    for (final track in _audioTracks) {
+      if (track.language == s.preferredAudioLanguage) {
+        _player.setAudioTrack(track);
+        _autoAudioSelected = true;
+        return;
+      }
+    }
+    _autoAudioSelected = true;
+  }
+
+  Future<void> _loadSrtFile(String path, String encoding, {bool silent = false}) async {
+    try {
+      await _player.setSubtitleTrack(SubtitleTrack.no());
+      final entries = await SubtitleService.load(path, encodingName: encoding);
+      if (entries.isEmpty) return;
+
+      _lastSubtitleEntries = entries;
+      await _applySubtitleSyncOffset();
+
+      if (mounted) {
+        setState(() => _showSubtitles = true);
+        if (!silent) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('✅ تم تحميل الترجمة')));
+        }
+      }
+    } catch (e) {
+      if (mounted && !silent) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل تحميل الترجمة: $e')));
+      }
+    }
+  }
+
+  String _formatSrtTime(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final ms = (d.inMilliseconds.remainder(1000)).toString().padLeft(3, '0');
+    return '$h:$m:$s,$ms';
+  }
+
+  Future<void> _pickSubtitle() async {
+    final result =
+        await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'SRT', 'ssa', 'ass']);
+    if (result?.files.single.path != null) {
+      final settings = context.read<SettingsProvider>();
+      await _loadSrtFile(result!.files.single.path!, settings.subtitleEncoding);
+    }
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _isPlaying && !_isLocked && _currentMenu == ActiveMenu.none) {
+        setState(() => _showControls = false);
+      }
+    });
+  }
+
+  void cancelHideTimer() {
+    _hideTimer?.cancel();
+  }
+
+  void _toggleControls() {
+    if (_isLocked) return;
+    if (_currentMenu != ActiveMenu.none) {
+      setState(() => _currentMenu = ActiveMenu.none);
+      _scheduleHide();
+      return;
+    }
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _scheduleHide();
+  }
+
+  Future<void> _enterPip() async {
+    await PipService.enter();
+  }
+
+  void _resetIndicatorTimer() {
+    _indicatorTimer?.cancel();
+    _indicatorTimer = Timer(const Duration(seconds: 1), () {
+      _showVolNotifier.value = false;
+      _showBrightNotifier.value = false;
+    });
+  }
+
+  String? _seekHintText;
+  Timer? _seekHintTimer;
+
+  void _showSeekHint(int seconds) {
+    setState(() => _seekHintText = seconds > 0 ? '+${seconds}s ⏩' : '${seconds}s ⏪');
+    _seekHintTimer?.cancel();
+    _seekHintTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _seekHintText = null);
+    });
+  }
+
+  void _onVolumeChanged(double newLevel) {
+    setState(() {
+      _volumeLevel = newLevel.clamp(0.0, 2.0);
+      _player.setVolume(_volumeLevel * 100.0);
+    });
+    _savePersistedVolume();
+  }
+
+  /// يطبّق إزاحة مزامنة الترجمة على المشغل. ملاحظة تقنية: نسخة
+  /// media_kit المستخدَمة هنا لا توفر دالة موثَّقة لضبط تأخير الترجمة
+  /// مباشرة (لا يوجد ما يعادل setSubtitleDelay في الواجهة الرسمية)،
+  /// لذا تُطبَّق الإزاحة عملياً بإعادة بناء نص SRT بتوقيت معدَّل
+  /// وإعادة تحميله عبر SubtitleTrack.data، وهي واجهة موثَّقة ومضمونة.
+  void _onSubtitleSyncChanged(double v) {
+    setState(() => _subtitleSync = v);
+    context.read<SettingsProvider>().setDefaultSubtitleSync(v);
+    if (_lastSubtitleEntries != null && _lastSubtitleEntries!.isNotEmpty) {
+      _applySubtitleSyncOffset();
+    }
+  }
+
+  Future<void> _applySubtitleSyncOffset() async {
+    final entries = _lastSubtitleEntries;
+    if (entries == null || entries.isEmpty) return;
+    final offset = Duration(milliseconds: (_subtitleSync * 1000).round());
+
+    final srtContent = StringBuffer();
+    for (int i = 0; i < entries.length; i++) {
+      final e = entries[i];
+      final start = e.start + offset;
+      final end = e.end + offset;
+      if (end.isNegative) continue;
+      srtContent.writeln('${i + 1}');
+      srtContent.writeln(
+          '${_formatSrtTime(start.isNegative ? Duration.zero : start)} --> ${_formatSrtTime(end)}');
+      srtContent.writeln(e.text);
+      srtContent.writeln();
+    }
+    await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
+  }
+
+  // ─── دوال بناء النافذة الجانبية ───
+  Widget _buildAudioPanelContent() {
+    final cs = Theme.of(context).colorScheme;
+    final uniqueAudio = _audioTracks.toSet().toList();
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          AudioBoostSection(boost: _volumeLevel * 100, onChanged: (v) => _onVolumeChanged(v / 100)),
+          const Divider(color: Colors.white24, height: 32),
+          if (uniqueAudio.isNotEmpty) ...[
+            const Text('المسارات الصوتية',
+                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...uniqueAudio.map((track) {
+              final name = track.title ?? track.language ?? 'مسار صوتي';
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(name, style: const TextStyle(color: Colors.white)),
+                subtitle: track.language != null
+                    ? Text(track.language!, style: const TextStyle(color: Colors.white54))
+                    : null,
+                trailing: _player.state.track.audio == track ? Icon(Icons.check, color: cs.primary) : null,
+                onTap: () => setState(() => _player.setAudioTrack(track)),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubtitlePanelContent() {
+    final cs = Theme.of(context).colorScheme;
+    final uniqueTracks = _subtitleTracks.toSet().toList();
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('تفعيل الترجمة', style: TextStyle(color: Colors.white, fontSize: 15)),
+              Switch(
+                value: _showSubtitles,
+                onChanged: (v) {
+                  setState(() => _showSubtitles = v);
+                  if (!v) _player.setSubtitleTrack(SubtitleTrack.no());
+                },
+                activeColor: cs.primary,
+              ),
+            ],
+          ),
+          if (uniqueTracks.isNotEmpty) ...[
+            const Divider(color: Colors.white24, height: 24),
+            ...uniqueTracks.map((track) {
+              final name = track.title ?? track.language ?? 'ترجمة';
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(name, style: const TextStyle(color: Colors.white)),
+                trailing:
+                    _player.state.track.subtitle == track ? Icon(Icons.check, color: cs.primary) : null,
+                onTap: () {
+                  _player.setSubtitleTrack(track);
+                  setState(() => _showSubtitles = true);
+                },
+              );
+            }),
+          ],
+          const Divider(color: Colors.white24, height: 24),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.folder_open, color: Colors.white70),
+            title: const Text('اختيار ملف ترجمة يدوي', style: TextStyle(color: Colors.white)),
+            onTap: () {
+              _pickSubtitle();
+              setState(() => _currentMenu = ActiveMenu.none);
+            },
+          ),
+          const Divider(color: Colors.white24, height: 24),
+          const Text('المزامنة والسرعة',
+              style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('تأخير الترجمة', style: TextStyle(color: Colors.white, fontSize: 14)),
+              Text('${_subtitleSync > 0 ? '+' : ''}${_subtitleSync.toStringAsFixed(1)}s',
+                  style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          SliderTheme(
+            data: SliderThemeData(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6)),
+            child: Slider(
+              value: _subtitleSync,
+              min: -5.0,
+              max: 5.0,
+              divisions: 100,
+              onChanged: _onSubtitleSyncChanged,
+              activeColor: cs.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('المظهر والتخصيص',
+              style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const SubtitleAppearancePanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidePanel() {
+    const double panelWidth = 340.0;
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      top: 0,
+      bottom: 0,
+      right: _currentMenu != ActiveMenu.none ? 0 : -panelWidth,
+      width: panelWidth,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xD9000000),
+          border: Border(left: BorderSide(color: Colors.white24, width: 1)),
+        ),
+        child: SafeArea(
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _currentMenu == ActiveMenu.subtitles ? 'إعدادات الترجمة' : 'إعدادات الصوت',
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Symbols.close_rounded, color: Colors.white70),
+                        onPressed: () {
+                          setState(() => _currentMenu = ActiveMenu.none);
+                          _scheduleHide();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white24, height: 1),
+                Expanded(
+                  child: _currentMenu == ActiveMenu.subtitles
+                      ? _buildSubtitlePanelContent()
+                      : _currentMenu == ActiveMenu.audio
+                          ? _buildAudioPanelContent()
+                          : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final s = context.watch<SettingsProvider>();
+
+    // الحالة الحقيقية القادمة من Android (انظر PipService)، وليست
+    // قيمة محلية مفترَضة لا تتحدّث أبداً عند الدخول الفعلي في PiP.
+    if (PipService.isInPipMode.value) {
+      return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
+    }
+
+    return PopScope(
+      canPop: !_isLocked,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) {
+          if (_currentMenu != ActiveMenu.none) {
+            setState(() => _currentMenu = ActiveMenu.none);
+            return;
+          }
+          if (!_isLocked) await _enterPip();
+        }
+        if (_isLocked) setState(() => _isLocked = false);
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: !_initialized
+            ? Center(child: CircularProgressIndicator(color: cs.primary))
+            : Stack(children: [
+                // ─── طبقة الجاستر الشاملة ───
+                // مقسّمة لثلاث مناطق أفقية:
+                //   يسار الشاشة  → سطوع (سحب عمودي)  + تأخير (ضغط مزدوج)
+                //   منتصف الشاشة → play/pause (ضغط مزدوج)
+                //   يمين الشاشة  → صوت   (سحب عمودي)  + تقديم (ضغط مزدوج)
+                // إصبعان في أي مكان → تكبير/تصغير وتحريك الترجمة (عند الإيقاف فقط)
+                GestureDetector(
+                  onTap: _toggleControls,
+                  onDoubleTapDown: _isLocked
+                      ? null
+                      : (details) {
+                          final x = details.localPosition.dx;
+                          // ثلث أيسر → تأخير 10 ثواني
+                          if (x < screenWidth / 3) {
+                            final target = _position - const Duration(seconds: 10);
+                            _player.seek(target.isNegative ? Duration.zero : target);
+                            _showSeekHint(-10);
+                          }
+                          // ثلث أيمن → تقديم 10 ثواني
+                          else if (x > screenWidth * 2 / 3) {
+                            final target = _position + const Duration(seconds: 10);
+                            _player.seek(target > _duration ? _duration : target);
+                            _showSeekHint(10);
+                          }
+                          // المنتصف → play / pause
+                          else {
+                            _isPlaying ? _player.pause() : _player.play();
+                          }
+                        },
+                  onScaleStart: (details) {
+                    if (_isLocked) return;
+                    if (details.pointerCount == 2) {
+                      _startSubtitleSize = s.subtitleFontSize;
+                      _startBottomPadding = s.bottomPadding;
+                      _startFocalPoint = details.focalPoint;
+                      _subtitleGestureActive = true;
+                    } else {
+                      _seekMsNotifier.value = _position.inMilliseconds.toDouble();
+                      _subtitleGestureActive = false;
+                    }
+                  },
+                  onScaleUpdate: (details) {
+                    if (_isLocked) return;
+
+                    // ── إصبعان: تكبير/تصغير وتحريك الترجمة ──
+                    if (details.pointerCount == 2 && _subtitleGestureActive) {
+                      final newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
+                      s.setSubtitleFontSize(newSize);
+
+                      final dy = details.focalPoint.dy - _startFocalPoint.dy;
+                      final newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.85);
+                      s.setBottomPadding(newPadding);
+                      return;
+                    }
+
+                    // ── إصبع واحد ──
+                    if (details.pointerCount != 1) return;
+                    if (details.focalPointDelta.distance < 0.5) return;
+
+                    final isRight = details.focalPoint.dx > screenWidth / 2;
+                    final dx = details.focalPointDelta.dx.abs();
+                    final dy = details.focalPointDelta.dy.abs();
+                    final isHorizontal = dx > dy;
+
+                    if (isHorizontal) {
+                      // سحب أفقي → seek مرئي
+                      final seekFactor = (_duration.inMilliseconds * 0.25)
+                          .clamp(30000.0, 600000.0);
+                      final change = (details.focalPointDelta.dx / screenWidth) * seekFactor;
+                      _seekMsNotifier.value = (_seekMsNotifier.value + change)
+                          .clamp(0.0, _duration.inMilliseconds.toDouble());
+                      _showSeekNotifier.value = true;
+                      _showVolNotifier.value = false;
+                      _showBrightNotifier.value = false;
+                    } else {
+                      // سحب عمودي → صوت (يمين) أو سطوع (يسار)
+                      final delta = -details.focalPointDelta.dy / 180.0;
+                      if (isRight) {
+                        _onVolumeChanged(_volumeLevel + delta);
+                        _showVolNotifier.value = true;
+                        _showBrightNotifier.value = false;
+                        _showSeekNotifier.value = false;
+                      } else {
+                        final newBright = (_brightnessNotifier.value + delta).clamp(0.05, 1.0);
+                        _brightnessNotifier.value = newBright;
+                        ScreenBrightness.instance.setApplicationScreenBrightness(newBright);
+                        _showBrightNotifier.value = true;
+                        _showVolNotifier.value = false;
+                        _showSeekNotifier.value = false;
+                      }
+                      _resetIndicatorTimer();
+                    }
+                  },
+                  onScaleEnd: (details) {
+                    if (_isLocked) return;
+                    _subtitleGestureActive = false;
+                    if (_showSeekNotifier.value) {
+                      _player.seek(Duration(milliseconds: _seekMsNotifier.value.toInt()));
+                      _showSeekNotifier.value = false;
+                      _scheduleHide();
+                    }
+                  },
+                  child: Video(
+                    controller: _controller,
+                    fit: getBoxFit(_fitMode),
+                    controls: NoVideoControls,
+                    subtitleViewConfiguration: SubtitleViewConfiguration(
+                      style: buildSubtitleTextStyle(s),
+                      textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
+                      padding: EdgeInsets.fromLTRB(s.horizontalMargin, 0, s.horizontalMargin, s.bottomPadding),
+                    ),
+                  ),
+                ),
+
+                // ── شريط مؤشر التمرير (Seek) ──
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showSeekNotifier,
+                  builder: (context, show, child) {
+                    if (!show) return const SizedBox.shrink();
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _seekMsNotifier,
+                      builder: (context, seekMs, child) {
+                        return Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.75),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Symbols.fast_forward_rounded, color: Colors.white, size: 32),
+                              const SizedBox(height: 8),
+                              Text(
+                                _fmt(Duration(milliseconds: seekMs.toInt())),
+                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                              ),
+                            ]),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+
+                // ── مؤشر الصوت (يمين الشاشة — جانب إيماءة الصوت) ──
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showVolNotifier,
+                  builder: (context, show, child) {
+                    if (!show) return const SizedBox.shrink();
+                    final bool isBoosted = _volumeLevel > 1.0;
+                    return Positioned(
+                      right: 20,
+                      top: MediaQuery.of(context).size.height * 0.22,
+                      child: PlayerIndicators.buildFloatingIndicator(
+                        icon: _volumeLevel == 0
+                            ? Icons.volume_off_rounded
+                            : isBoosted
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_down_rounded,
+                        displayValue: (_volumeLevel / 2.0).clamp(0.0, 1.0),
+                        labelText: '${(_volumeLevel * 100).round()}%',
+                        color: isBoosted ? Colors.orangeAccent : const Color(0xFF4FC3F7),
+                      ),
+                    );
+                  },
+                ),
+
+                // ── مؤشر السطوع (يسار الشاشة — جانب إيماءة السطوع) ──
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showBrightNotifier,
+                  builder: (context, show, child) {
+                    if (!show) return const SizedBox.shrink();
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _brightnessNotifier,
+                      builder: (context, brightness, child) {
+                        return Positioned(
+                          left: 20,
+                          top: MediaQuery.of(context).size.height * 0.22,
+                          child: PlayerIndicators.buildFloatingIndicator(
+                            icon: brightness < 0.15
+                                ? Icons.brightness_2_rounded
+                                : brightness < 0.5
+                                    ? Icons.brightness_5_rounded
+                                    : Icons.brightness_7_rounded,
+                            displayValue: brightness,
+                            labelText: '${(brightness * 100).round()}%',
+                            color: const Color(0xFFFFD54F),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+
+                if (_seekHintText != null)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.72),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Text(
+                        _seekHintText!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (_fitOverlayText != null)
+                  Positioned(
+                    top: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(_fitOverlayText!,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ),
+
+                if (_isLocked)
+                  Positioned(
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: _toggleLock,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.lock_rounded, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text('مقفل — اضغط للفتح', style: TextStyle(color: Colors.white, fontSize: 13)),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // ── واجهة أزرار التحكم ──
+                if (_showControls && !_isLocked) ...[
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: PlayerTopBar(
+                      videoName: widget.video.name,
+                      onBack: () => Navigator.pop(context),
+                      onToggleFit: _toggleFit,
+                      onToggleOrientation: _toggleOrientation,
+                      onPip: _enterPip,
+                      isLandscape: _isLandscape,
+                      showSubtitles: _showSubtitles,
+                      onAudioMenu: () {
+                        setState(() {
+                          _currentMenu = _currentMenu == ActiveMenu.audio ? ActiveMenu.none : ActiveMenu.audio;
+                          _currentMenu != ActiveMenu.none ? cancelHideTimer() : _scheduleHide();
+                        });
+                      },
+                      onSubtitleMenu: () {
+                        setState(() {
+                          _currentMenu = _currentMenu == ActiveMenu.subtitles ? ActiveMenu.none : ActiveMenu.subtitles;
+                          _currentMenu != ActiveMenu.none ? cancelHideTimer() : _scheduleHide();
+                        });
+                      },
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: PlayerBottomBar(
+                      position: _position,
+                      duration: _duration,
+                      onSeek: (v) => _player.seek(Duration(milliseconds: (v * _duration.inMilliseconds).toInt())),
+                      primaryColor: cs.primary,
+                      isPlaying: _isPlaying,
+                      onPlayPause: () => _isPlaying ? _player.pause() : _player.play(),
+                      onSkipBack: () {
+                        final target = _position - const Duration(seconds: 10);
+                        _player.seek(target.isNegative ? Duration.zero : target);
+                      },
+                      onSkipForward: () {
+                        final target = _position + const Duration(seconds: 10);
+                        _player.seek(target > _duration ? _duration : target);
+                      },
+                      onToggleFit: _toggleFit,
+                      onToggleLock: _toggleLock,
+                      onPip: _enterPip,
+                      onToggleOrientation: _toggleOrientation,
+                      isLandscape: _isLandscape,
+                    ),
+                  ),
+                ],
+
+                // ── النافذة الجانبية ──
+                _buildSidePanel(),
+              ]),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    PipService.isInPipMode.removeListener(_onPipModeChanged);
+    _brightnessNotifier.dispose();
+    _seekMsNotifier.dispose();
+    _showVolNotifier.dispose();
+    _showBrightNotifier.dispose();
+    _showSeekNotifier.dispose();
+    _hideTimer?.cancel();
+    _saveTimer?.cancel();
+    _indicatorTimer?.cancel();
+    _fitOverlayTimer?.cancel();
+    _seekHintTimer?.cancel();
+    try {
+      ScreenBrightness.instance.resetApplicationScreenBrightness();
+    } catch (_) {}
+    WakelockPlus.disable();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    _player.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+}
+
+===== lib/screens/player/player_fit_mode.dart =====
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+enum VideoFitMode { contain, cover, fill }
+
+BoxFit getBoxFit(VideoFitMode mode) {
+  switch (mode) {
+    case VideoFitMode.contain:
+      return BoxFit.contain;
+    case VideoFitMode.cover:
+      return BoxFit.cover;
+    case VideoFitMode.fill:
+      return BoxFit.fill;
+  }
+}
+
+String modeName(VideoFitMode mode) {
+  switch (mode) {
+    case VideoFitMode.contain:
+      return 'احتواء';
+    case VideoFitMode.cover:
+      return 'تغطية';
+    case VideoFitMode.fill:
+      return 'تمديد';
+  }
+}
+
+class VideoFitSettings {
+  static const _key = 'video_fit_mode';
+
+  static Future<void> save(VideoFitMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_key, mode.index);
+  }
+
+  static Future<VideoFitMode> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final index = prefs.getInt(_key) ?? 0;
+    if (index < 0 || index >= VideoFitMode.values.length) {
+      return VideoFitMode.contain;
+    }
+    return VideoFitMode.values[index];
+  }
+}
+
+===== lib/screens/player/subtitle_style_builder.dart =====
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../providers/settings_provider.dart';
+
+/// يبني [TextStyle] الترجمة النهائية من إعدادات المستخدم.
+///
+/// ملاحظة تقنية: media_kit's SubtitleViewConfiguration لا يوفر سوى
+/// [TextStyle]/[TextAlign]/padding، بلا أي وصول لشجرة widgets خاصة
+/// بالترجمة. لذلك:
+/// - الحدّ الخارجي (Outline) يُحاكى عبر مجموعة ظلال (Shadow) موزَّعة
+///   بزوايا متعددة حول النص بنفس إزاحة [outlineWidth]، وهي التقنية
+///   القياسية لمحاكاة Stroke في TextStyle بدون فقدان لون التعبئة.
+/// - ظل الصندوق (Box Shadow) يُحاكى بظل أكبر امتداداً وأقل حدّة خلف
+///   النص (وليس صندوقاً حقيقياً منفصلاً، لعدم توفر هذا المستوى من
+///   التحكم في الـ widget الداخلي لـ media_kit).
+TextStyle buildSubtitleTextStyle(SettingsProvider s) {
+  final shadows = <Shadow>[];
+
+  if (s.outlineEnabled && s.outlineWidth > 0) {
+    const steps = 8;
+    for (var i = 0; i < steps; i++) {
+      final angle = (2 * math.pi / steps) * i;
+      shadows.add(Shadow(
+        color: s.outlineColor,
+        offset: Offset(
+          math.cos(angle) * s.outlineWidth,
+          math.sin(angle) * s.outlineWidth,
+        ),
+        blurRadius: 0,
+      ));
+    }
+  }
+
+  if (s.boxShadowEnabled) {
+    shadows.add(Shadow(
+      color: s.boxShadowColor,
+      offset: Offset(s.boxShadowOffsetX, s.boxShadowOffsetY),
+      blurRadius: s.boxShadowBlurRadius + 6,
+    ));
+  }
+
+  if (s.textShadowEnabled) {
+    shadows.add(Shadow(
+      color: s.textShadowColor,
+      offset: Offset(s.textShadowOffsetX, s.textShadowOffsetY),
+      blurRadius: s.textShadowBlurRadius,
+    ));
+  }
+
+  final baseStyle = TextStyle(
+    fontSize: s.subtitleFontSize,
+    color: s.subtitleColor,
+    fontWeight: _fontWeight(s.fontWeightIndex),
+    fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
+    backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
+    shadows: shadows.isEmpty ? null : shadows,
+  );
+
+  if (_isBuiltInFont(s.fontFamily)) {
+    return baseStyle.copyWith(fontFamily: s.fontFamily == 'Roboto' ? null : s.fontFamily);
+  }
+
+  try {
+    return GoogleFonts.getFont(s.fontFamily, textStyle: baseStyle);
+  } catch (_) {
+    return baseStyle;
+  }
+}
+
+bool _isBuiltInFont(String font) {
+  const builtIn = {'Roboto', 'monospace', 'sans-serif'};
+  return builtIn.contains(font);
+}
+
+FontWeight _fontWeight(int index) {
+  switch (index) {
+    case 0:
+      return FontWeight.w300;
+    case 1:
+      return FontWeight.normal;
+    case 2:
+      return FontWeight.w500;
+    case 3:
+      return FontWeight.bold;
+    default:
+      return FontWeight.normal;
+  }
+}
+
+===== lib/screens/player/player_audio_panel.dart =====
+import 'package:flutter/material.dart';
+
+/// قسم تكبير الصوت ضمن لوحة الصوت الجانبية.
+/// يعكس مباشرة _volumeLevel من PlayerScreen (نفس المصدر الذي
+/// تستخدمه إيماءة السحب العمودي) فلا يوجد مصدران للحقيقة.
+class AudioBoostSection extends StatelessWidget {
+  final double boost; // من 0 إلى 200 (%)
+  final ValueChanged<double> onChanged;
+
+  const AudioBoostSection({
+    super.key,
+    required this.boost,
+    required this.onChanged,
+  });
+
+  Color _color(double v) {
+    if (v <= 100) return const Color(0xFF4FC3F7); // أزرق فاتح
+    if (v <= 140) return const Color(0xFFFFB74D); // برتقالي
+    return const Color(0xFFEF5350);               // أحمر
+  }
+
+  String _label(double v) {
+    if (v <= 100) return 'مستوى طبيعي';
+    if (v <= 130) return 'تكبير خفيف';
+    if (v <= 160) return 'تكبير قوي';
+    return '⚠️ تشويه محتمل';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color(boost);
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // ── العنوان الرئيسي ──
+      _PanelHeader(icon: Icons.graphic_eq_rounded, title: 'تكبير الصوت'),
+      const SizedBox(height: 12),
+
+      // ── قيمة كبيرة + حالة ──
+      Center(
+        child: Column(children: [
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 200),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 48,
+            ),
+            child: Text('${boost.round()}%'),
+          ),
+          const SizedBox(height: 2),
+          Text(_label(boost), style: TextStyle(color: color.withOpacity(0.75), fontSize: 13)),
+        ]),
+      ),
+      const SizedBox(height: 12),
+
+      // ── شريط السحب ──
+      SliderTheme(
+        data: SliderThemeData(
+          trackHeight: 5,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+          overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
+          activeTrackColor: color,
+          inactiveTrackColor: Colors.white10,
+          thumbColor: color,
+          overlayColor: color.withOpacity(0.2),
+        ),
+        child: Slider(
+          value: boost.clamp(50, 200),
+          min: 50, max: 200,
+          divisions: 30,
+          onChanged: onChanged,
+        ),
+      ),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('50%', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          Text('100%', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          Text('200%', style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ],
+      ),
+      const SizedBox(height: 14),
+
+      // ── أزرار سريعة ──
+      Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+        for (final val in [100.0, 130.0, 160.0, 200.0])
+          _QuickBtn(
+            label: '${val.toInt()}%',
+            active: (boost - val).abs() < 3,
+            color: _color(val),
+            onTap: () => onChanged(val),
+          ),
+      ]),
+    ]);
+  }
+}
+
+/// رأس موحَّد للوحة
+class _PanelHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Color? color;
+  const _PanelHeader({required this.icon, required this.title, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? Theme.of(context).colorScheme.primary;
+    return Row(children: [
+      Container(
+        width: 32, height: 32,
+        decoration: BoxDecoration(color: c.withOpacity(0.18), borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, color: c, size: 18),
+      ),
+      const SizedBox(width: 10),
+      Text(title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          )),
+    ]);
+  }
+}
+
+class _QuickBtn extends StatelessWidget {
+  final String label;
+  final bool active;
+  final Color color;
+  final VoidCallback onTap;
+  const _QuickBtn({required this.label, required this.active, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? color.withOpacity(0.22) : Colors.white.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? color : Colors.white24, width: active ? 1.5 : 1),
+        ),
+        child: Text(label,
+            style: TextStyle(
+              color: active ? color : Colors.white54,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            )),
+      ),
+    );
+  }
+}
+
+===== lib/screens/player/player_subtitle_panel.dart =====
+import 'package:flutter/material.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../providers/settings_provider.dart';
+
+/// لوحة تخصيص الترجمة — accordion بـ 4 أقسام، كل شيء داخل حدود النافذة
+class SubtitleAppearancePanel extends StatefulWidget {
+  const SubtitleAppearancePanel({super.key});
+  @override
+  State<SubtitleAppearancePanel> createState() => _SubtitleAppearancePanelState();
+}
+
+class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
+  int _open = 0;
+
+  static const _fontList = [
+    ('sans-serif', 'System Default', false),
+    ('Roboto', 'Roboto', false),
+    ('monospace', 'Monospace', false),
+    ('Cairo', 'Cairo', true),
+    ('Amiri', 'Amiri', true),
+    ('Noto Naskh Arabic', 'Noto Naskh', true),
+    ('Noto Kufi Arabic', 'Noto Kufi', true),
+    ('Lateef', 'Lateef', true),
+    ('Tajawal', 'Tajawal', true),
+    ('Scheherazade New', 'Scheherazade', true),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>();
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Accordion(
+            index: 0, open: _open,
+            icon: Icons.text_fields_rounded,
+            title: 'النص والخط',
+            onToggle: (i) => setState(() => _open = _open == i ? -1 : i),
+            child: _FontSection(s: s, fonts: _fontList, onPickColor: _pickColor),
+          ),
+          _Accordion(
+            index: 1, open: _open,
+            icon: Icons.palette_rounded,
+            title: 'الألوان',
+            onToggle: (i) => setState(() => _open = _open == i ? -1 : i),
+            child: _ColorSection(s: s, onPickColor: _pickColor),
+          ),
+          _Accordion(
+            index: 2, open: _open,
+            icon: Icons.auto_fix_high_rounded,
+            title: 'الحدّ والظل',
+            onToggle: (i) => setState(() => _open = _open == i ? -1 : i),
+            child: _EffectsSection(s: s, onPickColor: _pickColor),
+          ),
+          _Accordion(
+            index: 3, open: _open,
+            icon: Icons.vertical_align_bottom_rounded,
+            title: 'الموضع',
+            onToggle: (i) => setState(() => _open = _open == i ? -1 : i),
+            child: _PositionSection(s: s),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickColor(BuildContext ctx, Color cur, ValueChanged<Color> fn) async {
+    final c = await showColorPickerDialog(ctx, cur,
+        title: const Text('اختر لوناً', style: TextStyle(fontWeight: FontWeight.bold)));
+    fn(c);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Accordion wrapper
+// ─────────────────────────────────────────────
+class _Accordion extends StatelessWidget {
+  final int index, open;
+  final IconData icon;
+  final String title;
+  final Widget child;
+  final void Function(int) onToggle;
+  const _Accordion({required this.index, required this.open, required this.icon,
+    required this.title, required this.child, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final isOpen = open == index;
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: isOpen ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isOpen ? cs.primary.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+        ),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => onToggle(index),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(children: [
+              Icon(icon, size: 18, color: isOpen ? cs.primary : Colors.white54),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title,
+                  style: TextStyle(
+                    color: isOpen ? Colors.white : Colors.white70,
+                    fontSize: 13,
+                    fontWeight: isOpen ? FontWeight.w700 : FontWeight.w500,
+                  ))),
+              Icon(isOpen ? Icons.expand_less : Icons.expand_more,
+                  color: isOpen ? cs.primary : Colors.white38, size: 20),
+            ]),
+          ),
+        ),
+        if (isOpen)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+            child: child,
+          ),
+      ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// قسم النص والخط
+// ─────────────────────────────────────────────
+class _FontSection extends StatelessWidget {
+  final SettingsProvider s;
+  final List<(String, String, bool)> fonts;
+  final Future<void> Function(BuildContext, Color, ValueChanged<Color>) onPickColor;
+  const _FontSection({required this.s, required this.fonts, required this.onPickColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // حجم الخط
+      _Label('حجم الخط'),
+      _SliderRow(value: s.subtitleFontSize, min: 10, max: 100,
+          display: '${s.subtitleFontSize.toInt()} px',
+          onChanged: s.setSubtitleFontSize, color: cs.primary),
+      const SizedBox(height: 12),
+
+      // اختيار الخط — شبكة 2 عمود
+      _Label('نوع الخط'),
+      const SizedBox(height: 6),
+      GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 6, crossAxisSpacing: 6,
+          childAspectRatio: 2.6,
+        ),
+        itemCount: fonts.length,
+        itemBuilder: (ctx, i) {
+          final (id, label, isGoogle) = fonts[i];
+          final sel = s.fontFamily == id;
+          return GestureDetector(
+            onTap: () => s.setFontFamily(id),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: sel ? cs.primary.withOpacity(0.18) : Colors.white.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: sel ? cs.primary : Colors.white.withOpacity(0.15),
+                    width: sel ? 1.5 : 1),
+              ),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text('مرحباً Hello',
+                    style: _style(id, isGoogle).copyWith(
+                      fontSize: 13,
+                      color: sel ? cs.primary : Colors.white,
+                    ),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(label,
+                    style: TextStyle(fontSize: 10,
+                        color: sel ? cs.primary.withOpacity(0.7) : Colors.white38),
+                    maxLines: 1),
+              ]),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 12),
+
+      // وزن + مائل + RTL
+      _Label('وزن الخط'),
+      const SizedBox(height: 6),
+      Row(children: [
+        for (final (i, lbl, fw) in [
+          (0, 'خفيف', FontWeight.w300), (1, 'عادي', FontWeight.normal),
+          (2, 'متوسط', FontWeight.w500), (3, 'عريض', FontWeight.bold),
+        ]) ...[
+          if (i > 0) const SizedBox(width: 5),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => s.setFontWeightIndex(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 130),
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                decoration: BoxDecoration(
+                  color: s.fontWeightIndex == i
+                      ? cs.primary.withOpacity(0.2)
+                      : Colors.white.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(
+                      color: s.fontWeightIndex == i ? cs.primary : Colors.white24),
+                ),
+                child: Center(
+                  child: Text(lbl,
+                      style: TextStyle(
+                        color: s.fontWeightIndex == i ? cs.primary : Colors.white54,
+                        fontWeight: fw, fontSize: 11,
+                      )),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: _Chip(label: 'مائل', icon: Icons.format_italic_rounded,
+            value: s.subtitleItalic, onChanged: s.setSubtitleItalic, color: cs.primary)),
+        const SizedBox(width: 8),
+        Expanded(child: _Chip(label: 'يمين←يسار', icon: Icons.format_textdirection_r_to_l_rounded,
+            value: s.subtitleRTL, onChanged: s.setSubtitleRTL, color: cs.secondary)),
+      ]),
+    ]);
+  }
+
+  TextStyle _style(String id, bool isGoogle) {
+    if (!isGoogle) return TextStyle(fontFamily: id == 'Roboto' ? null : id);
+    try {
+      final name = id.replaceAll(' New', '').replaceAll(' Arabic', '');
+      return GoogleFonts.getFont(name);
+    } catch (_) { return const TextStyle(); }
+  }
+}
+
+// ─────────────────────────────────────────────
+// قسم الألوان
+// ─────────────────────────────────────────────
+class _ColorSection extends StatelessWidget {
+  final SettingsProvider s;
+  final Future<void> Function(BuildContext, Color, ValueChanged<Color>) onPickColor;
+  const _ColorSection({required this.s, required this.onPickColor});
+
+  static const _textColors = [
+    Colors.white, Colors.yellow, Color(0xFFFFE680),
+    Color(0xFF80FF80), Color(0xFF80D4FF), Color(0xFFFFB3B3),
+  ];
+  static const _bgColors = [
+    Colors.black, Color(0xFF1A1A1A), Color(0xFF001133),
+    Color(0xFF002200), Color(0xFF220000), Color(0xFF222200),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _Label('لون النص'),
+      const SizedBox(height: 6),
+      _ColorRow(
+        colors: _textColors, selected: s.subtitleColor,
+        onSelect: s.setSubtitleColor,
+        onCustom: () => onPickColor(context, s.subtitleColor, s.setSubtitleColor),
+      ),
+      const SizedBox(height: 14),
+      Row(children: [
+        Expanded(child: _Label('خلفية النص')),
+        Switch(value: s.subtitleBgOpacity > 0,
+            onChanged: (v) => s.setSubtitleBgOpacity(v ? 0.65 : 0.0),
+            activeColor: cs.primary),
+      ]),
+      const SizedBox(height: 6),
+      _ColorRow(
+        colors: _bgColors, selected: s.subtitleBgColor,
+        onSelect: s.setSubtitleBgColor,
+        onCustom: () => onPickColor(context, s.subtitleBgColor, s.setSubtitleBgColor),
+      ),
+      if (s.subtitleBgOpacity > 0) ...[
+        const SizedBox(height: 8),
+        _SliderRow(value: s.subtitleBgOpacity, min: 0.1, max: 1.0,
+            display: '${(s.subtitleBgOpacity * 100).toInt()}%',
+            onChanged: s.setSubtitleBgOpacity, color: cs.primary),
+      ],
+      const SizedBox(height: 14),
+      _Label('معاينة'),
+      const SizedBox(height: 6),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Center(
+          child: Text('مرحباً • Hello World',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: (s.subtitleFontSize * 0.55).clamp(12.0, 32.0),
+                color: s.subtitleColor,
+                fontWeight: _fw(s.fontWeightIndex),
+                fontStyle: s.subtitleItalic ? FontStyle.italic : FontStyle.normal,
+                backgroundColor: s.subtitleBgColor.withOpacity(s.subtitleBgOpacity),
+              )),
+        ),
+      ),
+    ]);
+  }
+
+  FontWeight _fw(int i) => [FontWeight.w300, FontWeight.normal, FontWeight.w500, FontWeight.bold][i.clamp(0, 3)];
+}
+
+// ─────────────────────────────────────────────
+// قسم الحدّ والظل
+// ─────────────────────────────────────────────
+class _EffectsSection extends StatelessWidget {
+  final SettingsProvider s;
+  final Future<void> Function(BuildContext, Color, ValueChanged<Color>) onPickColor;
+  const _EffectsSection({required this.s, required this.onPickColor});
+
+  static const _shadowColors = [
+    Colors.black, Color(0xFF0D0D0D), Color(0xFF1A1A2E),
+    Color(0xFF003366), Color(0xFF330000), Colors.white,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // حدّ خارجي
+      _SwitchRow(label: 'حدّ خارجي للنص', value: s.outlineEnabled, onChanged: s.setOutlineEnabled, color: cs.primary),
+      if (s.outlineEnabled) ...[
+        const SizedBox(height: 6),
+        _ColorRow(colors: _shadowColors, selected: s.outlineColor,
+            onSelect: s.setOutlineColor,
+            onCustom: () => onPickColor(context, s.outlineColor, s.setOutlineColor)),
+        const SizedBox(height: 6),
+        _SliderRow(value: s.outlineWidth, min: 0.5, max: 6.0,
+            display: 'سماكة ${s.outlineWidth.toStringAsFixed(1)}',
+            onChanged: s.setOutlineWidth, color: cs.primary),
+      ],
+      const SizedBox(height: 10),
+
+      // ظل النص
+      _SwitchRow(label: 'ظل النص', value: s.textShadowEnabled, onChanged: s.setTextShadowEnabled, color: cs.secondary),
+      if (s.textShadowEnabled) ...[
+        const SizedBox(height: 6),
+        _ColorRow(colors: _shadowColors, selected: s.textShadowColor,
+            onSelect: s.setTextShadowColor,
+            onCustom: () => onPickColor(context, s.textShadowColor, s.setTextShadowColor)),
+        const SizedBox(height: 6),
+        _SliderRow(value: s.textShadowBlurRadius, min: 0, max: 20,
+            display: 'ضبابية ${s.textShadowBlurRadius.toInt()}',
+            onChanged: s.setTextShadowBlurRadius, color: cs.secondary),
+      ],
+      const SizedBox(height: 10),
+
+      // ظل الصندوق
+      _SwitchRow(label: 'ظل الصندوق', value: s.boxShadowEnabled, onChanged: s.setBoxShadowEnabled, color: cs.tertiary),
+      if (s.boxShadowEnabled) ...[
+        const SizedBox(height: 6),
+        _ColorRow(colors: _shadowColors, selected: s.boxShadowColor,
+            onSelect: s.setBoxShadowColor,
+            onCustom: () => onPickColor(context, s.boxShadowColor, s.setBoxShadowColor)),
+        const SizedBox(height: 6),
+        _SliderRow(value: s.boxShadowBlurRadius, min: 0, max: 20,
+            display: 'ضبابية ${s.boxShadowBlurRadius.toInt()}',
+            onChanged: s.setBoxShadowBlurRadius, color: cs.tertiary),
+      ],
+    ]);
+  }
+}
+
+// ─────────────────────────────────────────────
+// قسم الموضع
+// ─────────────────────────────────────────────
+class _PositionSection extends StatelessWidget {
+  final SettingsProvider s;
+  const _PositionSection({required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _Label('الارتفاع عن الأسفل'),
+      _SliderRow(value: s.bottomPadding, min: 0, max: 300,
+          display: '${s.bottomPadding.toInt()} px',
+          onChanged: s.setBottomPadding, color: cs.primary),
+      const SizedBox(height: 10),
+      _Label('الهامش الأفقي'),
+      _SliderRow(value: s.horizontalMargin, min: 0, max: 120,
+          display: '${s.horizontalMargin.toInt()} px',
+          onChanged: s.setHorizontalMargin, color: cs.primary),
+    ]);
+  }
+}
+
+// ══════════════════════════════════════════════
+// Widgets مساعدة مشتركة
+// ══════════════════════════════════════════════
+
+class _Label extends StatelessWidget {
+  final String text;
+  const _Label(this.text);
+  @override
+  Widget build(BuildContext context) => Text(text,
+      style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w600));
+}
+
+class _SwitchRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final Color color;
+  const _SwitchRow({required this.label, required this.value, required this.onChanged, required this.color});
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+          Switch(value: value, onChanged: onChanged, activeColor: color),
+        ],
+      );
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final Color color;
+  const _Chip({required this.label, required this.icon, required this.value,
+    required this.onChanged, required this.color});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: () => onChanged(!value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 130),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: value ? color.withOpacity(0.18) : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: value ? color : Colors.white24),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, size: 14, color: value ? color : Colors.white38),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 11, color: value ? color : Colors.white54)),
+          ]),
+        ),
+      );
+}
+
+/// شريط ألوان سريعة + زر مخصص
+class _ColorRow extends StatelessWidget {
+  final List<Color> colors;
+  final Color selected;
+  final ValueChanged<Color> onSelect;
+  final VoidCallback onCustom;
+  const _ColorRow({required this.colors, required this.selected,
+    required this.onSelect, required this.onCustom});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      for (final c in colors)
+        GestureDetector(
+          onTap: () => onSelect(c),
+          child: Container(
+            margin: const EdgeInsets.only(left: 5),
+            width: 30, height: 30,
+            decoration: BoxDecoration(
+              color: c,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected.value == c.value ? Colors.white : Colors.white30,
+                width: selected.value == c.value ? 2.5 : 1,
+              ),
+            ),
+            child: selected.value == c.value
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
+                : null,
+          ),
+        ),
+      const SizedBox(width: 6),
+      GestureDetector(
+        onTap: onCustom,
+        child: Container(
+          width: 30, height: 30,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white38),
+            gradient: const SweepGradient(colors: [
+              Colors.red, Colors.yellow, Colors.green,
+              Colors.cyan, Colors.blue, Colors.purple, Colors.red,
+            ]),
+          ),
+          child: const Icon(Icons.add_rounded, color: Colors.white, size: 16),
+        ),
+      ),
+    ]);
+  }
+}
+
+/// slider موحّد مع label على اليمين
+class _SliderRow extends StatelessWidget {
+  final double value, min, max;
+  final String display;
+  final ValueChanged<double> onChanged;
+  final Color color;
+  const _SliderRow({required this.value, required this.min, required this.max,
+    required this.display, required this.onChanged, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Expanded(
+        child: SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 3,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            activeTrackColor: color,
+            inactiveTrackColor: Colors.white12,
+            thumbColor: color,
+            overlayColor: color.withOpacity(0.2),
+          ),
+          child: Slider(
+              value: value.clamp(min, max), min: min, max: max, onChanged: onChanged),
+        ),
+      ),
+      SizedBox(
+        width: 70,
+        child: Text(display, textAlign: TextAlign.end,
+            style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+      ),
+    ]);
+  }
+}
+
+===== lib/widgets/video_thumbnail_loader.dart =====
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import '../models/video_item.dart';
+import '../services/thumbnail_service.dart';
+
+class VideoThumbnailLoader extends StatelessWidget {
+  final VideoItem video;
+  final double width;
+  final double height;
+
+  const VideoThumbnailLoader({
+    super.key,
+    required this.video,
+    this.width = 120,
+    this.height = 80,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbnailNotifier = ThumbnailService().getNotifier(video);
+    final errorNotifier = ThumbnailService().getErrorNotifier(video);
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ValueListenableBuilder<Uint8List?>(
+          valueListenable: thumbnailNotifier,
+          builder: (context, bytes, child) {
+            if (bytes != null) {
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) =>
+                    _buildPlaceholder('فشل تحميل الصورة'),
+              );
+            }
+            return ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (context, errorText, _) =>
+                  _buildPlaceholder(errorText),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(String? errorText) {
+    if (errorText != null && errorText.isNotEmpty) {
+      return Container(
+        color: const Color(0xFF1A1A1A),
+        padding: const EdgeInsets.all(4),
+        alignment: Alignment.center,
+        child: Text(
+          errorText,
+          style: const TextStyle(
+            color: Colors.redAccent,
+            fontSize: 8,
+            height: 1.2,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }
+    return Container(
+      color: Colors.grey[900],
+      child: const Center(
+        child: Icon(Icons.video_file_rounded,
+            color: Colors.white30, size: 36),
+      ),
+    );
+  }
+}
+===== lib/widgets/video_card.dart =====
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../models/video_item.dart';
+import 'video_thumbnail_loader.dart';
+
+class VideoCard extends StatelessWidget {
+  final VideoItem video;
+  final VoidCallback onTap;
+  final VoidCallback? onMoreTap;
+
+  const VideoCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 90, height: 64,
+                child: Stack(fit: StackFit.expand, children: [
+                  VideoThumbnailLoader(video: video, width: 90, height: 64),
+                  Positioned(
+                    bottom: 4, right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.72),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(video.formattedDuration,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: _Info(video: video)),
+            if (onMoreTap != null)
+              IconButton(
+                icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 22),
+                onPressed: onMoreTap,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class VideoGridCard extends StatelessWidget {
+  final VideoItem video;
+  final VoidCallback onTap;
+  final VoidCallback? onMoreTap;
+
+  const VideoGridCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(fit: StackFit.expand, children: [
+                VideoThumbnailLoader(video: video, width: double.infinity, height: double.infinity),
+                Positioned(
+                  bottom: 6, right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.75),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(video.formattedDuration,
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(video.name,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: cs.onSurface, fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 3),
+                  Text(video.formattedSize, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 10)),
+                ])),
+                if (onMoreTap != null)
+                  IconButton(
+                    icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
+                    onPressed: onMoreTap,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Info extends StatelessWidget {
+  final VideoItem video;
+  const _Info({required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(video.name,
+          maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: cs.onSurface, fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3)),
+      const SizedBox(height: 6),
+      Row(children: [
+        _Tag(video.formattedSize, cs),
+        const SizedBox(width: 6),
+        _Tag(video.extension.toUpperCase(), cs, primary: true),
+        
+        // بطاقات عرض صيغ الترجمة المدمجة باللون الأخضر المميز
+        ValueListenableBuilder<List<String>>(
+          valueListenable: video.subtitlesNotifier,
+          builder: (context, subtitles, _) {
+            if (subtitles.isEmpty) return const SizedBox.shrink();
+            return Row(
+              children: subtitles.map((sub) => Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.green.withOpacity(0.35)),
+                  ),
+                  child: Text(sub, style: const TextStyle(
+                    color: Colors.green, fontSize: 8.5, fontWeight: FontWeight.w900
+                  )),
+                ),
+              )).toList(),
+            );
+          },
+        ),
+      ]),
+      const SizedBox(height: 4),
+      Row(children: [
+        Icon(Symbols.folder_rounded, size: 12, color: cs.onSurfaceVariant.withOpacity(0.6)),
+        const SizedBox(width: 4),
+        Expanded(child: Text(video.folder,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.6), fontSize: 11))),
+      ]),
+    ]);
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final String label;
+  final ColorScheme cs;
+  final bool primary;
+  const _Tag(this.label, this.cs, {this.primary = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: primary ? cs.primaryContainer.withOpacity(0.4) : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label, style: TextStyle(
+        color: primary ? cs.primary : cs.onSurfaceVariant,
+        fontSize: 10, fontWeight: FontWeight.w600,
+      )),
+    );
+  }
+}
+
