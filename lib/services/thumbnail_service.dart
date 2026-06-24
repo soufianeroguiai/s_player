@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -15,7 +16,7 @@ class ThumbnailService {
   final Map<String, ValueNotifier<String?>> _errors = {};
   final Set<String> _pending = {};
   int _active = 0;
-  static const _maxConcurrent = 2;
+  static const _maxConcurrent = 1; // مفرد لضمان أقصى سرعة
   final List<Future<void> Function()> _queue = [];
 
   ValueNotifier<Uint8List?> getNotifier(VideoItem video) {
@@ -68,7 +69,7 @@ class ThumbnailService {
         }
       }
 
-      final bytes = await _ffmpegThumb(video.path, cacheFile.path);
+      final bytes = await _ffmpegThumb(video, cacheFile.path);
       if (bytes != null && bytes.isNotEmpty) {
         if (!await cacheFile.exists()) {
           await cacheFile.writeAsBytes(bytes);
@@ -76,7 +77,7 @@ class ThumbnailService {
         _notifiers[path]?.value = bytes;
         _errors[path]?.value = null;
       } else {
-        _errors[path]?.value ??= 'فشل استخراج الصورة (FFmpeg)';
+        _errors[path]?.value ??= 'فشل استخراج الصورة';
       }
     } catch (e) {
       _errors[path]?.value = 'خطأ: $e';
@@ -85,48 +86,63 @@ class ThumbnailService {
     }
   }
 
-  Future<Uint8List?> _ffmpegThumb(String videoPath, String savePath) async {
+  Future<Uint8List?> _ffmpegThumb(VideoItem video, String savePath) async {
+    final videoPath = video.path;
     final file = File(videoPath);
     if (!await file.exists()) {
       _errors[videoPath]?.value = 'الملف غير موجود';
       return null;
     }
 
-    final command = '-y -i "$videoPath" -ss 5 -vframes 1 -s 360x240 -q:v 2 "$savePath"';
+    // ⚡ ثانية ذكية: 10% من المدة، وإلا الثانية 5 كافتراض
+    final int seekSec = video.duration.inSeconds > 0
+        ? (video.duration.inSeconds * 0.1).round().clamp(1, 99999)
+        : 5;
 
-    // ✅ استخدام executeAsync كما في التوثيق الذي أرسلته
+    // ⚡ أمر فائق السرعة: JPEG، دقة ثابتة 720×480، جودة جيدة
+    final command =
+        '-y -ss $seekSec -noaccurate_seek -i "$videoPath" -vframes 1 -vf "scale=720:480" -q:v 5 -an "$savePath"';
+
     final completer = Completer<Uint8List?>();
 
-    await FFmpegKit.executeAsync(command, onComplete: (session) async {
-      final returnCode = await session.getReturnCode();
-
-      if (ReturnCode.isSuccess(returnCode)) {
-        final outputFile = File(savePath);
-        if (await outputFile.exists()) {
-          completer.complete(await outputFile.readAsBytes());
+    await FFmpegKit.executeAsync(
+      command,
+      onComplete: (session) async {
+        final returnCode = await session.getReturnCode();
+        if (ReturnCode.isSuccess(returnCode)) {
+          final outputFile = File(savePath);
+          if (await outputFile.exists()) {
+            completer.complete(await outputFile.readAsBytes());
+          } else {
+            completer.complete(null);
+          }
         } else {
+          final output = await session.getOutput();
+          _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل"}';
           completer.complete(null);
         }
-      } else {
-        final output = await session.getOutput();
-        _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل غير معروف"}';
-        completer.complete(null);
-      }
-    });
+      },
+    );
 
     return completer.future;
   }
 
+  // ✅ تخزين دائم سريع (لا يمسح بعد الخروج)
   Future<File> _cacheFile(String videoPath) async {
-    final dir = await getTemporaryDirectory();
-    return File('${dir.path}/thumb_${videoPath.hashCode}.jpg');
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (!await thumbDir.exists()) {
+      await thumbDir.create(recursive: true);
+    }
+    final safeName = base64Url.encode(utf8.encode(videoPath));
+    return File('${thumbDir.path}/$safeName.jpg');
   }
 
   Future<void> clearCache() async {
-    final dir = await getTemporaryDirectory();
-    final files = dir.listSync().where((f) => f.path.contains('thumb_'));
-    for (final f in files) {
-      try { f.deleteSync(); } catch (_) {}
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (await thumbDir.exists()) {
+      await thumbDir.delete(recursive: true);
     }
     _notifiers.forEach((_, n) => n.value = null);
     _notifiers.clear();
