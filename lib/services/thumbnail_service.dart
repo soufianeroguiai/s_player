@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -67,14 +68,13 @@ class ThumbnailService {
         }
       }
 
-      // توليد الصورة باستخدام FFmpeg
       final bytes = await _ffmpegThumb(video.path, cacheFile.path);
       if (bytes != null && bytes.isNotEmpty) {
         if (!await cacheFile.exists()) {
           await cacheFile.writeAsBytes(bytes);
         }
         _notifiers[path]?.value = bytes;
-        _errors[path]?.value = null; // نجاح
+        _errors[path]?.value = null;
       } else {
         _errors[path]?.value ??= 'فشل استخراج الصورة (FFmpeg)';
       }
@@ -92,21 +92,29 @@ class ThumbnailService {
       return null;
     }
 
-    // أمر FFmpeg لاستخراج إطار JPEG من الثانية 5
     final command = '-y -i "$videoPath" -ss 5 -vframes 1 -s 360x240 -q:v 2 "$savePath"';
-    final session = await FFmpegKitExtended.execute(command);
-    final returnCode = await session.getReturnCode();
 
-    if (ReturnCode.isSuccess(returnCode)) {
-      final outputFile = File(savePath);
-      if (await outputFile.exists()) {
-        return await outputFile.readAsBytes();
+    // ✅ استخدام executeAsync كما في التوثيق الذي أرسلته
+    final completer = Completer<Uint8List?>();
+
+    await FFmpegKit.executeAsync(command, onComplete: (session) async {
+      final returnCode = await session.getReturnCode();
+
+      if (ReturnCode.isSuccess(returnCode)) {
+        final outputFile = File(savePath);
+        if (await outputFile.exists()) {
+          completer.complete(await outputFile.readAsBytes());
+        } else {
+          completer.complete(null);
+        }
+      } else {
+        final output = await session.getOutput();
+        _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل غير معروف"}';
+        completer.complete(null);
       }
-    } else {
-      final output = await session.getOutput();
-      _errors[videoPath]?.value = 'FFmpeg: ${output ?? "فشل غير معروف"}';
-    }
-    return null;
+    });
+
+    return completer.future;
   }
 
   Future<File> _cacheFile(String videoPath) async {
