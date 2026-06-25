@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
+  String? _browsingFolder;   // ✅ مجلد التصفح الحالي داخل تبويب المجلدات
 
   late AnimationController _rotateController;
   late Animation<double> _rotateAnimation;
@@ -257,6 +258,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: IndexedStack(
         index: _currentIndex,
         children: [
+          // 0: المكتبة
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: LibraryTab(
@@ -267,14 +269,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               loading: lib.loading,
             ),
           ),
-          RefreshIndicator(
-            onRefresh: _refreshLibrary,
-            child: FoldersTab(
-              byFolder: lib.byFolder,
-              gridView: settings.foldersGridView,
-              onTap: (folder) {},
-            ),
-          ),
+          // 1: المجلدات – يدعم التصفح الهرمي
+          _buildFoldersTab(lib, settings),
+          // 2: الأخيرة
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: RecentTab(
@@ -293,7 +290,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           if (index == 3) {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
           } else {
-            setState(() => _currentIndex = index);
+            setState(() {
+              _currentIndex = index;
+              // عند مغادرة تبويب المجلدات نلغي التصفح
+              if (index != 1) _browsingFolder = null;
+            });
           }
         },
         destinations: const [
@@ -323,6 +324,72 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  /// يبني محتوى تبويب المجلدات (قائمة مجلدات أو فيديوهات مجلد معين)
+  Widget _buildFoldersTab(LibraryProvider lib, SettingsProvider settings) {
+    // إذا كنا داخل مجلد
+    if (_browsingFolder != null) {
+      final folderVideos = _sorted(
+        lib.videos.where((v) => v.folder == _browsingFolder).toList(),
+      );
+
+      return Column(
+        children: [
+          // شريط التنقل داخل المجلد
+          Container(
+            color: Theme.of(context).colorScheme.surface,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Symbols.arrow_back_rounded),
+                  onPressed: () => setState(() => _browsingFolder = null),
+                  tooltip: 'رجوع إلى المجلدات',
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _browsingFolder!,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                // عدد الفيديوهات
+                Text(
+                  '${folderVideos.length} فيديو',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: LibraryTab(
+              videos: folderVideos,
+              gridView: settings.foldersGridView, // يستخدم إعداد العرض الخاص بالمجلدات
+              onOpen: _openPlayer,
+              onMore: (v) => _menu(v),
+              loading: false,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // قائمة المجلدات العادية
+    return RefreshIndicator(
+      onRefresh: _refreshLibrary,
+      child: FoldersTab(
+        byFolder: lib.byFolder,
+        gridView: settings.foldersGridView,
+        onTap: (folder) => setState(() => _browsingFolder = folder),
+      ),
+    );
+  }
+
+  // ─── الدوال المساعدة (بقيت كما هي) ───
   void _menu(VideoItem video) {
     final cs = Theme.of(context).colorScheme;
     final lib = context.read<LibraryProvider>();
