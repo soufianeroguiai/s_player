@@ -125,7 +125,7 @@ class RecentTab extends StatelessWidget {
 class FoldersTab extends StatelessWidget {
   final Map<String, List<VideoItem>> byFolder;
   final void Function(String) onTap;
-  final void Function(String folderName, List<VideoItem> videos)? onMore; // ✅ دالة خيارات المجلد
+  final void Function(String folderName, List<VideoItem> videos)? onMore;
   final bool gridView;
 
   const FoldersTab({
@@ -196,17 +196,12 @@ class FoldersTab extends StatelessWidget {
               child: Icon(Symbols.folder_rounded, color: cs.onSecondaryContainer, size: 28)),
           title: Text(folder, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 15)),
           subtitle: Text('${videos.length} فيديو  •  $size', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (onMore != null)
-                IconButton(
+          trailing: onMore != null
+              ? IconButton(
                   icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 20),
                   onPressed: () => onMore!(folder, videos),
-                ),
-              Icon(Symbols.chevron_right_rounded, color: cs.onSurfaceVariant),
-            ],
-          ),
+                )
+              : null,
           onTap: () => onTap(folder),
         );
       }

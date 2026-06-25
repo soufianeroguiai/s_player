@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // ✅ هذا السطر المُضاف
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/video_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -28,8 +28,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late AnimationController _rotateController;
   late Animation<double> _rotateAnimation;
 
-  // قائمة المفضلة المحفوظة محلياً
   final List<String> _favorites = [];
+  final List<String> _playlist = [];
 
   @override
   void initState() {
@@ -413,9 +413,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ══════════════════════════════════════════════
-  // 📂 قائمة خصائص المجلد
-  // ══════════════════════════════════════════════
   void _buildFolderOptionsSheet(String folderName, List<VideoItem> folderVideos) {
     final cs = Theme.of(context).colorScheme;
     final lib = context.read<LibraryProvider>();
@@ -450,7 +447,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
               const Divider(height: 1),
-              // تشغيل الكل
               _sheetTile(
                 icon: Symbols.play_arrow_rounded,
                 title: 'تشغيل الكل',
@@ -461,7 +457,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   if (folderVideos.isNotEmpty) _openPlayer(folderVideos.first);
                 },
               ),
-              // تشغيل عشوائي
               _sheetTile(
                 icon: Symbols.shuffle_rounded,
                 title: 'تشغيل عشوائي',
@@ -476,7 +471,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 },
               ),
               const Divider(height: 1),
-              // خصائص المجلد
               _sheetTile(
                 icon: Symbols.info_rounded,
                 title: 'خصائص المجلد',
@@ -504,7 +498,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
-              // إضافة للمفضلة
               _sheetTile(
                 icon: _isFavorite(folderName) ? Symbols.star_rounded : Symbols.star_outline_rounded,
                 title: _isFavorite(folderName) ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
@@ -516,7 +509,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 },
               ),
               const Divider(height: 1),
-              // إخفاء الكل
               _sheetTile(
                 icon: allHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded,
                 title: allHidden ? 'إظهار الكل' : 'إخفاء الكل',
@@ -533,7 +525,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   }
                 },
               ),
-              // حذف المجلد
               _sheetTile(
                 icon: Symbols.delete_rounded,
                 title: 'حذف المجلد',
@@ -545,7 +536,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 },
               ),
               const Divider(height: 1),
-              // خيارات قادمة (معطلة)
               _sheetTile(
                 icon: Symbols.swap_horiz_rounded,
                 title: 'تحويل الكل (قريباً)',
@@ -568,9 +558,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ══════════════════════════════════════════════
-  // 🎬 قائمة خصائص الفيديو
-  // ══════════════════════════════════════════════
   void _buildVideoOptionsSheet(VideoItem video) {
     final cs = Theme.of(context).colorScheme;
     final lib = context.read<LibraryProvider>();
@@ -593,7 +580,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14)),
               ),
               const Divider(height: 1),
-              // تشغيل
               _sheetTile(
                 icon: Symbols.play_arrow_rounded,
                 title: 'تشغيل',
@@ -604,7 +590,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   _openPlayer(video);
                 },
               ),
-              // معلومات
               _sheetTile(
                 icon: Symbols.info_rounded,
                 title: 'معلومات',
@@ -616,26 +601,67 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 },
               ),
               const Divider(height: 1),
-              // قص الفيديو (قريباً)
               _sheetTile(
                 icon: Symbols.content_cut_rounded,
                 title: 'قص الفيديو (قريباً)',
                 enabled: false,
               ),
-              // تحويل صيغة (قريباً)
               _sheetTile(
                 icon: Symbols.swap_horiz_rounded,
                 title: 'تحويل صيغة (قريباً)',
                 enabled: false,
               ),
-              // استخراج الصوت (قريباً)
               _sheetTile(
                 icon: Symbols.music_note_rounded,
                 title: 'استخراج الصوت (قريباً)',
                 enabled: false,
               ),
+              _sheetTile(
+                icon: Symbols.gif_rounded,
+                title: 'صورة متحركة GIF (قريباً)',
+                enabled: false,
+              ),
               const Divider(height: 1),
-              // مشاركة
+              _sheetTile(
+                icon: _isFavorite(video.path) ? Symbols.star_rounded : Symbols.star_outline_rounded,
+                title: _isFavorite(video.path) ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
+                iconBg: cs.tertiaryContainer,
+                iconColor: cs.onTertiaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleFavorite(video.path);
+                },
+              ),
+              _sheetTile(
+                icon: Symbols.playlist_add_rounded,
+                title: 'إضافة إلى قائمة التشغيل',
+                iconBg: cs.tertiaryContainer,
+                iconColor: cs.onTertiaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  if (!_playlist.contains(video.path)) {
+                    _playlist.add(video.path);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تمت الإضافة إلى قائمة التشغيل')),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('الملف موجود مسبقاً في القائمة')),
+                    );
+                  }
+                },
+              ),
+              _sheetTile(
+                icon: Symbols.drive_file_rename_outline_rounded,
+                title: 'تغيير الاسم',
+                iconBg: cs.surfaceContainerHighest,
+                iconColor: cs.onSurfaceVariant,
+                onTap: () {
+                  Navigator.pop(context);
+                  _renameFile(video);
+                },
+              ),
+              const Divider(height: 1),
               _sheetTile(
                 icon: Symbols.share_rounded,
                 title: 'مشاركة',
@@ -646,7 +672,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   Share.shareXFiles([XFile(video.path)], subject: video.name);
                 },
               ),
-              // نسخ المسار
               _sheetTile(
                 icon: Symbols.content_copy_rounded,
                 title: 'نسخ المسار',
@@ -660,7 +685,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   );
                 },
               ),
-              // فتح في مدير الملفات
               _sheetTile(
                 icon: Symbols.folder_open_rounded,
                 title: 'فتح في مدير الملفات',
@@ -675,18 +699,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 },
               ),
               const Divider(height: 1),
-              // إضافة للمفضلة
               _sheetTile(
-                icon: _isFavorite(video.path) ? Symbols.star_rounded : Symbols.star_outline_rounded,
-                title: _isFavorite(video.path) ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
-                iconBg: cs.tertiaryContainer,
-                iconColor: cs.onTertiaryContainer,
-                onTap: () {
-                  Navigator.pop(context);
-                  _toggleFavorite(video.path);
-                },
+                icon: Symbols.image_rounded,
+                title: 'إعادة توليد الصورة (قريباً)',
+                enabled: false,
               ),
-              // إخفاء / إظهار
+              _sheetTile(
+                icon: Symbols.subtitles_rounded,
+                title: 'استخراج الترجمة (قريباً)',
+                enabled: false,
+              ),
+              _sheetTile(
+                icon: Symbols.bar_chart_rounded,
+                title: 'خصائص الترميز (قريباً)',
+                enabled: false,
+              ),
+              const Divider(height: 1),
               _sheetTile(
                 icon: isHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded,
                 title: isHidden ? 'إلغاء الإخفاء' : 'إخفاء',
@@ -701,7 +729,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   }
                 },
               ),
-              // حذف
               _sheetTile(
                 icon: Symbols.delete_rounded,
                 title: 'حذف',
@@ -744,7 +771,49 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Icon(icon, color: fg, size: 22),
         ),
         title: Text(title, style: TextStyle(color: enabled ? cs.onSurface : cs.onSurfaceVariant, fontSize: 14)),
-        onTap: enabled ? onTap : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً'))),
+        onTap: enabled
+            ? onTap
+            : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً'))),
+      ),
+    );
+  }
+
+  void _renameFile(VideoItem video) {
+    final controller = TextEditingController(text: video.name);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تغيير الاسم'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'الاسم الجديد'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () {
+              final newName = controller.text.trim();
+              if (newName.isNotEmpty && newName != video.name) {
+                final oldFile = File(video.path);
+                final newPath = '${oldFile.parent.path}/$newName.${video.extension}';
+                try {
+                  oldFile.renameSync(newPath);
+                  context.read<LibraryProvider>().scan();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تغيير الاسم بنجاح')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('فشل تغيير الاسم: $e')),
+                  );
+                }
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('موافق'),
+          ),
+        ],
       ),
     );
   }
