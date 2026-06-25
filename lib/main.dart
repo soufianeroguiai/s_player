@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -84,10 +85,12 @@ class SPlayerApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: context.supportedLocales,
-      builder: (context, child) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: child!,
-      ),
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,
