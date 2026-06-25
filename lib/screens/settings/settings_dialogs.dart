@@ -1,6 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import '../../providers/settings_provider.dart';
-import 'settings_widgets.dart';
+
+void showLanguagePicker(BuildContext ctx, SettingsProvider s) {
+  showDialog(
+    context: ctx,
+    builder: (context) => SimpleDialog(
+      title: Text('language'.tr()),
+      children: [
+        RadioListTile<Locale>(
+          title: Text('arabic'.tr()),
+          value: const Locale('ar'),
+          groupValue: s.locale,
+          onChanged: (v) {
+            s.setLocale(v!);
+            Navigator.pop(context);
+          },
+        ),
+        RadioListTile<Locale>(
+          title: Text('english'.tr()),
+          value: const Locale('en'),
+          groupValue: s.locale,
+          onChanged: (v) {
+            s.setLocale(v!);
+            Navigator.pop(context);
+          },
+        ),
+      ],
+    ),
+  );
+}
 
 void showBoostDialog(BuildContext ctx, SettingsProvider s) {
   showDialog(
@@ -47,8 +76,6 @@ void showAudioLanguagePicker(BuildContext ctx, SettingsProvider s) {
 }
 
 void showEncodingPicker(BuildContext ctx, SettingsProvider s) {
-  // هذه القائمة تطابق تماماً الترميزات المدعومة فعلياً في
-  // SubtitleEncodings — أي إضافة هنا يجب أن تُضاف هناك أولاً.
   const encodings = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
   showDialog(
     context: ctx,
@@ -173,5 +200,36 @@ void showSortPicker(BuildContext ctx, SettingsProvider s) {
       ('duration', 'المدة', Icons.timer_rounded),
     ],
     onSelected: s.setSortBy,
+  );
+}
+
+void showBottomPicker<T>(
+  BuildContext ctx, {
+  required String title,
+  required List<(T, String, IconData)> items,
+  required T currentValue,
+  required void Function(T) onSelected,
+}) {
+  final cs = Theme.of(ctx).colorScheme;
+  showModalBottomSheet(
+    context: ctx,
+    builder: (_) => Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+            child: Text(title, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+        const Divider(height: 1),
+        ...items.map((item) => ListTile(
+              leading: Icon(item.$3),
+              title: Text(item.$2),
+              trailing: currentValue == item.$1 ? Icon(Icons.check_rounded, color: cs.primary) : null,
+              onTap: () {
+                onSelected(item.$1);
+                Navigator.pop(ctx);
+              },
+            )),
+      ]),
+    ),
   );
 }

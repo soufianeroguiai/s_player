@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart'; // ✅ الإضافة
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'theme/app_theme.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
@@ -12,6 +14,7 @@ import 'screens/home/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
 
   FlutterError.onError = (details) => FlutterError.presentError(details);
   PlatformDispatcher.instance.onError = (error, stack) {
@@ -20,7 +23,6 @@ void main() async {
     return true;
   };
 
-  // 1. تهيئة MediaKit
   try {
     MediaKit.ensureInitialized();
   } catch (e) {
@@ -28,7 +30,6 @@ void main() async {
     return;
   }
 
-  // 2. تهيئة FFmpegKitExtended (جديد)
   try {
     await FFmpegKitExtended.initialize();
   } catch (e) {
@@ -36,7 +37,6 @@ void main() async {
     return;
   }
 
-  // باقي الإعدادات
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -52,13 +52,21 @@ void main() async {
     return;
   }
 
-  runApp(MultiProvider(
-    providers: [
-      ChangeNotifierProvider.value(value: settings),
-      ChangeNotifierProvider(create: (_) => LibraryProvider()),
-    ],
-    child: const SPlayerApp(),
-  ));
+  runApp(
+    EasyLocalization(
+      supportedLocales: const [Locale('ar'), Locale('en')],
+      path: 'assets/translations',
+      fallbackLocale: const Locale('ar'),
+      startLocale: settings.locale,
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: settings),
+          ChangeNotifierProvider(create: (_) => LibraryProvider()),
+        ],
+        child: const SPlayerApp(),
+      ),
+    ),
+  );
 }
 
 class SPlayerApp extends StatelessWidget {
@@ -70,6 +78,13 @@ class SPlayerApp extends StatelessWidget {
     return MaterialApp(
       title: 'SR Player',
       debugShowCheckedModeBanner: false,
+      locale: context.locale,
+      localizationsDelegates: context.localizationDelegates + const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: context.supportedLocales,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,

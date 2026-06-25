@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import '../models/video_item.dart';
 import '../providers/library_provider.dart';
 import '../widgets/video_card.dart';
 import 'player/player_screen.dart';

@@ -1,5 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class SettingsProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.dark;
@@ -20,7 +22,6 @@ class SettingsProvider extends ChangeNotifier {
   bool _sortDesc = true;
   bool get sortDesc => _sortDesc;
 
-  // إعدادات العرض المستقلة
   bool _libraryGridView = false;
   bool get libraryGridView => _libraryGridView;
 
@@ -120,6 +121,9 @@ class SettingsProvider extends ChangeNotifier {
   String _preferredAudioLanguage = 'ara';
   String get preferredAudioLanguage => _preferredAudioLanguage;
 
+  Locale _locale = const Locale('ar');
+  Locale get locale => _locale;
+
   Future<void> load() async {
     try {
       final p = await SharedPreferences.getInstance();
@@ -169,6 +173,9 @@ class SettingsProvider extends ChangeNotifier {
       _libraryGridView = p.getBool('libraryGridView') ?? false;
       _foldersGridView = p.getBool('foldersGridView') ?? false;
       _recentGridView = p.getBool('recentGridView') ?? false;
+
+      final langCode = p.getString('language') ?? 'ar';
+      _locale = Locale(langCode);
 
       notifyListeners();
     } catch (e) {
@@ -221,9 +228,17 @@ class SettingsProvider extends ChangeNotifier {
     await p.setBool('libraryGridView', _libraryGridView);
     await p.setBool('foldersGridView', _foldersGridView);
     await p.setBool('recentGridView', _recentGridView);
+
+    await p.setString('language', _locale.languageCode);
   }
 
-  // Setters...
+  void setLocale(Locale v) {
+    _locale = v;
+    EasyLocalization.of(GlobalObjectKey(0).currentContext!)!.setLocale(v);
+    notifyListeners();
+    _save();
+  }
+
   void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
   void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
   void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
