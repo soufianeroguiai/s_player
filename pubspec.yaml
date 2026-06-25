@@ -28,9 +28,11 @@ dependencies:
   ffmpeg_kit_extended_flutter: ^0.5.8
 
   # 🌍 Localization
-  easy_localization: ^3.0.7
+  easy_localization: ^3.0.8
   flutter_localizations:
     sdk: flutter
+    
+  url_launcher: ^6.3.2
 
   # 📦 State
   provider: ^6.1.5+1

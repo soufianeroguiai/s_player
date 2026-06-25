@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:easy_localization/easy_localization.dart';
 import '../../models/video_item.dart';
 import '../../widgets/video_card.dart';
 
-// ─── تبويب المكتبة ───
 class LibraryTab extends StatelessWidget {
   final List<VideoItem> videos;
   final bool gridView;
@@ -27,7 +27,7 @@ class LibraryTab extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (videos.isEmpty) {
-      return const EmptyState('ما لقينا فيديوهات', Symbols.video_library_rounded);
+      return EmptyState('no_videos'.tr(), Symbols.video_library_rounded);
     }
     return gridView
         ? GridView.builder(
@@ -45,7 +45,6 @@ class LibraryTab extends StatelessWidget {
   }
 }
 
-// ─── تبويب الأخيرة ───
 class RecentTab extends StatelessWidget {
   final List<String> paths;
   final List<VideoItem> all;
@@ -83,7 +82,7 @@ class RecentTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final items = list;
-    if (items.isEmpty) return const EmptyState('ما شفتي فيديو بعد', Symbols.history_rounded);
+    if (items.isEmpty) return EmptyState('no_recents'.tr(), Symbols.history_rounded);
 
     return Column(children: [
       Padding(
@@ -96,7 +95,7 @@ class RecentTab extends StatelessWidget {
           TextButton.icon(
               onPressed: onClear,
               icon: Icon(Symbols.delete_sweep_rounded, size: 16, color: cs.error),
-              label: Text('مسح', style: TextStyle(color: cs.error, fontSize: 12)),
+              label: Text('clear_recents'.tr(), style: TextStyle(color: cs.error, fontSize: 12)),
               style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10))),
         ]),
       ),
@@ -121,7 +120,6 @@ class RecentTab extends StatelessWidget {
   }
 }
 
-// ─── تبويب المجلدات ───
 class FoldersTab extends StatelessWidget {
   final Map<String, List<VideoItem>> byFolder;
   final void Function(String) onTap;
@@ -140,7 +138,7 @@ class FoldersTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final keys = byFolder.keys.toList()..sort();
-    if (keys.isEmpty) return const EmptyState('ما لقينا مجلدات', Symbols.folder_off_rounded);
+    if (keys.isEmpty) return EmptyState('no_folders'.tr(), Symbols.folder_off_rounded);
 
     final children = keys.map((folder) {
       final videos = byFolder[folder]!;
@@ -225,7 +223,6 @@ class FoldersTab extends StatelessWidget {
   }
 }
 
-// ─── الحالة الفارغة ───
 class EmptyState extends StatelessWidget {
   final String msg;
   final IconData icon;
