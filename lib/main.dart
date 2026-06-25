@@ -87,7 +87,7 @@ class SPlayerApp extends StatelessWidget {
       supportedLocales: context.supportedLocales,
       builder: (context, child) {
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: TextDirection.values[1],
           child: child!,
         );
       },
