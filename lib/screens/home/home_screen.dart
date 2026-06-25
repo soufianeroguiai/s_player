@@ -7,7 +7,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:easy_localization/easy_localization.dart';
 import '../../models/video_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -160,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Icon(Symbols.grid_view_rounded, color: currentGrid ? cs.primary : null),
               const SizedBox(width: 12),
-              Text('grid'.tr(), style: TextStyle(fontWeight: currentGrid ? FontWeight.bold : FontWeight.normal)),
+              Text('شبكة', style: TextStyle(fontWeight: currentGrid ? FontWeight.bold : FontWeight.normal)),
             ],
           ),
         ),
@@ -170,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Icon(Symbols.view_list_rounded, color: !currentGrid ? cs.primary : null),
               const SizedBox(width: 12),
-              Text('list'.tr(), style: TextStyle(fontWeight: !currentGrid ? FontWeight.bold : FontWeight.normal)),
+              Text('قائمة', style: TextStyle(fontWeight: !currentGrid ? FontWeight.bold : FontWeight.normal)),
             ],
           ),
         ),
@@ -181,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Icon(Symbols.calendar_today_rounded, color: settings.sortBy == 'date' ? cs.primary : null),
               const SizedBox(width: 12),
-              Text('date'.tr(), style: TextStyle(fontWeight: settings.sortBy == 'date' ? FontWeight.bold : FontWeight.normal)),
+              Text('التاريخ', style: TextStyle(fontWeight: settings.sortBy == 'date' ? FontWeight.bold : FontWeight.normal)),
             ],
           ),
         ),
@@ -191,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Icon(Symbols.sort_by_alpha_rounded, color: settings.sortBy == 'name' ? cs.primary : null),
               const SizedBox(width: 12),
-              Text('name'.tr(), style: TextStyle(fontWeight: settings.sortBy == 'name' ? FontWeight.bold : FontWeight.normal)),
+              Text('الاسم', style: TextStyle(fontWeight: settings.sortBy == 'name' ? FontWeight.bold : FontWeight.normal)),
             ],
           ),
         ),
@@ -201,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Icon(Symbols.data_usage_rounded, color: settings.sortBy == 'size' ? cs.primary : null),
               const SizedBox(width: 12),
-              Text('size'.tr(), style: TextStyle(fontWeight: settings.sortBy == 'size' ? FontWeight.bold : FontWeight.normal)),
+              Text('الحجم', style: TextStyle(fontWeight: settings.sortBy == 'size' ? FontWeight.bold : FontWeight.normal)),
             ],
           ),
         ),
@@ -211,7 +210,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Icon(Symbols.timer_rounded, color: settings.sortBy == 'duration' ? cs.primary : null),
               const SizedBox(width: 12),
-              Text('duration'.tr(), style: TextStyle(fontWeight: settings.sortBy == 'duration' ? FontWeight.bold : FontWeight.normal)),
+              Text('المدة', style: TextStyle(fontWeight: settings.sortBy == 'duration' ? FontWeight.bold : FontWeight.normal)),
             ],
           ),
         ),
@@ -222,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Icon(settings.sortDesc ? Symbols.arrow_downward_rounded : Symbols.arrow_upward_rounded),
               const SizedBox(width: 12),
-              Text(settings.sortDesc ? 'descending'.tr() : 'ascending'.tr()),
+              Text(settings.sortDesc ? 'تنازلي' : 'تصاعدي'),
             ],
           ),
         ),
@@ -263,35 +262,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         0,
       ),
       items: [
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'settings',
           child: Row(children: [
             Icon(Symbols.settings_rounded),
-            const SizedBox(width: 12),
-            Text('settings'.tr()),
+            SizedBox(width: 12),
+            Text('الإعدادات'),
           ]),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'favorites',
           child: Row(children: [
             Icon(Symbols.star_rounded),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text('المفضلة'),
           ]),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'playlist',
           child: Row(children: [
             Icon(Symbols.playlist_play_rounded),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text('قائمة التشغيل'),
           ]),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'hidden',
           child: Row(children: [
             Icon(Symbols.visibility_off_rounded),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text('الملفات المخفية'),
           ]),
         ),
@@ -348,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: IconButton(
               icon: const Icon(Symbols.grid_view_rounded),
               onPressed: _onViewOptionsPressed,
-              tooltip: 'view_options'.tr(),
+              tooltip: 'خيارات العرض والفرز',
             ),
           ),
           IconButton(
@@ -394,29 +393,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             setState(() => _currentIndex = index);
           }
         },
-        destinations: [
+        destinations: const [
           NavigationDestination(
-            icon: const Icon(Symbols.video_library_rounded),
-            label: 'library'.tr(),
+            icon: Icon(Symbols.video_library_rounded),
+            label: 'المكتبة',
           ),
           NavigationDestination(
-            icon: const Icon(Symbols.folder_rounded),
-            label: 'folders'.tr(),
+            icon: Icon(Symbols.folder_rounded),
+            label: 'المجلدات',
           ),
           NavigationDestination(
-            icon: const Icon(Symbols.history_rounded),
-            label: 'recents'.tr(),
+            icon: Icon(Symbols.history_rounded),
+            label: 'الأخيرة',
           ),
           NavigationDestination(
-            icon: const Icon(Symbols.more_horiz_rounded),
-            label: 'more'.tr(),
+            icon: Icon(Symbols.more_horiz_rounded),
+            label: 'المزيد',
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _pickFile,
         icon: const Icon(Symbols.folder_open_rounded),
-        label: Text('open_file'.tr()),
+        label: const Text('فتح ملف'),
       ),
     );
   }
@@ -597,7 +596,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
                 _sheetTile(
                   icon: Symbols.delete_rounded,
-                  title: 'delete'.tr(),
+                  title: 'حذف المجلد',
                   iconBg: cs.errorContainer,
                   iconColor: cs.onErrorContainer,
                   onTap: () {
@@ -608,17 +607,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const Divider(height: 1),
                 _sheetTile(
                   icon: Symbols.swap_horiz_rounded,
-                  title: 'تحويل الكل (${'close'.tr()})',
+                  title: 'تحويل الكل (قريباً)',
                   enabled: false,
                 ),
                 _sheetTile(
                   icon: Symbols.music_note_rounded,
-                  title: 'استخراج الصوت (${'close'.tr()})',
+                  title: 'استخراج الصوت (قريباً)',
                   enabled: false,
                 ),
                 _sheetTile(
                   icon: Symbols.image_rounded,
-                  title: 'إعادة توليد الصور (${'close'.tr()})',
+                  title: 'إعادة توليد الصور (قريباً)',
                   enabled: false,
                 ),
               ],
@@ -675,22 +674,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const Divider(height: 1),
                 _sheetTile(
                   icon: Symbols.content_cut_rounded,
-                  title: 'قص الفيديو (${'close'.tr()})',
+                  title: 'قص الفيديو (قريباً)',
                   enabled: false,
                 ),
                 _sheetTile(
                   icon: Symbols.swap_horiz_rounded,
-                  title: 'تحويل صيغة (${'close'.tr()})',
+                  title: 'تحويل صيغة (قريباً)',
                   enabled: false,
                 ),
                 _sheetTile(
                   icon: Symbols.music_note_rounded,
-                  title: 'استخراج الصوت (${'close'.tr()})',
+                  title: 'استخراج الصوت (قريباً)',
                   enabled: false,
                 ),
                 _sheetTile(
                   icon: Symbols.gif_rounded,
-                  title: 'صورة متحركة GIF (${'close'.tr()})',
+                  title: 'صورة متحركة GIF (قريباً)',
                   enabled: false,
                 ),
                 const Divider(height: 1),
@@ -770,17 +769,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const Divider(height: 1),
                 _sheetTile(
                   icon: Symbols.image_rounded,
-                  title: 'إعادة توليد الصورة (${'close'.tr()})',
+                  title: 'إعادة توليد الصورة (قريباً)',
                   enabled: false,
                 ),
                 _sheetTile(
                   icon: Symbols.subtitles_rounded,
-                  title: 'استخراج الترجمة (${'close'.tr()})',
+                  title: 'استخراج الترجمة (قريباً)',
                   enabled: false,
                 ),
                 _sheetTile(
                   icon: Symbols.bar_chart_rounded,
-                  title: 'خصائص الترميز (${'close'.tr()})',
+                  title: 'خصائص الترميز (قريباً)',
                   enabled: false,
                 ),
                 const Divider(height: 1),
@@ -800,7 +799,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
                 _sheetTile(
                   icon: Symbols.delete_rounded,
-                  title: 'delete'.tr(),
+                  title: 'حذف',
                   iconBg: cs.errorContainer,
                   iconColor: cs.onErrorContainer,
                   onTap: () {
@@ -843,7 +842,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         title: Text(title, style: TextStyle(color: enabled ? cs.onSurface : cs.onSurfaceVariant, fontSize: 14)),
         onTap: enabled
             ? onTap
-            : () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('close'.tr()))),
+            : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً'))),
       ),
     );
   }
@@ -892,10 +891,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('delete'.tr()),
-        content: Text('${'confirm_delete_file'.tr()} "${video.name}"؟'),
+        title: const Text('حذف الملف'),
+        content: Text('هل أنت متأكد من حذف "${video.name}"؟'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -908,7 +907,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 );
               }
             },
-            child: Text('delete'.tr(), style: const TextStyle(color: Colors.red)),
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -919,10 +918,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('delete'.tr()),
-        content: Text('${'confirm_delete_file'.tr()} ${videos.length} فيديو؟'),
+        title: const Text('حذف المجلد'),
+        content: Text('هل أنت متأكد من حذف ${videos.length} فيديو؟'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -935,7 +934,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 SnackBar(content: Text('تم حذف ${videos.length} فيديو')),
               );
             },
-            child: Text('delete'.tr(), style: const TextStyle(color: Colors.red)),
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

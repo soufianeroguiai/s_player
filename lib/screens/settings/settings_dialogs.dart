@@ -1,35 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:easy_localization/easy_localization.dart';
 import '../../providers/settings_provider.dart';
-
-void showLanguagePicker(BuildContext ctx, SettingsProvider s) {
-  showDialog(
-    context: ctx,
-    builder: (context) => SimpleDialog(
-      title: Text('language'.tr()),
-      children: [
-        RadioListTile<Locale>(
-          title: Text('arabic'.tr()),
-          value: const Locale('ar'),
-          groupValue: s.locale,
-          onChanged: (v) {
-            s.setLocale(v!);
-            Navigator.pop(context);
-          },
-        ),
-        RadioListTile<Locale>(
-          title: Text('english'.tr()),
-          value: const Locale('en'),
-          groupValue: s.locale,
-          onChanged: (v) {
-            s.setLocale(v!);
-            Navigator.pop(context);
-          },
-        ),
-      ],
-    ),
-  );
-}
 
 void showBoostDialog(BuildContext ctx, SettingsProvider s) {
   showDialog(

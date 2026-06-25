@@ -27,11 +27,6 @@ dependencies:
   # 🎞️ FFmpeg Extended
   ffmpeg_kit_extended_flutter: ^0.5.8
 
-  # 🌍 Localization
-  easy_localization: ^3.0.8
-  flutter_localizations:
-    sdk: flutter
-    
   url_launcher: ^6.3.2
 
   # 📦 State
@@ -58,7 +53,7 @@ flutter:
 
   assets:
     - assets/
-    - assets/translations/
+    
 # تكوين FFmpeg Extended (ضبط البناء)
 ffmpeg_kit_extended_config:
   type: "base" # pre-bundled builds: debug, base, full, audio, video, video_hw
