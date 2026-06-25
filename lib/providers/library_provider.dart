@@ -6,8 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/video_item.dart';
 
-/// يدير مكتبة الفيديوهات: المسح عبر photo_manager، التخزين المؤقت
-/// المحلي، قائمة "الأخيرة"، ومواضع الاستئناف لكل فيديو.
 class LibraryProvider extends ChangeNotifier {
   List<VideoItem> _videos = [];
   List<String> _recentPaths = [];
@@ -15,8 +13,10 @@ class LibraryProvider extends ChangeNotifier {
   bool _loading = false;
   String? _error;
 
+  final Map<String, int> _positions = {};
+
   List<VideoItem> get videos => _videos.where((v) => !_hiddenPaths.contains(v.path)).toList();
-  List<VideoItem> get allVideos => _videos; // بما فيها المخفية
+  List<VideoItem> get allVideos => _videos;
   List<String> get recentPaths => _recentPaths;
   Set<String> get hiddenPaths => _hiddenPaths;
   bool get loading => _loading;
@@ -70,8 +70,19 @@ class LibraryProvider extends ChangeNotifier {
             .toList();
         notifyListeners();
       }
+      await _loadPositions();
     } catch (e) {
       debugPrint('فشل تحميل الذاكرة المؤقتة: $e');
+    }
+  }
+
+  Future<void> _loadPositions() async {
+    final p = await SharedPreferences.getInstance();
+    for (final video in _videos) {
+      final ms = p.getInt('pos_${video.path}');
+      if (ms != null && ms > 0) {
+        _positions[video.path] = ms;
+      }
     }
   }
 
@@ -153,6 +164,7 @@ class LibraryProvider extends ChangeNotifier {
       result.sort((a, b) => b.modified.compareTo(a.modified));
       _videos = result;
       await _saveVideosToCache();
+      await _loadPositions();
     } catch (e) {
       _error = 'فشل المسح: $e';
     }
@@ -183,18 +195,28 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// يحفظ آخر موضع تشغيل لملف معيّن. يُستخدم مسار الملف نفسه كجزء
-  /// من المفتاح (بدل الاعتماد فقط على hashCode) لتفادي أي احتمال
-  /// تصادم أو عدم ثبات بين تشغيلات مختلفة لتطبيق دارت.
   Future<void> savePosition(String path, Duration pos) async {
     final p = await SharedPreferences.getInstance();
     await p.setInt('pos_$path', pos.inMilliseconds);
+    _positions[path] = pos.inMilliseconds;
+    notifyListeners();
+  }
+
+  Duration? getCachedPosition(String path) {
+    final ms = _positions[path];
+    if (ms == null || ms <= 0) return null;
+    return Duration(milliseconds: ms);
   }
 
   Future<Duration?> getPosition(String path) async {
+    return getCachedPosition(path) ?? (await _loadPositionFromPrefs(path));
+  }
+
+  Future<Duration?> _loadPositionFromPrefs(String path) async {
     final p = await SharedPreferences.getInstance();
     final ms = p.getInt('pos_$path');
     if (ms == null || ms == 0) return null;
+    _positions[path] = ms;
     return Duration(milliseconds: ms);
   }
 }
