@@ -7,8 +7,6 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../providers/settings_provider.dart';
 import 'player_indicators.dart';
 
-/// طبقة الإيماءات والمؤشرات (صوت، سطوع، Seek، ترجمة)
-/// تستقبل كل المعطيات اللازمة من PlayerScreen وتردّ الفعل عبر callback.
 class PlayerGestureLayer extends StatefulWidget {
   final Player player;
   final VideoController controller;
@@ -46,19 +44,16 @@ class PlayerGestureLayer extends StatefulWidget {
 }
 
 class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
-  // إيماءات الترجمة (إصبعين)
   double _startSubtitleSize = 24.0;
   double _startBottomPadding = 0.0;
   Offset _startFocalPoint = Offset.zero;
   bool _subtitleGestureActive = false;
 
-  // مؤشرات الصوت والسطوع والـ seek
   final ValueNotifier<bool> _showVolNotifier = ValueNotifier(false);
   final ValueNotifier<bool> _showBrightNotifier = ValueNotifier(false);
   final ValueNotifier<bool> _showSeekNotifier = ValueNotifier(false);
   Timer? _indicatorTimer;
 
-  // رسالة الـ seek hint
   String? _seekHintText;
   Timer? _seekHintTimer;
 
@@ -103,7 +98,6 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
 
     return Stack(
       children: [
-        // طبقة الإيماءات
         GestureDetector(
           onTap: widget.onToggleControls,
           onDoubleTapDown: widget.isLocked
@@ -193,7 +187,6 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
           child: widget.child,
         ),
 
-        // مؤشر الـ seek
         ValueListenableBuilder<bool>(
           valueListenable: _showSeekNotifier,
           builder: (context, show, child) {
@@ -218,7 +211,7 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
           },
         ),
 
-        // ✅ مؤشر الصوت (يظهر على اليسار بتصميم Pill البسيط)
+        // ✅ مؤشر الصوت (يظهر على اليسار – شريط عمودي)
         ValueListenableBuilder<bool>(
           valueListenable: _showVolNotifier,
           builder: (context, show, child) {
@@ -236,14 +229,14 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
                 displayValue: (widget.volumeLevel / 2.0).clamp(0.0, 1.0),
                 labelText: '${(widget.volumeLevel * 100).round()}%',
                 color: isBoosted
-                    ? const Color(0xFFFF8A65)   // برتقالي هادئ
-                    : const Color(0xFF64B5F6), // أزرق هادئ
+                    ? const Color(0xFFFF8A65)
+                    : const Color(0xFF64B5F6),
               ),
             );
           },
         ),
 
-        // ✅ مؤشر السطوع (يظهر على اليمين بتصميم Pill البسيط)
+        // ✅ مؤشر السطوع (يظهر على اليمين – شريط عمودي)
         ValueListenableBuilder<bool>(
           valueListenable: _showBrightNotifier,
           builder: (context, show, child) {
@@ -262,7 +255,7 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
                             : Icons.brightness_7_rounded,
                     displayValue: brightness,
                     labelText: '${(brightness * 100).round()}%',
-                    color: const Color(0xFFFFF176), // أصفر فاتح ناعم
+                    color: const Color(0xFFFFF176),
                   ),
                 );
               },
@@ -270,7 +263,6 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
           },
         ),
 
-        // رسالة الـ seek hint (+10s, -10s)
         if (_seekHintText != null)
           Center(
             child: Container(

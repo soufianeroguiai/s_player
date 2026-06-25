@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// مؤشرات بتصميم شريط أفقي بسيط وهادئ مع أيقونة متغيرة.
+/// مؤشرات بتصميم عمودي بسيط وهادئ مع أيقونة متغيرة.
 class PlayerIndicators {
   static Widget buildFloatingIndicator({
     required IconData icon,
@@ -8,7 +8,7 @@ class PlayerIndicators {
     required String labelText,
     required Color color,
   }) {
-    return _MinimalPill(
+    return _VerticalPill(
       icon: icon,
       value: displayValue.clamp(0.0, 1.0),
       label: labelText,
@@ -17,14 +17,14 @@ class PlayerIndicators {
   }
 }
 
-/// شريط أفقي بسيط (Pill) مع أيقونة تتغير حسب القيمة.
-class _MinimalPill extends StatelessWidget {
+/// شريط عمودي بسيط (Vertical Pill) مع أيقونة تتغير حسب القيمة.
+class _VerticalPill extends StatelessWidget {
   final IconData icon;
   final double value;
   final String label;
   final Color barColor;
 
-  const _MinimalPill({
+  const _VerticalPill({
     required this.icon,
     required this.value,
     required this.label,
@@ -66,13 +66,15 @@ class _MinimalPill extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      width: 40,
+      height: 160,
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: Colors.black87,
         borderRadius: BorderRadius.circular(30),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // أيقونة متغيرة مع حركة سلسة
           AnimatedSwitcher(
@@ -87,29 +89,47 @@ class _MinimalPill extends StatelessWidget {
               key: ValueKey(currentIcon),
             ),
           ),
-          const SizedBox(width: 10),
-          // شريط التقدم
-          SizedBox(
-            width: 80,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: value,
-                backgroundColor: Colors.white24,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  barColor.withOpacity(0.8),
+          // شريط التقدم العمودي
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LayoutBuilder(
+                  builder: (ctx, constraints) {
+                    final barHeight = constraints.maxHeight;
+                    return Stack(
+                      alignment: Alignment.bottomCenter,
+                      children: [
+                        // الخلفية
+                        Container(
+                          width: 4,
+                          height: barHeight,
+                          color: Colors.white24,
+                        ),
+                        // الممتلئ
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 100),
+                          width: 4,
+                          height: barHeight * value,
+                          decoration: BoxDecoration(
+                            color: barColor.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                minHeight: 4,
               ),
             ),
           ),
-          const SizedBox(width: 10),
           // النسبة
           Text(
             label,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 13,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
             ),
           ),
