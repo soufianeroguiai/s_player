@@ -125,8 +125,16 @@ class RecentTab extends StatelessWidget {
 class FoldersTab extends StatelessWidget {
   final Map<String, List<VideoItem>> byFolder;
   final void Function(String) onTap;
+  final void Function(String folderName, List<VideoItem> videos)? onMore; // ✅ دالة خيارات المجلد
   final bool gridView;
-  const FoldersTab({super.key, required this.byFolder, required this.onTap, this.gridView = false});
+
+  const FoldersTab({
+    super.key,
+    required this.byFolder,
+    required this.onTap,
+    this.onMore,
+    this.gridView = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -150,6 +158,24 @@ class FoldersTab extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (onMore != null)
+                        GestureDetector(
+                          onTap: () => onMore!(folder, videos),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
+                          ),
+                        ),
+                    ],
+                  ),
                   Icon(Symbols.folder_rounded, color: cs.onSecondaryContainer, size: 48),
                   const SizedBox(height: 8),
                   Text(folder, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 13)),
@@ -170,7 +196,17 @@ class FoldersTab extends StatelessWidget {
               child: Icon(Symbols.folder_rounded, color: cs.onSecondaryContainer, size: 28)),
           title: Text(folder, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 15)),
           subtitle: Text('${videos.length} فيديو  •  $size', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
-          trailing: Icon(Symbols.chevron_right_rounded, color: cs.onSurfaceVariant),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (onMore != null)
+                IconButton(
+                  icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 20),
+                  onPressed: () => onMore!(folder, videos),
+                ),
+              Icon(Symbols.chevron_right_rounded, color: cs.onSurfaceVariant),
+            ],
+          ),
           onTap: () => onTap(folder),
         );
       }

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -21,10 +22,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
-  String? _browsingFolder;   // ✅ مجلد التصفح الحالي داخل تبويب المجلدات
+  String? _browsingFolder;
 
   late AnimationController _rotateController;
   late Animation<double> _rotateAnimation;
+
+  // قائمة المفضلة المحفوظة محلياً
+  final List<String> _favorites = [];
 
   @override
   void initState() {
@@ -36,13 +40,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _rotateAnimation = Tween<double>(begin: 0, end: 0.5).animate(
       CurvedAnimation(parent: _rotateController, curve: Curves.easeInOut),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initLibrary());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initLibrary();
+      _loadFavorites();
+    });
   }
 
   @override
   void dispose() {
     _rotateController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFavorites() async {
+    final p = await SharedPreferences.getInstance();
+    final favs = p.getStringList('favorite_paths') ?? [];
+    setState(() => _favorites.addAll(favs));
+  }
+
+  Future<void> _saveFavorites() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('favorite_paths', _favorites);
+  }
+
+  bool _isFavorite(String path) => _favorites.contains(path);
+
+  void _toggleFavorite(String path) {
+    setState(() {
+      if (_isFavorite(path)) {
+        _favorites.remove(path);
+      } else {
+        _favorites.add(path);
+      }
+    });
+    _saveFavorites();
   }
 
   Future<void> _initLibrary() async {
@@ -258,20 +289,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          // 0: المكتبة
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: LibraryTab(
               videos: _sorted(lib.videos),
               gridView: settings.libraryGridView,
               onOpen: _openPlayer,
-              onMore: (v) => _menu(v),
+              onMore: (v) => _buildVideoOptionsSheet(v),
               loading: lib.loading,
             ),
           ),
-          // 1: المجلدات – يدعم التصفح الهرمي
           _buildFoldersTab(lib, settings),
-          // 2: الأخيرة
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: RecentTab(
@@ -292,7 +320,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           } else {
             setState(() {
               _currentIndex = index;
-              // عند مغادرة تبويب المجلدات نلغي التصفح
               if (index != 1) _browsingFolder = null;
             });
           }
@@ -324,9 +351,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  /// يبني محتوى تبويب المجلدات (قائمة مجلدات أو فيديوهات مجلد معين)
   Widget _buildFoldersTab(LibraryProvider lib, SettingsProvider settings) {
-    // إذا كنا داخل مجلد
     if (_browsingFolder != null) {
       final folderVideos = _sorted(
         lib.videos.where((v) => v.folder == _browsingFolder).toList(),
@@ -334,7 +359,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
       return Column(
         children: [
-          // شريط التنقل داخل المجلد
           Container(
             color: Theme.of(context).colorScheme.surface,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -355,7 +379,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 ),
                 const Spacer(),
-                // عدد الفيديوهات
                 Text(
                   '${folderVideos.length} فيديو',
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
@@ -368,9 +391,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           Expanded(
             child: LibraryTab(
               videos: folderVideos,
-              gridView: settings.foldersGridView, // يستخدم إعداد العرض الخاص بالمجلدات
+              gridView: settings.foldersGridView,
               onOpen: _openPlayer,
-              onMore: (v) => _menu(v),
+              onMore: (v) => _buildVideoOptionsSheet(v),
               loading: false,
             ),
           ),
@@ -378,166 +401,421 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
     }
 
-    // قائمة المجلدات العادية
     return RefreshIndicator(
       onRefresh: _refreshLibrary,
       child: FoldersTab(
         byFolder: lib.byFolder,
         gridView: settings.foldersGridView,
         onTap: (folder) => setState(() => _browsingFolder = folder),
+        onMore: _buildFolderOptionsSheet, // ✅ نمرر دالة الخيارات للمجلدات
       ),
     );
   }
 
-  // ─── الدوال المساعدة (بقيت كما هي) ───
-  void _menu(VideoItem video) {
+  // ══════════════════════════════════════════════
+  // 📂 قائمة خصائص المجلد
+  // ══════════════════════════════════════════════
+  void _buildFolderOptionsSheet(String folderName, List<VideoItem> folderVideos) {
+    final cs = Theme.of(context).colorScheme;
+    final lib = context.read<LibraryProvider>();
+    final totalSize = folderVideos.fold<int>(0, (s, v) => s + v.size);
+    final sizeStr = totalSize < 1024 * 1024 * 1024
+        ? '${(totalSize / (1024 * 1024)).toStringAsFixed(0)} MB'
+        : '${(totalSize / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+
+    final bool allHidden = folderVideos.every((v) => lib.hiddenPaths.contains(v.path));
+
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Column(
+                  children: [
+                    Text(folderName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text('${folderVideos.length} فيديو  •  $sizeStr',
+                        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // تشغيل الكل
+              _sheetTile(
+                icon: Symbols.play_arrow_rounded,
+                title: 'تشغيل الكل',
+                iconBg: cs.primaryContainer,
+                iconColor: cs.onPrimaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  if (folderVideos.isNotEmpty) _openPlayer(folderVideos.first);
+                },
+              ),
+              // تشغيل عشوائي
+              _sheetTile(
+                icon: Symbols.shuffle_rounded,
+                title: 'تشغيل عشوائي',
+                iconBg: cs.tertiaryContainer,
+                iconColor: cs.onTertiaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  if (folderVideos.isNotEmpty) {
+                    folderVideos.shuffle();
+                    _openPlayer(folderVideos.first);
+                  }
+                },
+              ),
+              const Divider(height: 1),
+              // خصائص المجلد
+              _sheetTile(
+                icon: Symbols.info_rounded,
+                title: 'خصائص المجلد',
+                iconBg: cs.secondaryContainer,
+                iconColor: cs.onSecondaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text(folderName),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _infoRow('عدد الملفات', '${folderVideos.length}'),
+                          _infoRow('الحجم الإجمالي', sizeStr),
+                          _infoRow('أول ملف', folderVideos.isNotEmpty ? folderVideos.first.modified.toString() : '-'),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('موافق')),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              // إضافة للمفضلة
+              _sheetTile(
+                icon: _isFavorite(folderName) ? Symbols.star_rounded : Symbols.star_outline_rounded,
+                title: _isFavorite(folderName) ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
+                iconBg: cs.tertiaryContainer,
+                iconColor: cs.onTertiaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleFavorite(folderName);
+                },
+              ),
+              const Divider(height: 1),
+              // إخفاء الكل
+              _sheetTile(
+                icon: allHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded,
+                title: allHidden ? 'إظهار الكل' : 'إخفاء الكل',
+                iconBg: cs.errorContainer,
+                iconColor: cs.onErrorContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  for (final v in folderVideos) {
+                    if (allHidden) {
+                      lib.unhideVideo(v.path);
+                    } else {
+                      lib.hideVideo(v.path);
+                    }
+                  }
+                },
+              ),
+              // حذف المجلد
+              _sheetTile(
+                icon: Symbols.delete_rounded,
+                title: 'حذف المجلد',
+                iconBg: cs.errorContainer,
+                iconColor: cs.onErrorContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteFolder(folderVideos);
+                },
+              ),
+              const Divider(height: 1),
+              // خيارات قادمة (معطلة)
+              _sheetTile(
+                icon: Symbols.swap_horiz_rounded,
+                title: 'تحويل الكل (قريباً)',
+                enabled: false,
+              ),
+              _sheetTile(
+                icon: Symbols.music_note_rounded,
+                title: 'استخراج الصوت (قريباً)',
+                enabled: false,
+              ),
+              _sheetTile(
+                icon: Symbols.image_rounded,
+                title: 'إعادة توليد الصور (قريباً)',
+                enabled: false,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════
+  // 🎬 قائمة خصائص الفيديو
+  // ══════════════════════════════════════════════
+  void _buildVideoOptionsSheet(VideoItem video) {
     final cs = Theme.of(context).colorScheme;
     final lib = context.read<LibraryProvider>();
     final isHidden = lib.hiddenPaths.contains(video.path);
 
     showModalBottomSheet(
-        context: context,
-        builder: (_) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                    child: Text(video.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14))),
-                const Divider(height: 1),
-                ListTile(
-                    leading: _mIcon(Symbols.play_arrow_rounded, cs.primaryContainer, cs.onPrimaryContainer),
-                    title: const Text('تشغيل'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _openPlayer(video);
-                    }),
-                ListTile(
-                    leading: _mIcon(Symbols.info_rounded, cs.secondaryContainer, cs.onSecondaryContainer),
-                    title: const Text('معلومات'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: video)));
-                    }),
-                ListTile(
-                    leading: _mIcon(Symbols.share_rounded, cs.tertiaryContainer, cs.onTertiaryContainer),
-                    title: const Text('مشاركة'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Share.shareXFiles([XFile(video.path)], subject: video.name);
-                    }),
-                ListTile(
-                    leading: _mIcon(
-                      isHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded,
-                      isHidden ? cs.secondaryContainer : cs.errorContainer,
-                      isHidden ? cs.onSecondaryContainer : cs.onErrorContainer,
-                    ),
-                    title: Text(isHidden ? 'إلغاء الإخفاء' : 'إخفاء'),
-                    subtitle: Text(
-                      isHidden ? 'سيظهر في المكتبة مجدداً' : 'لن يظهر في القائمة الرئيسية',
-                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                    ),
-                    onTap: () {
-                      Navigator.pop(context);
-                      if (isHidden) {
-                        lib.unhideVideo(video.path);
-                      } else {
-                        lib.hideVideo(video.path);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('تم إخفاء الفيديو'),
-                            action: SnackBarAction(
-                              label: 'تراجع',
-                              onPressed: () => lib.unhideVideo(video.path),
-                            ),
-                          ),
-                        );
-                      }
-                    }),
-              ]),
-            ));
-  }
-
-  void _showHiddenVideos() {
-    final lib = context.read<LibraryProvider>();
-    final hidden = lib.allVideos.where((v) => lib.hiddenPaths.contains(v.path)).toList();
-    final cs = Theme.of(context).colorScheme;
-
-    showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.95,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (ctx, scroll) => Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Row(children: [
-              Icon(Symbols.visibility_off_rounded, color: cs.primary, size: 20),
-              const SizedBox(width: 8),
-              Text('الملفات المخفية (${hidden.length})',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface)),
-              const Spacer(),
-              if (hidden.isNotEmpty)
-                TextButton(
-                  onPressed: () {
-                    lib.clearHidden();
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('إظهار الكل'),
-                ),
-            ]),
-          ),
-          const Divider(height: 1),
-          if (hidden.isEmpty)
-            Expanded(
-              child: Center(
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Symbols.visibility_rounded, size: 48, color: cs.onSurfaceVariant),
-                  const SizedBox(height: 12),
-                  Text('لا يوجد ملفات مخفية', style: TextStyle(color: cs.onSurfaceVariant)),
-                ]),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Text(video.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14)),
               ),
-            )
-          else
-            Expanded(
-              child: ListView.builder(
-                controller: scroll,
-                itemCount: hidden.length,
-                itemBuilder: (_, i) {
-                  final v = hidden[i];
-                  return ListTile(
-                    leading: Container(
-                      width: 48, height: 48,
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(Symbols.video_file_rounded, color: cs.onSurfaceVariant),
-                    ),
-                    title: Text(v.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(v.formattedSize, style: const TextStyle(fontSize: 12)),
-                    trailing: TextButton(
-                      onPressed: () => lib.unhideVideo(v.path),
-                      child: const Text('إظهار'),
-                    ),
+              const Divider(height: 1),
+              // تشغيل
+              _sheetTile(
+                icon: Symbols.play_arrow_rounded,
+                title: 'تشغيل',
+                iconBg: cs.primaryContainer,
+                iconColor: cs.onPrimaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  _openPlayer(video);
+                },
+              ),
+              // معلومات
+              _sheetTile(
+                icon: Symbols.info_rounded,
+                title: 'معلومات',
+                iconBg: cs.secondaryContainer,
+                iconColor: cs.onSecondaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: video)));
+                },
+              ),
+              const Divider(height: 1),
+              // قص الفيديو (قريباً)
+              _sheetTile(
+                icon: Symbols.content_cut_rounded,
+                title: 'قص الفيديو (قريباً)',
+                enabled: false,
+              ),
+              // تحويل صيغة (قريباً)
+              _sheetTile(
+                icon: Symbols.swap_horiz_rounded,
+                title: 'تحويل صيغة (قريباً)',
+                enabled: false,
+              ),
+              // استخراج الصوت (قريباً)
+              _sheetTile(
+                icon: Symbols.music_note_rounded,
+                title: 'استخراج الصوت (قريباً)',
+                enabled: false,
+              ),
+              const Divider(height: 1),
+              // مشاركة
+              _sheetTile(
+                icon: Symbols.share_rounded,
+                title: 'مشاركة',
+                iconBg: cs.tertiaryContainer,
+                iconColor: cs.onTertiaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  Share.shareXFiles([XFile(video.path)], subject: video.name);
+                },
+              ),
+              // نسخ المسار
+              _sheetTile(
+                icon: Symbols.content_copy_rounded,
+                title: 'نسخ المسار',
+                iconBg: cs.surfaceContainerHighest,
+                iconColor: cs.onSurfaceVariant,
+                onTap: () {
+                  Navigator.pop(context);
+                  Clipboard.setData(ClipboardData(text: video.path));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم نسخ المسار')),
                   );
                 },
               ),
-            ),
-        ]),
+              // فتح في مدير الملفات
+              _sheetTile(
+                icon: Symbols.folder_open_rounded,
+                title: 'فتح في مدير الملفات',
+                iconBg: cs.surfaceContainerHighest,
+                iconColor: cs.onSurfaceVariant,
+                onTap: () {
+                  Navigator.pop(context);
+                  // محاولة فتح المجلد الذي يحتوي الملف
+                  try {
+                    final folderPath = File(video.path).parent.path;
+                    Process.run('am', ['start', '-a', 'android.intent.action.VIEW', '-d', 'file://$folderPath']);
+                  } catch (_) {}
+                },
+              ),
+              const Divider(height: 1),
+              // إضافة للمفضلة
+              _sheetTile(
+                icon: _isFavorite(video.path) ? Symbols.star_rounded : Symbols.star_outline_rounded,
+                title: _isFavorite(video.path) ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
+                iconBg: cs.tertiaryContainer,
+                iconColor: cs.onTertiaryContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleFavorite(video.path);
+                },
+              ),
+              // إخفاء / إظهار
+              _sheetTile(
+                icon: isHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded,
+                title: isHidden ? 'إلغاء الإخفاء' : 'إخفاء',
+                iconBg: isHidden ? cs.secondaryContainer : cs.errorContainer,
+                iconColor: isHidden ? cs.onSecondaryContainer : cs.onErrorContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  if (isHidden) {
+                    lib.unhideVideo(video.path);
+                  } else {
+                    lib.hideVideo(video.path);
+                  }
+                },
+              ),
+              // حذف
+              _sheetTile(
+                icon: Symbols.delete_rounded,
+                title: 'حذف',
+                iconBg: cs.errorContainer,
+                iconColor: cs.onErrorContainer,
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteFile(video);
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _mIcon(IconData icon, Color bg, Color fg) => Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-      child: Icon(icon, color: fg, size: 22));
+  // ويدجت صف واحد في القائمة
+  Widget _sheetTile({
+    required IconData icon,
+    required String title,
+    Color? iconBg,
+    Color? iconColor,
+    VoidCallback? onTap,
+    bool enabled = true,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = iconBg ?? cs.surfaceContainerHighest;
+    final fg = iconColor ?? cs.onSurfaceVariant;
+
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.5,
+      child: ListTile(
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: fg, size: 22),
+        ),
+        title: Text(title, style: TextStyle(color: enabled ? cs.onSurface : cs.onSurfaceVariant, fontSize: 14)),
+        onTap: enabled ? onTap : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً'))),
+      ),
+    );
+  }
+
+  // مربع حوار تأكيد حذف ملف واحد
+  void _confirmDeleteFile(VideoItem video) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف الملف'),
+        content: Text('هل أنت متأكد من حذف "${video.name}"؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              final file = File(video.path);
+              if (file.existsSync()) {
+                file.deleteSync();
+                context.read<LibraryProvider>().scan();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('تم حذف "${video.name}"')),
+                );
+              }
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // مربع حوار تأكيد حذف كل ملفات المجلد
+  void _confirmDeleteFolder(List<VideoItem> videos) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف المجلد'),
+        content: Text('هل أنت متأكد من حذف ${videos.length} فيديو؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              for (final v in videos) {
+                final file = File(v.path);
+                if (file.existsSync()) file.deleteSync();
+              }
+              context.read<LibraryProvider>().scan();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('تم حذف ${videos.length} فيديو')),
+              );
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(value),
+        ],
+      ),
+    );
+  }
 }
