@@ -218,7 +218,7 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
           },
         ),
 
-        // ✅ مؤشر الصوت (يظهر على اليسار بتصميم دائري متحرك)
+        // ✅ مؤشر الصوت (يظهر على اليسار بتصميم Pill البسيط)
         ValueListenableBuilder<bool>(
           valueListenable: _showVolNotifier,
           builder: (context, show, child) {
@@ -235,13 +235,15 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
                         : Icons.volume_down_rounded,
                 displayValue: (widget.volumeLevel / 2.0).clamp(0.0, 1.0),
                 labelText: '${(widget.volumeLevel * 100).round()}%',
-                color: isBoosted ? Colors.orangeAccent : const Color(0xFF4FC3F7),
+                color: isBoosted
+                    ? const Color(0xFFFF8A65)   // برتقالي هادئ
+                    : const Color(0xFF64B5F6), // أزرق هادئ
               ),
             );
           },
         ),
 
-        // ✅ مؤشر السطوع (يظهر على اليمين بتصميم دائري متحرك)
+        // ✅ مؤشر السطوع (يظهر على اليمين بتصميم Pill البسيط)
         ValueListenableBuilder<bool>(
           valueListenable: _showBrightNotifier,
           builder: (context, show, child) {
@@ -260,7 +262,7 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
                             : Icons.brightness_7_rounded,
                     displayValue: brightness,
                     labelText: '${(brightness * 100).round()}%',
-                    color: const Color(0xFFFFD54F),
+                    color: const Color(0xFFFFF176), // أصفر فاتح ناعم
                   ),
                 );
               },
