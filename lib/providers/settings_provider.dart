@@ -32,14 +32,21 @@ class SettingsProvider extends ChangeNotifier {
   // ──────────────────────────────────────────────
   // المكتبة
   // ──────────────────────────────────────────────
-  bool _gridView = false;
-  bool get gridView => _gridView;
-
   String _sortBy = 'date';
   String get sortBy => _sortBy;
 
   bool _sortDesc = true;
   bool get sortDesc => _sortDesc;
+
+  // --- عرض التبويبات (منفصل لكل تبويب) ---
+  bool _libraryGridView = false;
+  bool get libraryGridView => _libraryGridView;
+
+  bool _foldersGridView = false;
+  bool get foldersGridView => _foldersGridView;
+
+  bool _recentGridView = false;
+  bool get recentGridView => _recentGridView;
 
   // ──────────────────────────────────────────────
   // الترجمة — العرض والتخصيص
@@ -155,7 +162,6 @@ class SettingsProvider extends ChangeNotifier {
       _autoPlay = p.getBool('autoPlay') ?? true;
       _defaultSpeed = p.getDouble('defaultSpeed') ?? 1.0;
       _showSubtitlesByDefault = p.getBool('showSubtitles') ?? true;
-      _gridView = p.getBool('gridView') ?? false;
       _sortBy = p.getString('sortBy') ?? 'date';
       _sortDesc = p.getBool('sortDesc') ?? true;
       _subtitleFontSize = p.getDouble('subtitleFontSize') ?? 30.0;
@@ -191,6 +197,12 @@ class SettingsProvider extends ChangeNotifier {
       _subtitleRTL = p.getBool('subtitleRTL') ?? false;
       _defaultAudioBoost = p.getDouble('defaultAudioBoost') ?? 100.0;
       _preferredAudioLanguage = p.getString('preferredAudioLanguage') ?? 'ara';
+
+      // --- إعدادات العرض الجديدة ---
+      _libraryGridView = p.getBool('libraryGridView') ?? false;
+      _foldersGridView = p.getBool('foldersGridView') ?? false;
+      _recentGridView = p.getBool('recentGridView') ?? false;
+
       notifyListeners();
     } catch (e) {
       debugPrint('Settings load error: $e');
@@ -205,7 +217,6 @@ class SettingsProvider extends ChangeNotifier {
     await p.setBool('autoPlay', _autoPlay);
     await p.setDouble('defaultSpeed', _defaultSpeed);
     await p.setBool('showSubtitles', _showSubtitlesByDefault);
-    await p.setBool('gridView', _gridView);
     await p.setString('sortBy', _sortBy);
     await p.setBool('sortDesc', _sortDesc);
     await p.setDouble('subtitleFontSize', _subtitleFontSize);
@@ -240,6 +251,11 @@ class SettingsProvider extends ChangeNotifier {
     await p.setBool('subtitleRTL', _subtitleRTL);
     await p.setDouble('defaultAudioBoost', _defaultAudioBoost);
     await p.setString('preferredAudioLanguage', _preferredAudioLanguage);
+
+    // --- إعدادات العرض الجديدة ---
+    await p.setBool('libraryGridView', _libraryGridView);
+    await p.setBool('foldersGridView', _foldersGridView);
+    await p.setBool('recentGridView', _recentGridView);
   }
 
   // ──────────────────────────────────────────────
@@ -250,7 +266,6 @@ class SettingsProvider extends ChangeNotifier {
   void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
   void setDefaultSpeed(double v) { _defaultSpeed = v; notifyListeners(); _save(); }
   void setShowSubtitlesByDefault(bool v) { _showSubtitlesByDefault = v; notifyListeners(); _save(); }
-  void setGridView(bool v) { _gridView = v; notifyListeners(); _save(); }
   void setSortBy(String v) { _sortBy = v; notifyListeners(); _save(); }
   void setSortDesc(bool v) { _sortDesc = v; notifyListeners(); _save(); }
   void setSubtitleFontSize(double v) { _subtitleFontSize = v; notifyListeners(); _save(); }
@@ -285,4 +300,9 @@ class SettingsProvider extends ChangeNotifier {
   void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); _save(); }
   void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); _save(); }
   void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); _save(); }
+
+  // --- إعدادات العرض الجديدة ---
+  void setLibraryGridView(bool v) { _libraryGridView = v; notifyListeners(); _save(); }
+  void setFoldersGridView(bool v) { _foldersGridView = v; notifyListeners(); _save(); }
+  void setRecentGridView(bool v) { _recentGridView = v; notifyListeners(); _save(); }
 }

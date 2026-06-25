@@ -19,13 +19,29 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0; // 0: المكتبة, 1: المجلدات, 2: الأخيرة
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  int _currentIndex = 0;
+
+  late AnimationController _rotateController;
+  late Animation<double> _rotateAnimation;
 
   @override
   void initState() {
     super.initState();
+    _rotateController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _rotateAnimation = Tween<double>(begin: 0, end: 0.5).animate(
+      CurvedAnimation(parent: _rotateController, curve: Curves.easeInOut),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _initLibrary());
+  }
+
+  @override
+  void dispose() {
+    _rotateController.dispose();
+    super.dispose();
   }
 
   Future<void> _initLibrary() async {
@@ -74,6 +90,166 @@ class _HomeScreenState extends State<HomeScreen> {
     return s.sortDesc ? sorted.reversed.toList() : sorted;
   }
 
+  void _onViewOptionsPressed() {
+    _rotateController.forward().then((_) => _rotateController.reverse());
+    _showViewOptionsPopup();
+  }
+
+  void _showViewOptionsPopup() {
+    final settings = context.read<SettingsProvider>();
+    final cs = Theme.of(context).colorScheme;
+
+    bool currentGrid;
+    if (_currentIndex == 0) {
+      currentGrid = settings.libraryGridView;
+    } else if (_currentIndex == 1) {
+      currentGrid = settings.foldersGridView;
+    } else {
+      currentGrid = settings.recentGridView;
+    }
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 50,
+        80,
+        MediaQuery.of(context).size.width,
+        0,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'grid',
+          child: Row(
+            children: [
+              Icon(Symbols.grid_view_rounded, color: currentGrid ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('شبكة', style: TextStyle(fontWeight: currentGrid ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'list',
+          child: Row(
+            children: [
+              Icon(Symbols.view_list_rounded, color: !currentGrid ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('قائمة', style: TextStyle(fontWeight: !currentGrid ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'more',
+          child: Row(
+            children: [
+              Icon(Symbols.more_horiz_rounded, color: cs.onSurfaceVariant),
+              const SizedBox(width: 12),
+              const Text('المزيد'),
+              const Spacer(),
+              Icon(Symbols.chevron_left_rounded, size: 18, color: cs.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      if (value == 'grid') {
+        if (_currentIndex == 0) {
+          settings.setLibraryGridView(true);
+        } else if (_currentIndex == 1) {
+          settings.setFoldersGridView(true);
+        } else {
+          settings.setRecentGridView(true);
+        }
+      } else if (value == 'list') {
+        if (_currentIndex == 0) {
+          settings.setLibraryGridView(false);
+        } else if (_currentIndex == 1) {
+          settings.setFoldersGridView(false);
+        } else {
+          settings.setRecentGridView(false);
+        }
+      } else if (value == 'more') {
+        _showSortPopup();
+      }
+    });
+  }
+
+  void _showSortPopup() {
+    final settings = context.read<SettingsProvider>();
+    final cs = Theme.of(context).colorScheme;
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 50,
+        160,
+        MediaQuery.of(context).size.width,
+        0,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'date',
+          child: Row(
+            children: [
+              Icon(Symbols.calendar_today_rounded, color: settings.sortBy == 'date' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('التاريخ', style: TextStyle(fontWeight: settings.sortBy == 'date' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'name',
+          child: Row(
+            children: [
+              Icon(Symbols.sort_by_alpha_rounded, color: settings.sortBy == 'name' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('الاسم', style: TextStyle(fontWeight: settings.sortBy == 'name' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'size',
+          child: Row(
+            children: [
+              Icon(Symbols.data_usage_rounded, color: settings.sortBy == 'size' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('الحجم', style: TextStyle(fontWeight: settings.sortBy == 'size' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'duration',
+          child: Row(
+            children: [
+              Icon(Symbols.timer_rounded, color: settings.sortBy == 'duration' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('المدة', style: TextStyle(fontWeight: settings.sortBy == 'duration' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'toggle_order',
+          child: Row(
+            children: [
+              Icon(settings.sortDesc ? Symbols.arrow_downward_rounded : Symbols.arrow_upward_rounded),
+              const SizedBox(width: 12),
+              Text(settings.sortDesc ? 'تنازلي' : 'تصاعدي'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      if (value == 'toggle_order') {
+        settings.setSortDesc(!settings.sortDesc);
+      } else {
+        settings.setSortBy(value!);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -90,106 +266,70 @@ class _HomeScreenState extends State<HomeScreen> {
           fontSize: 22,
         ),
         actions: [
-          // أيقونة تبديل العرض (شبكة/قائمة)
-          IconButton(
-            icon: Icon(settings.gridView ? Symbols.view_list_rounded : Symbols.grid_view_rounded),
-            onPressed: () => settings.setGridView(!settings.gridView),
-            tooltip: settings.gridView ? 'عرض القائمة' : 'عرض الشبكة',
+          AnimatedBuilder(
+            animation: _rotateAnimation,
+            builder: (context, child) {
+              return Transform.rotate(
+                angle: _rotateAnimation.value * 3.14159,
+                child: child,
+              );
+            },
+            child: IconButton(
+              icon: const Icon(Symbols.grid_view_rounded),
+              onPressed: _onViewOptionsPressed,
+              tooltip: 'خيارات العرض والفرز',
+            ),
           ),
-          // أيقونة البحث
           IconButton(
             icon: const Icon(Symbols.search_rounded),
             onPressed: () => showSearch(
                 context: context,
                 delegate: VideoSearchDelegate(lib.videos, _openPlayer)),
           ),
-          // أيقونة القائمة الجانبية (Drawer)
-          Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Symbols.menu_rounded),
-              onPressed: () => Scaffold.of(context).openEndDrawer(),
-            ),
-          ),
         ],
-      ),
-      endDrawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: cs.primaryContainer),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(Symbols.play_arrow_rounded, color: cs.onPrimaryContainer, size: 40),
-                  const SizedBox(height: 8),
-                  Text('SR Player', style: TextStyle(color: cs.onPrimaryContainer, fontSize: 20, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Symbols.settings_rounded),
-              title: const Text('الإعدادات'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Symbols.visibility_off_rounded),
-              title: const Text('الملفات المخفية'),
-              onTap: () {
-                Navigator.pop(context);
-                _showHiddenVideos();
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Symbols.sort_rounded),
-              title: const Text('الفرز'),
-              onTap: () {
-                Navigator.pop(context);
-                _sortSheet(settings);
-              },
-            ),
-          ],
-        ),
       ),
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          // المكتبة
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: LibraryTab(
               videos: _sorted(lib.videos),
-              gridView: settings.gridView,
+              gridView: settings.libraryGridView,
               onOpen: _openPlayer,
               onMore: (v) => _menu(v),
               loading: lib.loading,
             ),
           ),
-          // المجلدات
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: FoldersTab(
-                byFolder: lib.byFolder,
-                onTap: (folder) {
-                  // سنضبطه لاحقاً ليفلتر المكتبة
-                }),
+              byFolder: lib.byFolder,
+              gridView: settings.foldersGridView,
+              onTap: (folder) {},
+            ),
           ),
-          // الأخيرة
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: RecentTab(
-                paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
+              paths: lib.recentPaths,
+              all: lib.videos,
+              gridView: settings.recentGridView,
+              onOpen: _openByPath,
+              onClear: lib.clearRecent,
+            ),
           ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        onDestinationSelected: (index) {
+          if (index == 3) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+          } else {
+            setState(() => _currentIndex = index);
+          }
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Symbols.video_library_rounded),
@@ -203,6 +343,10 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Symbols.history_rounded),
             label: 'الأخيرة',
           ),
+          NavigationDestination(
+            icon: Icon(Symbols.more_horiz_rounded),
+            label: 'المزيد',
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -213,45 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ─── دوال مساعدة (بقيت كما هي) ───
-
-  void _sortSheet(SettingsProvider s) {
-    final cs = Theme.of(context).colorScheme;
-    showModalBottomSheet(
-        context: context,
-        builder: (_) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-                    child: Text('ترتيب حسب',
-                        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
-                const Divider(height: 1),
-                ...[
-                  ('date', 'التاريخ', Symbols.calendar_today_rounded),
-                  ('name', 'الاسم', Symbols.sort_by_alpha_rounded),
-                  ('size', 'الحجم', Symbols.data_usage_rounded),
-                  ('duration', 'المدة', Symbols.timer_rounded)
-                ].map((e) => ListTile(
-                    leading: Icon(e.$3),
-                    title: Text(e.$2),
-                    trailing: s.sortBy == e.$1 ? Icon(Symbols.check_rounded, color: cs.primary) : null,
-                    onTap: () {
-                      s.sortBy == e.$1 ? s.setSortDesc(!s.sortDesc) : s.setSortBy(e.$1);
-                      Navigator.pop(context);
-                    })),
-                const Divider(height: 1),
-                ListTile(
-                    leading: Icon(s.sortDesc ? Symbols.arrow_downward_rounded : Symbols.arrow_upward_rounded),
-                    title: Text(s.sortDesc ? 'تنازلي' : 'تصاعدي'),
-                    onTap: () {
-                      s.setSortDesc(!s.sortDesc);
-                      Navigator.pop(context);
-                    }),
-              ]),
-            ));
-  }
-
+  // ─── الدوال المساعدة (بقيت كما هي) ───
   void _menu(VideoItem video) {
     final cs = Theme.of(context).colorScheme;
     final lib = context.read<LibraryProvider>();
