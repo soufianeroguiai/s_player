@@ -34,6 +34,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final List<String> _favorites = [];
   final List<String> _playlist = [];
 
+  bool _isFabVisible = true;
+
   @override
   void initState() {
     super.initState();
@@ -105,9 +107,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     await _openPlayer(VideoItem.fromPath(path: path, size: stat.size, modified: stat.modified));
   }
 
-  Future<void> _pickFile() async {
-    final result = await FilePicker.pickFiles(type: FileType.video);
-    if (result?.files.single.path != null) await _openByPath(result!.files.single.path!);
+  void _playLastVideo() {
+    final lib = context.read<LibraryProvider>();
+    final recent = lib.recentPaths;
+    if (recent.isNotEmpty) {
+      _openByPath(recent.first);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد فيديو سابق')),
+      );
+    }
   }
 
   List<VideoItem> _sorted(List<VideoItem> list) {
@@ -358,31 +367,44 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          RefreshIndicator(
-            onRefresh: _refreshLibrary,
-            child: LibraryTab(
-              videos: _sorted(lib.videos),
-              gridView: settings.libraryGridView,
-              onOpen: _openPlayer,
-              onMore: (v) => _buildVideoOptionsSheet(v),
-              loading: lib.loading,
+      body: NotificationListener<ScrollUpdateNotification>(
+        onNotification: (notification) {
+          if (notification.dragDetails != null) {
+            final delta = notification.dragDetails!.delta.dy;
+            if (delta > 10 && _isFabVisible) {
+              setState(() => _isFabVisible = false);
+            } else if (delta < -10 && !_isFabVisible) {
+              setState(() => _isFabVisible = true);
+            }
+          }
+          return false;
+        },
+        child: IndexedStack(
+          index: _currentIndex,
+          children: [
+            RefreshIndicator(
+              onRefresh: _refreshLibrary,
+              child: LibraryTab(
+                videos: _sorted(lib.videos),
+                gridView: settings.libraryGridView,
+                onOpen: _openPlayer,
+                onMore: (v) => _buildVideoOptionsSheet(v),
+                loading: lib.loading,
+              ),
             ),
-          ),
-          _buildFoldersTab(lib, settings),
-          RefreshIndicator(
-            onRefresh: _refreshLibrary,
-            child: RecentTab(
-              paths: lib.recentPaths,
-              all: lib.videos,
-              gridView: settings.recentGridView,
-              onOpen: _openByPath,
-              onClear: lib.clearRecent,
+            _buildFoldersTab(lib, settings),
+            RefreshIndicator(
+              onRefresh: _refreshLibrary,
+              child: RecentTab(
+                paths: lib.recentPaths,
+                all: lib.videos,
+                gridView: settings.recentGridView,
+                onOpen: _openByPath,
+                onClear: lib.clearRecent,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
@@ -412,11 +434,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _pickFile,
-        icon: const Icon(Symbols.folder_open_rounded),
-        label: const Text('فتح ملف'),
-      ),
+      floatingActionButton: _isFabVisible
+          ? FloatingActionButton(
+              onPressed: _playLastVideo,
+              child: const Icon(Symbols.play_arrow_rounded),
+            )
+          : null,
     );
   }
 
