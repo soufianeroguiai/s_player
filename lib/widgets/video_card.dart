@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
 import '../models/video_item.dart';
+import '../providers/library_provider.dart';
 import 'video_thumbnail_loader.dart';
 
 class VideoCard extends StatelessWidget {
@@ -37,6 +39,8 @@ class VideoCard extends StatelessWidget {
                           style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
                     ),
                   ),
+                  // شريط تقدم الاستئناف
+                  _ResumeProgressBar(video: video),
                 ]),
               ),
             ),
@@ -89,6 +93,8 @@ class VideoGridCard extends StatelessWidget {
                         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
                   ),
                 ),
+                // شريط تقدم الاستئناف
+                _ResumeProgressBar(video: video),
               ]),
             ),
             Padding(
@@ -117,6 +123,43 @@ class VideoGridCard extends StatelessWidget {
   }
 }
 
+// ويدجت شريط تقدم الاستئناف
+class _ResumeProgressBar extends StatelessWidget {
+  final VideoItem video;
+  const _ResumeProgressBar({required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Duration?>(
+      future: context.read<LibraryProvider>().getPosition(video.path),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data == null || snapshot.data!.inMilliseconds <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        final position = snapshot.data!;
+        final totalDuration = video.duration;
+        if (totalDuration.inMilliseconds <= 0) return const SizedBox.shrink();
+
+        final progress = (position.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
+        final cs = Theme.of(context).colorScheme;
+
+        return Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.transparent,
+            valueColor: AlwaysStoppedAnimation<Color>(cs.primary.withOpacity(0.8)),
+            minHeight: 3,
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _Info extends StatelessWidget {
   final VideoItem video;
   const _Info({required this.video});
@@ -134,7 +177,6 @@ class _Info extends StatelessWidget {
         const SizedBox(width: 6),
         _Tag(video.extension.toUpperCase(), cs, primary: true),
         
-        // بطاقات عرض صيغ الترجمة المدمجة باللون الأخضر المميز
         ValueListenableBuilder<List<String>>(
           valueListenable: video.subtitlesNotifier,
           builder: (context, subtitles, _) {

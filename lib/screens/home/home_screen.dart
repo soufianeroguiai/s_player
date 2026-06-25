@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ هذا السطر المُضاف
 import '../../models/video_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -407,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         byFolder: lib.byFolder,
         gridView: settings.foldersGridView,
         onTap: (folder) => setState(() => _browsingFolder = folder),
-        onMore: _buildFolderOptionsSheet, // ✅ نمرر دالة الخيارات للمجلدات
+        onMore: _buildFolderOptionsSheet,
       ),
     );
   }
@@ -667,7 +668,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 iconColor: cs.onSurfaceVariant,
                 onTap: () {
                   Navigator.pop(context);
-                  // محاولة فتح المجلد الذي يحتوي الملف
                   try {
                     final folderPath = File(video.path).parent.path;
                     Process.run('am', ['start', '-a', 'android.intent.action.VIEW', '-d', 'file://$folderPath']);
@@ -719,7 +719,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ويدجت صف واحد في القائمة
   Widget _sheetTile({
     required IconData icon,
     required String title,
@@ -750,7 +749,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // مربع حوار تأكيد حذف ملف واحد
   void _confirmDeleteFile(VideoItem video) {
     showDialog(
       context: context,
@@ -778,7 +776,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // مربع حوار تأكيد حذف كل ملفات المجلد
   void _confirmDeleteFolder(List<VideoItem> videos) {
     showDialog(
       context: context,
