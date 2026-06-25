@@ -85,6 +85,13 @@ class SPlayerApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: context.supportedLocales,
+      builder: (context, child) {
+        final locale = context.locale;
+        return Directionality(
+          textDirection: locale.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+          child: child!,
+        );
+      },
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,
