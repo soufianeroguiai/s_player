@@ -19,6 +19,7 @@ import 'player_controls.dart';
 import 'player_audio_panel.dart';
 import 'player_subtitle_panel.dart';
 import 'player_fit_mode.dart';
+import 'player_gesture_layer.dart';         // ← الملف الجديد
 import 'subtitle_style_builder.dart';
 
 enum ActiveMenu { none, subtitles, audio }
@@ -36,15 +37,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   ActiveMenu _currentMenu = ActiveMenu.none;
 
-  // ── متغيرات جاستر الترجمة (إصبعين) ──
-  double _startSubtitleSize = 24.0;
-  double _startBottomPadding = 0.0;
-  Offset _startFocalPoint = Offset.zero;
-
-  // ── مستوى الصوت/التكبير المدمج (0% إلى 200%)، نفس المصدر المستخدَم
-  // من قِبل كلٍ من جاستر السحب العمودي ولوحة "تكبير الصوت" الجانبية،
-  // حتى لا يوجد مصدران منفصلان للحقيقة. القيمة الافتراضية الأولى
-  // تُؤخذ من Settings.defaultAudioBoost عند فتح الفيديو لأول مرة.
   double _volumeLevel = 1.0;
 
   bool _initialized = false;
@@ -52,7 +44,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _isLocked = false;
   Timer? _hideTimer;
   Timer? _saveTimer;
-  Timer? _indicatorTimer;
 
   bool _showSubtitles = true;
   List<SubtitleTrack> _subtitleTracks = [];
@@ -71,19 +62,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _autoSubtitleSelected = false;
   bool _autoAudioSelected = false;
 
-  /// هل جاستر الإصبعين نشط حالياً لتحريك الترجمة/تكبيرها
-  bool _subtitleGestureActive = false;
-
-  /// آخر إدخالات SRT الخام (قبل تطبيق إزاحة المزامنة)، تُستخدم لإعادة
-  /// بناء الترجمة بسرعة عند تغيير _subtitleSync دون إعادة قراءة الملف.
   List<SubtitleEntry>? _lastSubtitleEntries;
 
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
   final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
-
-  final ValueNotifier<bool> _showVolNotifier = ValueNotifier(false);
-  final ValueNotifier<bool> _showBrightNotifier = ValueNotifier(false);
-  final ValueNotifier<bool> _showSeekNotifier = ValueNotifier(false);
 
   @override
   void initState() {
@@ -103,8 +85,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _showSubtitles = settings.showSubtitlesByDefault;
     _speed = settings.defaultSpeed;
     _subtitleSync = settings.defaultSubtitleSync;
-    // قيمة افتراضية أولية من إعدادات تكبير الصوت؛ تُستبدَل بالقيمة
-    // المحفوظة محلياً لهذا التشغيل إن وُجدت (انظر _loadPersistedVolumeAndBrightness).
     _volumeLevel = (settings.defaultAudioBoost / 100.0).clamp(0.0, 2.0);
 
     _loadPersistedVolumeAndBrightness();
@@ -233,9 +213,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
       setState(() => _initialized = true);
       _scheduleHide();
-      // محاولة تحميل ترجمة خارجية مجاورة للفيديو. تُطبَّق هذه بعد
-      // محاولة اختيار مسار ترجمة مدمج مفضّل (عبر تدفّق tracks أعلاه)
-      // لإعطاء الأولوية للترجمة الداخلية إن وُجدت بنفس اللغة المفضّلة.
       await _loadSubtitleFromAdjacentFile(settings);
     } catch (e) {
       if (mounted) {
@@ -264,9 +241,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _autoSubtitleSelected = true;
   }
 
-  /// يطبّق لغة الصوت المفضَّلة من الإعدادات إن وُجد مسار صوتي مطابق
-  /// ضمن مسارات الفيديو المتعددة. سابقاً كان هذا الإعداد محفوظاً دون
-  /// أي تأثير فعلي على اختيار المسار الصوتي.
   void _applyPreferredAudioLanguage(SettingsProvider s) {
     if (_autoAudioSelected || _audioTracks.isEmpty) return;
     for (final track in _audioTracks) {
@@ -311,8 +285,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Future<void> _pickSubtitle() async {
-    final result =
-        await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'SRT', 'ssa', 'ass']);
+    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'SRT', 'ssa', 'ass']);
     if (result?.files.single.path != null) {
       final settings = context.read<SettingsProvider>();
       await _loadSrtFile(result!.files.single.path!, settings.subtitleEncoding);
@@ -347,25 +320,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     await PipService.enter();
   }
 
-  void _resetIndicatorTimer() {
-    _indicatorTimer?.cancel();
-    _indicatorTimer = Timer(const Duration(seconds: 1), () {
-      _showVolNotifier.value = false;
-      _showBrightNotifier.value = false;
-    });
-  }
-
-  String? _seekHintText;
-  Timer? _seekHintTimer;
-
-  void _showSeekHint(int seconds) {
-    setState(() => _seekHintText = seconds > 0 ? '+${seconds}s ⏩' : '${seconds}s ⏪');
-    _seekHintTimer?.cancel();
-    _seekHintTimer = Timer(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() => _seekHintText = null);
-    });
-  }
-
   void _onVolumeChanged(double newLevel) {
     setState(() {
       _volumeLevel = newLevel.clamp(0.0, 2.0);
@@ -374,11 +328,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _savePersistedVolume();
   }
 
-  /// يطبّق إزاحة مزامنة الترجمة على المشغل. ملاحظة تقنية: نسخة
-  /// media_kit المستخدَمة هنا لا توفر دالة موثَّقة لضبط تأخير الترجمة
-  /// مباشرة (لا يوجد ما يعادل setSubtitleDelay في الواجهة الرسمية)،
-  /// لذا تُطبَّق الإزاحة عملياً بإعادة بناء نص SRT بتوقيت معدَّل
-  /// وإعادة تحميله عبر SubtitleTrack.data، وهي واجهة موثَّقة ومضمونة.
   void _onSubtitleSyncChanged(double v) {
     setState(() => _subtitleSync = v);
     context.read<SettingsProvider>().setDefaultSubtitleSync(v);
@@ -407,7 +356,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
   }
 
-  // ─── دوال بناء النافذة الجانبية ───
+  // ─── دوال بناء النافذة الجانبية (بقيت كما هي) ───
   Widget _buildAudioPanelContent() {
     final cs = Theme.of(context).colorScheme;
     final uniqueAudio = _audioTracks.toSet().toList();
@@ -584,12 +533,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
     final s = context.watch<SettingsProvider>();
 
-    // الحالة الحقيقية القادمة من Android (انظر PipService)، وليست
-    // قيمة محلية مفترَضة لا تتحدّث أبداً عند الدخول الفعلي في PiP.
     if (PipService.isInPipMode.value) {
       return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
     }
@@ -611,108 +556,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         body: !_initialized
             ? Center(child: CircularProgressIndicator(color: cs.primary))
             : Stack(children: [
-                // ─── طبقة الجاستر الشاملة ───
-                // مقسّمة لثلاث مناطق أفقية:
-                //   يسار الشاشة  → سطوع (سحب عمودي)  + تأخير (ضغط مزدوج)
-                //   منتصف الشاشة → play/pause (ضغط مزدوج)
-                //   يمين الشاشة  → صوت   (سحب عمودي)  + تقديم (ضغط مزدوج)
-                // إصبعان في أي مكان → تكبير/تصغير وتحريك الترجمة (عند الإيقاف فقط)
-                GestureDetector(
-                  onTap: _toggleControls,
-                  onDoubleTapDown: _isLocked
-                      ? null
-                      : (details) {
-                          final x = details.localPosition.dx;
-                          // ثلث أيسر → تأخير 10 ثواني
-                          if (x < screenWidth / 3) {
-                            final target = _position - const Duration(seconds: 10);
-                            _player.seek(target.isNegative ? Duration.zero : target);
-                            _showSeekHint(-10);
-                          }
-                          // ثلث أيمن → تقديم 10 ثواني
-                          else if (x > screenWidth * 2 / 3) {
-                            final target = _position + const Duration(seconds: 10);
-                            _player.seek(target > _duration ? _duration : target);
-                            _showSeekHint(10);
-                          }
-                          // المنتصف → play / pause
-                          else {
-                            _isPlaying ? _player.pause() : _player.play();
-                          }
-                        },
-                  onScaleStart: (details) {
-                    if (_isLocked) return;
-                    if (details.pointerCount == 2) {
-                      _startSubtitleSize = s.subtitleFontSize;
-                      _startBottomPadding = s.bottomPadding;
-                      _startFocalPoint = details.focalPoint;
-                      _subtitleGestureActive = true;
-                    } else {
-                      _seekMsNotifier.value = _position.inMilliseconds.toDouble();
-                      _subtitleGestureActive = false;
-                    }
-                  },
-                  onScaleUpdate: (details) {
-                    if (_isLocked) return;
-
-                    // ── إصبعان: تكبير/تصغير وتحريك الترجمة ──
-                    if (details.pointerCount == 2 && _subtitleGestureActive) {
-                      final newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
-                      s.setSubtitleFontSize(newSize);
-
-                      final dy = details.focalPoint.dy - _startFocalPoint.dy;
-                      final newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.85);
-                      s.setBottomPadding(newPadding);
-                      return;
-                    }
-
-                    // ── إصبع واحد ──
-                    if (details.pointerCount != 1) return;
-                    if (details.focalPointDelta.distance < 0.5) return;
-
-                    final isRight = details.focalPoint.dx > screenWidth / 2;
-                    final dx = details.focalPointDelta.dx.abs();
-                    final dy = details.focalPointDelta.dy.abs();
-                    final isHorizontal = dx > dy;
-
-                    if (isHorizontal) {
-                      // سحب أفقي → seek مرئي
-                      final seekFactor = (_duration.inMilliseconds * 0.25)
-                          .clamp(30000.0, 600000.0);
-                      final change = (details.focalPointDelta.dx / screenWidth) * seekFactor;
-                      _seekMsNotifier.value = (_seekMsNotifier.value + change)
-                          .clamp(0.0, _duration.inMilliseconds.toDouble());
-                      _showSeekNotifier.value = true;
-                      _showVolNotifier.value = false;
-                      _showBrightNotifier.value = false;
-                    } else {
-                      // سحب عمودي → صوت (يمين) أو سطوع (يسار)
-                      final delta = -details.focalPointDelta.dy / 180.0;
-                      if (isRight) {
-                        _onVolumeChanged(_volumeLevel + delta);
-                        _showVolNotifier.value = true;
-                        _showBrightNotifier.value = false;
-                        _showSeekNotifier.value = false;
-                      } else {
-                        final newBright = (_brightnessNotifier.value + delta).clamp(0.05, 1.0);
-                        _brightnessNotifier.value = newBright;
-                        ScreenBrightness.instance.setApplicationScreenBrightness(newBright);
-                        _showBrightNotifier.value = true;
-                        _showVolNotifier.value = false;
-                        _showSeekNotifier.value = false;
-                      }
-                      _resetIndicatorTimer();
-                    }
-                  },
-                  onScaleEnd: (details) {
-                    if (_isLocked) return;
-                    _subtitleGestureActive = false;
-                    if (_showSeekNotifier.value) {
-                      _player.seek(Duration(milliseconds: _seekMsNotifier.value.toInt()));
-                      _showSeekNotifier.value = false;
-                      _scheduleHide();
-                    }
-                  },
+                // ✅ طبقة الإيماءات والمؤشرات (الملف الجديد)
+                PlayerGestureLayer(
+                  player: _player,
+                  controller: _controller,
+                  isLocked: _isLocked,
+                  volumeLevel: _volumeLevel,
+                  brightnessNotifier: _brightnessNotifier,
+                  seekMsNotifier: _seekMsNotifier,
+                  position: _position,
+                  duration: _duration,
+                  isPlaying: _isPlaying,
+                  onToggleControls: _toggleControls,
+                  onVolumeChanged: _onVolumeChanged,
+                  onPlayPause: () => _isPlaying ? _player.pause() : _player.play(),
                   child: Video(
                     controller: _controller,
                     fit: getBoxFit(_fitMode),
@@ -725,105 +582,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   ),
                 ),
 
-                // ── شريط مؤشر التمرير (Seek) ──
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showSeekNotifier,
-                  builder: (context, show, child) {
-                    if (!show) return const SizedBox.shrink();
-                    return ValueListenableBuilder<double>(
-                      valueListenable: _seekMsNotifier,
-                      builder: (context, seekMs, child) {
-                        return Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.75),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
-                              const Icon(Symbols.fast_forward_rounded, color: Colors.white, size: 32),
-                              const SizedBox(height: 8),
-                              Text(
-                                _fmt(Duration(milliseconds: seekMs.toInt())),
-                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                              ),
-                            ]),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+                // ── النافذة الجانبية ──
+                _buildSidePanel(),
 
-                // ── مؤشر الصوت (يمين الشاشة — جانب إيماءة الصوت) ──
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showVolNotifier,
-                  builder: (context, show, child) {
-                    if (!show) return const SizedBox.shrink();
-                    final bool isBoosted = _volumeLevel > 1.0;
-                    return Positioned(
-                      right: 20,
-                      top: MediaQuery.of(context).size.height * 0.22,
-                      child: PlayerIndicators.buildFloatingIndicator(
-                        icon: _volumeLevel == 0
-                            ? Icons.volume_off_rounded
-                            : isBoosted
-                                ? Icons.volume_up_rounded
-                                : Icons.volume_down_rounded,
-                        displayValue: (_volumeLevel / 2.0).clamp(0.0, 1.0),
-                        labelText: '${(_volumeLevel * 100).round()}%',
-                        color: isBoosted ? Colors.orangeAccent : const Color(0xFF4FC3F7),
-                      ),
-                    );
-                  },
-                ),
-
-                // ── مؤشر السطوع (يسار الشاشة — جانب إيماءة السطوع) ──
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showBrightNotifier,
-                  builder: (context, show, child) {
-                    if (!show) return const SizedBox.shrink();
-                    return ValueListenableBuilder<double>(
-                      valueListenable: _brightnessNotifier,
-                      builder: (context, brightness, child) {
-                        return Positioned(
-                          left: 20,
-                          top: MediaQuery.of(context).size.height * 0.22,
-                          child: PlayerIndicators.buildFloatingIndicator(
-                            icon: brightness < 0.15
-                                ? Icons.brightness_2_rounded
-                                : brightness < 0.5
-                                    ? Icons.brightness_5_rounded
-                                    : Icons.brightness_7_rounded,
-                            displayValue: brightness,
-                            labelText: '${(brightness * 100).round()}%',
-                            color: const Color(0xFFFFD54F),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-
-                if (_seekHintText != null)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.72),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Text(
-                        _seekHintText!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-
+                // ── Fit overlay ──
                 if (_fitOverlayText != null)
                   Positioned(
                     top: 100,
@@ -842,6 +604,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
 
+                // ── قفل الشاشة ──
                 if (_isLocked)
                   Positioned(
                     bottom: 100,
@@ -866,7 +629,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
 
-                // ── واجهة أزرار التحكم ──
+                // ── أزرار التحكم (Top/Bottom) ──
                 if (_showControls && !_isLocked) ...[
                   Positioned(
                     top: 0,
@@ -921,9 +684,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
                 ],
-
-                // ── النافذة الجانبية ──
-                _buildSidePanel(),
               ]),
       ),
     );
@@ -935,14 +695,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     PipService.isInPipMode.removeListener(_onPipModeChanged);
     _brightnessNotifier.dispose();
     _seekMsNotifier.dispose();
-    _showVolNotifier.dispose();
-    _showBrightNotifier.dispose();
-    _showSeekNotifier.dispose();
     _hideTimer?.cancel();
     _saveTimer?.cancel();
-    _indicatorTimer?.cancel();
     _fitOverlayTimer?.cancel();
-    _seekHintTimer?.cancel();
     try {
       ScreenBrightness.instance.resetApplicationScreenBrightness();
     } catch (_) {}
@@ -951,12 +706,5 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     _player.dispose();
     super.dispose();
-  }
-
-  String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 }
