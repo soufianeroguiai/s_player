@@ -163,7 +163,6 @@ class SettingsScreen extends StatelessWidget {
               value: s.sortDesc,
               onChanged: s.setSortDesc),
           settingsDivider(),
-          // --- إعدادات العرض الثلاثة الجديدة ---
           settingsSwitchTile(context,
               icon: Symbols.grid_view_rounded,
               title: 'عرض شبكي للمكتبة',
@@ -184,7 +183,6 @@ class SettingsScreen extends StatelessWidget {
               subtitle: 'عرض قائمة الأخيرة كبطاقات',
               value: s.recentGridView,
               onChanged: s.setRecentGridView),
-          // --- نهاية إعدادات العرض ---
         ]),
         const SizedBox(height: 20),
         settingsHeader(context, 'عن التطبيق', Symbols.info_rounded),

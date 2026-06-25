@@ -89,7 +89,6 @@ class AppTheme {
         space: 1,
       ),
 
-      // ✅ إعدادات NavigationBar (الشريط السفلي)
       navigationBarTheme: NavigationBarThemeData(
         indicatorColor: cs.primaryContainer,
         backgroundColor: cs.surface,
@@ -107,6 +106,14 @@ class AppTheme {
             fontSize: 12,
           );
         }),
+      ),
+
+      popupMenuTheme: PopupMenuThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 6,
+        color: cs.surfaceContainerLow,
       ),
     );
   }

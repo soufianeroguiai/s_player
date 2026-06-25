@@ -1,25 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// يخزّن جميع تفضيلات المستخدم (المظهر، الصوت، الترجمة، المكتبة)
-/// ويحمّلها/يحفظها تلقائياً عبر SharedPreferences.
-///
-/// ملاحظة: تمت إزالة الإعدادات التي لم تكن مرتبطة بأي تنفيذ فعلي
-/// في المشغل (audioOutput, audioPlayerEngine, audioRate, audioPassthrough,
-/// bluetoothAudioDelayMs, pauseOnHeadphonesDisconnect, fadeInStart,
-/// fadeInSeek, showVolumePanel, defaultVolume, subtitleHwAcceleration,
-/// subtitleFontsFolder) لأنها كانت تُحفظ دون أي تأثير حقيقي على التشغيل.
-/// كل إعداد متبقٍ هنا مطبَّق فعلياً في PlayerScreen.
 class SettingsProvider extends ChangeNotifier {
-  // ──────────────────────────────────────────────
-  // المظهر العام
-  // ──────────────────────────────────────────────
   ThemeMode _themeMode = ThemeMode.dark;
   ThemeMode get themeMode => _themeMode;
 
-  // ──────────────────────────────────────────────
-  // المشغل
-  // ──────────────────────────────────────────────
   bool _rememberPosition = true;
   bool get rememberPosition => _rememberPosition;
 
@@ -29,16 +14,13 @@ class SettingsProvider extends ChangeNotifier {
   double _defaultSpeed = 1.0;
   double get defaultSpeed => _defaultSpeed;
 
-  // ──────────────────────────────────────────────
-  // المكتبة
-  // ──────────────────────────────────────────────
   String _sortBy = 'date';
   String get sortBy => _sortBy;
 
   bool _sortDesc = true;
   bool get sortDesc => _sortDesc;
 
-  // --- عرض التبويبات (منفصل لكل تبويب) ---
+  // إعدادات العرض المستقلة
   bool _libraryGridView = false;
   bool get libraryGridView => _libraryGridView;
 
@@ -48,9 +30,6 @@ class SettingsProvider extends ChangeNotifier {
   bool _recentGridView = false;
   bool get recentGridView => _recentGridView;
 
-  // ──────────────────────────────────────────────
-  // الترجمة — العرض والتخصيص
-  // ──────────────────────────────────────────────
   bool _showSubtitlesByDefault = true;
   bool get showSubtitlesByDefault => _showSubtitlesByDefault;
 
@@ -105,9 +84,6 @@ class SettingsProvider extends ChangeNotifier {
   bool _subtitleRTL = false;
   bool get subtitleRTL => _subtitleRTL;
 
-  // ──────────────────────────────────────────────
-  // ظل الأحرف (Text Shadow)
-  // ──────────────────────────────────────────────
   bool _textShadowEnabled = false;
   bool get textShadowEnabled => _textShadowEnabled;
 
@@ -123,9 +99,6 @@ class SettingsProvider extends ChangeNotifier {
   double _textShadowOffsetY = 1.0;
   double get textShadowOffsetY => _textShadowOffsetY;
 
-  // ──────────────────────────────────────────────
-  // ظل الصندوق المحيط بنص الترجمة (Box Shadow)
-  // ──────────────────────────────────────────────
   bool _boxShadowEnabled = false;
   bool get boxShadowEnabled => _boxShadowEnabled;
 
@@ -141,16 +114,12 @@ class SettingsProvider extends ChangeNotifier {
   double _boxShadowOffsetY = 1.0;
   double get boxShadowOffsetY => _boxShadowOffsetY;
 
-  // ──────────────────────────────────────────────
-  // الصوت
-  // ──────────────────────────────────────────────
   double _defaultAudioBoost = 100.0;
   double get defaultAudioBoost => _defaultAudioBoost;
 
   String _preferredAudioLanguage = 'ara';
   String get preferredAudioLanguage => _preferredAudioLanguage;
 
-  // --- Load ---
   Future<void> load() async {
     try {
       final p = await SharedPreferences.getInstance();
@@ -190,15 +159,13 @@ class SettingsProvider extends ChangeNotifier {
       _fontFamily = p.getString('fontFamily') ?? 'Roboto';
       _subtitleFolder = p.getString('subtitleFolder') ?? '';
       _subtitleEncoding = p.getString('subtitleEncoding') ?? 'UTF-8';
-      _preferredSubtitleLanguage =
-          p.getString('preferredSubtitleLanguage') ?? 'ara';
+      _preferredSubtitleLanguage = p.getString('preferredSubtitleLanguage') ?? 'ara';
       _defaultSubtitleSync = p.getDouble('defaultSubtitleSync') ?? 0.0;
       _subtitleItalic = p.getBool('subtitleItalic') ?? false;
       _subtitleRTL = p.getBool('subtitleRTL') ?? false;
       _defaultAudioBoost = p.getDouble('defaultAudioBoost') ?? 100.0;
       _preferredAudioLanguage = p.getString('preferredAudioLanguage') ?? 'ara';
 
-      // --- إعدادات العرض الجديدة ---
       _libraryGridView = p.getBool('libraryGridView') ?? false;
       _foldersGridView = p.getBool('foldersGridView') ?? false;
       _recentGridView = p.getBool('recentGridView') ?? false;
@@ -209,7 +176,6 @@ class SettingsProvider extends ChangeNotifier {
     }
   }
 
-  // --- Save ---
   Future<void> _save() async {
     final p = await SharedPreferences.getInstance();
     await p.setInt('themeMode', _themeMode.index);
@@ -252,15 +218,12 @@ class SettingsProvider extends ChangeNotifier {
     await p.setDouble('defaultAudioBoost', _defaultAudioBoost);
     await p.setString('preferredAudioLanguage', _preferredAudioLanguage);
 
-    // --- إعدادات العرض الجديدة ---
     await p.setBool('libraryGridView', _libraryGridView);
     await p.setBool('foldersGridView', _foldersGridView);
     await p.setBool('recentGridView', _recentGridView);
   }
 
-  // ──────────────────────────────────────────────
-  // Setters
-  // ──────────────────────────────────────────────
+  // Setters...
   void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
   void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
   void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
@@ -301,7 +264,6 @@ class SettingsProvider extends ChangeNotifier {
   void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); _save(); }
   void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); _save(); }
 
-  // --- إعدادات العرض الجديدة ---
   void setLibraryGridView(bool v) { _libraryGridView = v; notifyListeners(); _save(); }
   void setFoldersGridView(bool v) { _foldersGridView = v; notifyListeners(); _save(); }
   void setRecentGridView(bool v) { _recentGridView = v; notifyListeners(); _save(); }

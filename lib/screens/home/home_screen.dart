@@ -139,56 +139,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
-          value: 'more',
-          child: Row(
-            children: [
-              Icon(Symbols.more_horiz_rounded, color: cs.onSurfaceVariant),
-              const SizedBox(width: 12),
-              const Text('المزيد'),
-              const Spacer(),
-              Icon(Symbols.chevron_left_rounded, size: 18, color: cs.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ],
-    ).then((value) {
-      if (value == null) return;
-      if (value == 'grid') {
-        if (_currentIndex == 0) {
-          settings.setLibraryGridView(true);
-        } else if (_currentIndex == 1) {
-          settings.setFoldersGridView(true);
-        } else {
-          settings.setRecentGridView(true);
-        }
-      } else if (value == 'list') {
-        if (_currentIndex == 0) {
-          settings.setLibraryGridView(false);
-        } else if (_currentIndex == 1) {
-          settings.setFoldersGridView(false);
-        } else {
-          settings.setRecentGridView(false);
-        }
-      } else if (value == 'more') {
-        _showSortPopup();
-      }
-    });
-  }
-
-  void _showSortPopup() {
-    final settings = context.read<SettingsProvider>();
-    final cs = Theme.of(context).colorScheme;
-
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        MediaQuery.of(context).size.width - 50,
-        160,
-        MediaQuery.of(context).size.width,
-        0,
-      ),
-      items: [
-        PopupMenuItem(
           value: 'date',
           child: Row(
             children: [
@@ -242,7 +192,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ],
     ).then((value) {
       if (value == null) return;
-      if (value == 'toggle_order') {
+      if (value == 'grid') {
+        if (_currentIndex == 0) {
+          settings.setLibraryGridView(true);
+        } else if (_currentIndex == 1) {
+          settings.setFoldersGridView(true);
+        } else {
+          settings.setRecentGridView(true);
+        }
+      } else if (value == 'list') {
+        if (_currentIndex == 0) {
+          settings.setLibraryGridView(false);
+        } else if (_currentIndex == 1) {
+          settings.setFoldersGridView(false);
+        } else {
+          settings.setRecentGridView(false);
+        }
+      } else if (value == 'toggle_order') {
         settings.setSortDesc(!settings.sortDesc);
       } else {
         settings.setSortBy(value!);
@@ -357,7 +323,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ─── الدوال المساعدة (بقيت كما هي) ───
   void _menu(VideoItem video) {
     final cs = Theme.of(context).colorScheme;
     final lib = context.read<LibraryProvider>();

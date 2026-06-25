@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -56,12 +57,14 @@ class ThumbnailService {
     try {
       final cacheFile = await _cacheFile(path);
 
+      // استخدام الكاش إذا وُجد
       if (await cacheFile.exists()) {
         final bytes = await cacheFile.readAsBytes();
         if (bytes.isNotEmpty) {
           _notifiers[path]?.value = bytes;
           return;
         }
+        // ملف فارغ → احذفه وأعد التوليد
         await cacheFile.delete();
       }
 
@@ -74,7 +77,6 @@ class ThumbnailService {
       }
     } catch (e) {
       _errors[path]?.value = 'خطأ: $e';
-      debugPrint('ThumbnailService._generate: $e');
     } finally {
       _pending.remove(path);
     }
@@ -87,6 +89,7 @@ class ThumbnailService {
       return null;
     }
 
+    // ── رابط رمزي للمسارات الطويلة (> 200 حرف) ──
     String inputPath = videoPath;
     Link? symlink;
     if (videoPath.length > 200) {
@@ -102,36 +105,62 @@ class ThumbnailService {
     }
 
     try {
+      // نقطة البداية: 10% من مدة الفيديو، بحد أدنى 2 ثانية
       final seekSec = video.duration.inSeconds > 0
           ? (video.duration.inSeconds * 0.1).round().clamp(2, 99999)
           : 5;
 
+      // الأمر السريع
       final cmd = '-y -ss $seekSec -noaccurate_seek -i "$inputPath"'
           ' -vframes 1'
           ' -vf "scale=720:-2"'
-          ' -q:v 4'
-          ' -threads 1'
+          ' -q:v 5'
+          ' -an'
           ' "$savePath"';
 
-      final session = await FFmpegKit.execute(cmd);
-      final rc = await session.getReturnCode();
+      // ✅ نستخدم executeAsync مع Completer لتجنب تجميد الواجهة
+      final completer = Completer<Uint8List?>();
+      await FFmpegKit.executeAsync(
+        cmd,
+        onComplete: (session) async {
+          try {
+            final returnCode = await session.getReturnCode();
+            if (ReturnCode.isSuccess(returnCode)) {
+              final out = File(savePath);
+              if (await out.exists()) {
+                final bytes = await out.readAsBytes();
+                if (bytes.isNotEmpty) {
+                  completer.complete(bytes);
+                  return;
+                }
+              }
+              _errors[videoPath]?.value = 'الملف الناتج فارغ';
+            } else {
+              final log = await session.getOutput();
+              _errors[videoPath]?.value = 'FFmpeg فشل: ${log ?? "غير معروف"}';
+            }
+            completer.complete(null);
+          } catch (e) {
+            _errors[videoPath]?.value = 'استثناء: $e';
+            completer.complete(null);
+          }
+        },
+        onLog: (log) {
+          // يمكنك تفعيلها للتصحيح
+          // debugPrint('FFmpeg log: ${log.getMessage()}');
+        },
+      );
 
-      if (ReturnCode.isSuccess(rc)) {
-        final out = File(savePath);
-        if (await out.exists()) {
-          final bytes = await out.readAsBytes();
-          if (bytes.isNotEmpty) return bytes;
-        }
-        _errors[videoPath]?.value = 'الملف الناتج فارغ';
-      } else {
-        final log = await session.getOutput();
-        _errors[videoPath]?.value = 'FFmpeg فشل (${rc})';
-        debugPrint('ThumbnailService FFmpeg log:\n$log');
-      }
-      return null;
+      // انتظار النتيجة مع مهلة 15 ثانية (اختياري، يمنع التعليق للأبد)
+      return completer.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          _errors[videoPath]?.value = 'انتهى الوقت المحدد (15 ثانية)';
+          return null;
+        },
+      );
     } catch (e) {
       _errors[videoPath]?.value = 'استثناء: $e';
-      debugPrint('ThumbnailService._ffmpegThumb: $e');
       return null;
     } finally {
       if (symlink != null) {
@@ -146,7 +175,8 @@ class ThumbnailService {
     if (!await thumbDir.exists()) {
       await thumbDir.create(recursive: true);
     }
-    return File('${thumbDir.path}/${_shortHash(videoPath)}.jpg');
+    final name = _shortHash(videoPath);
+    return File('${thumbDir.path}/$name.jpg');
   }
 
   String _shortHash(String input) {
