@@ -88,6 +88,26 @@ class AppTheme {
         thickness: 1,
         space: 1,
       ),
+
+      // ✅ إعدادات NavigationBar (الشريط السفلي)
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: cs.primaryContainer,
+        backgroundColor: cs.surface,
+        surfaceTintColor: Colors.transparent,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return TextStyle(
+              color: cs.onPrimaryContainer,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            );
+          }
+          return TextStyle(
+            color: cs.onSurfaceVariant,
+            fontSize: 12,
+          );
+        }),
+      ),
     );
   }
 }

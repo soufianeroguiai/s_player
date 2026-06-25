@@ -4,102 +4,44 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../models/video_item.dart';
 import '../../widgets/video_card.dart';
 
-class AllTab extends StatelessWidget {
+// تبويب المكتبة (بدون FolderChips)
+class LibraryTab extends StatelessWidget {
   final List<VideoItem> videos;
-  final String? selectedFolder;
-  final Set<String> folders;
-  final void Function(String?) onFolderChanged;
+  final bool gridView;
   final void Function(VideoItem) onOpen;
   final void Function(VideoItem) onMore;
-  final bool gridView;
   final bool loading;
 
-  const AllTab({
+  const LibraryTab({
     super.key,
     required this.videos,
-    required this.selectedFolder,
-    required this.folders,
-    required this.onFolderChanged,
+    required this.gridView,
     required this.onOpen,
     required this.onMore,
-    required this.gridView,
     this.loading = false,
   });
 
-  List<VideoItem> get filtered =>
-      selectedFolder == null ? videos : videos.where((v) => v.folder == selectedFolder).toList();
-
   @override
   Widget build(BuildContext context) {
-    final list = filtered;
-    return Column(children: [
-      if (folders.isNotEmpty) FolderChips(folders: folders, selected: selectedFolder, onChanged: onFolderChanged),
-      if (loading && videos.isNotEmpty) LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
-      Expanded(
-        child: list.isEmpty && !loading
-            ? const EmptyState('ما لقينا فيديوهات', Symbols.video_library_rounded)
-            : gridView
-                ? GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
-                    itemCount: list.length,
-                    itemBuilder: (_, i) =>
-                        VideoGridCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i])))
-                : ListView.builder(
-                    padding: const EdgeInsets.only(top: 4, bottom: 90),
-                    itemCount: list.length,
-                    itemBuilder: (_, i) =>
-                        VideoCard(video: list[i], onTap: () => onOpen(list[i]), onMoreTap: () => onMore(list[i]))),
-      ),
-    ]);
-  }
-}
-
-class FolderChips extends StatelessWidget {
-  final Set<String> folders;
-  final String? selected;
-  final void Function(String?) onChanged;
-  const FolderChips({super.key, required this.folders, required this.selected, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final list = folders.toList()..sort();
-    return Container(
-      height: 48,
-      color: cs.surface,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-        children: [
-          _chip('الكل', selected == null, () => onChanged(null), cs),
-          ...list.map((f) => _chip(f, selected == f, () => onChanged(selected == f ? null : f), cs)),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(String label, bool sel, VoidCallback onTap, ColorScheme cs) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-        decoration: BoxDecoration(
-          color: sel ? cs.secondaryContainer : cs.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-              color: sel ? cs.onSecondaryContainer : cs.onSurfaceVariant,
-              fontSize: 13,
-              fontWeight: sel ? FontWeight.w600 : FontWeight.normal),
-        ),
-      ),
-    );
+    if (loading && videos.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (videos.isEmpty) {
+      return const EmptyState('ما لقينا فيديوهات', Symbols.video_library_rounded);
+    }
+    return gridView
+        ? GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
+            itemCount: videos.length,
+            itemBuilder: (_, i) =>
+                VideoGridCard(video: videos[i], onTap: () => onOpen(videos[i]), onMoreTap: () => onMore(videos[i])))
+        : ListView.builder(
+            padding: const EdgeInsets.only(top: 4, bottom: 90),
+            itemCount: videos.length,
+            itemBuilder: (_, i) =>
+                VideoCard(video: videos[i], onTap: () => onOpen(videos[i]), onMoreTap: () => onMore(videos[i])));
   }
 }
 

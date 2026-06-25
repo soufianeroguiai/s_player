@@ -19,14 +19,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabs;
-  String? _selectedFolder;
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0; // 0: المكتبة, 1: المجلدات, 2: الأخيرة
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initLibrary());
   }
 
@@ -41,12 +39,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _refreshLibrary() async {
     await context.read<LibraryProvider>().scan();
     await context.read<LibraryProvider>().loadRecent();
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
   }
 
   Future<void> _openPlayer(VideoItem video) async {
@@ -86,94 +78,133 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final settings = context.watch<SettingsProvider>();
+    final lib = context.watch<LibraryProvider>();
+
     return Scaffold(
       appBar: AppBar(
-        title: Row(children: [
-          Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
-              child: Icon(Symbols.play_arrow_rounded, color: cs.onPrimaryContainer, size: 22)),
-          const SizedBox(width: 10),
-          const Text('SR Player'),
-        ]),
-        bottom: TabBar(controller: _tabs, tabs: const [
-          Tab(text: 'الكل'),
-          Tab(text: 'الأخيرة'),
-          Tab(text: 'المجلدات'),
-        ]),
+        title: const Text('SR Player'),
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: cs.onSurface,
+          fontWeight: FontWeight.w700,
+          fontSize: 22,
+        ),
         actions: [
+          // أيقونة تبديل العرض (شبكة/قائمة)
           IconButton(
-              icon: const Icon(Symbols.search_rounded),
-              onPressed: () => showSearch(
-                  context: context,
-                  delegate: VideoSearchDelegate(context.read<LibraryProvider>().videos, _openPlayer))),
+            icon: Icon(settings.gridView ? Symbols.view_list_rounded : Symbols.grid_view_rounded),
+            onPressed: () => settings.setGridView(!settings.gridView),
+            tooltip: settings.gridView ? 'عرض القائمة' : 'عرض الشبكة',
+          ),
+          // أيقونة البحث
           IconButton(
-              icon: Icon(settings.gridView ? Symbols.view_list_rounded : Symbols.grid_view_rounded),
-              onPressed: () => settings.setGridView(!settings.gridView)),
-          IconButton(icon: const Icon(Symbols.sort_rounded), onPressed: () => _sortSheet(settings)),
-          IconButton(
-              icon: const Icon(Symbols.visibility_off_rounded),
-              tooltip: 'الملفات المخفية',
-              onPressed: _showHiddenVideos),
-          IconButton(
-              icon: const Icon(Symbols.settings_rounded),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
+            icon: const Icon(Symbols.search_rounded),
+            onPressed: () => showSearch(
+                context: context,
+                delegate: VideoSearchDelegate(lib.videos, _openPlayer)),
+          ),
+          // أيقونة القائمة الجانبية (Drawer)
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Symbols.menu_rounded),
+              onPressed: () => Scaffold.of(context).openEndDrawer(),
+            ),
+          ),
         ],
       ),
-      body: Consumer<LibraryProvider>(builder: (_, lib, __) {
-        if (lib.loading && lib.videos.isEmpty) {
-          return Center(
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            CircularProgressIndicator(color: cs.primary),
-            const SizedBox(height: 16),
-            Text('جاري البحث...', style: TextStyle(color: cs.onSurfaceVariant)),
-          ]));
-        }
-        if (lib.error != null && lib.videos.isEmpty) {
-          return Center(
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Symbols.error_rounded, size: 56, color: cs.error),
-            const SizedBox(height: 12),
-            Text(lib.error!, style: TextStyle(color: cs.onSurfaceVariant), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-                onPressed: () => _initLibrary(),
-                icon: const Icon(Symbols.refresh_rounded),
-                label: const Text('إعادة المحاولة')),
-          ]));
-        }
-
-        return TabBarView(controller: _tabs, children: [
+      endDrawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(color: cs.primaryContainer),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Icon(Symbols.play_arrow_rounded, color: cs.onPrimaryContainer, size: 40),
+                  const SizedBox(height: 8),
+                  Text('SR Player', style: TextStyle(color: cs.onPrimaryContainer, fontSize: 20, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Symbols.settings_rounded),
+              title: const Text('الإعدادات'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Symbols.visibility_off_rounded),
+              title: const Text('الملفات المخفية'),
+              onTap: () {
+                Navigator.pop(context);
+                _showHiddenVideos();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Symbols.sort_rounded),
+              title: const Text('الفرز'),
+              onTap: () {
+                Navigator.pop(context);
+                _sortSheet(settings);
+              },
+            ),
+          ],
+        ),
+      ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          // المكتبة
           RefreshIndicator(
             onRefresh: _refreshLibrary,
-            child: AllTab(
+            child: LibraryTab(
               videos: _sorted(lib.videos),
-              selectedFolder: _selectedFolder,
-              folders: lib.byFolder.keys.toSet(),
-              onFolderChanged: (f) => setState(() => _selectedFolder = f),
+              gridView: settings.gridView,
               onOpen: _openPlayer,
               onMore: (v) => _menu(v),
-              gridView: settings.gridView,
               loading: lib.loading,
             ),
           ),
-          RefreshIndicator(
-            onRefresh: _refreshLibrary,
-            child:
-                RecentTab(paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
-          ),
+          // المجلدات
           RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: FoldersTab(
                 byFolder: lib.byFolder,
-                onTap: (f) {
-                  setState(() => _selectedFolder = f);
-                  _tabs.animateTo(0);
+                onTap: (folder) {
+                  // سنضبطه لاحقاً ليفلتر المكتبة
                 }),
           ),
-        ]);
-      }),
+          // الأخيرة
+          RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: RecentTab(
+                paths: lib.recentPaths, all: lib.videos, onOpen: _openByPath, onClear: lib.clearRecent),
+          ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Symbols.video_library_rounded),
+            label: 'المكتبة',
+          ),
+          NavigationDestination(
+            icon: Icon(Symbols.folder_rounded),
+            label: 'المجلدات',
+          ),
+          NavigationDestination(
+            icon: Icon(Symbols.history_rounded),
+            label: 'الأخيرة',
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _pickFile,
         icon: const Icon(Symbols.folder_open_rounded),
@@ -181,6 +212,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
     );
   }
+
+  // ─── دوال مساعدة (بقيت كما هي) ───
 
   void _sortSheet(SettingsProvider s) {
     final cs = Theme.of(context).colorScheme;
