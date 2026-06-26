@@ -49,7 +49,7 @@ class PlayerTopBar extends StatelessWidget {
           ),
           if (!isQuickActionsActive)
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: screenWidth * 0.25), // تم تغييرها من 0.35 إلى 0.25
+              constraints: BoxConstraints(maxWidth: screenWidth * 0.25),
               child: _MarqueeText(
                 text: videoName,
                 style: const TextStyle(
@@ -108,10 +108,12 @@ class _MarqueeText extends StatefulWidget {
 }
 
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
+  final GlobalKey _key = GlobalKey();
   late ScrollController _scrollController;
   double _textWidth = 0;
   bool _needsMarquee = false;
   Timer? _timer;
+  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
@@ -150,32 +152,93 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     });
   }
 
+  void _stopScroll() {
+    _timer?.cancel();
+  }
+
+  void _resumeScroll() {
+    if (_needsMarquee) _startScroll();
+  }
+
+  void _showTooltip() {
+    _stopScroll();
+    _overlayEntry?.remove();
+    final renderBox = _key.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final double tooltipHeight = 48;
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned(
+            left: offset.dx,
+            top: offset.dy - tooltipHeight - 8,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                ),
+                child: Text(
+                  widget.text,
+                  style: widget.style.copyWith(
+                    color: Colors.black87,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    shadows: [],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _hideTooltip() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    _resumeScroll();
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
+    _overlayEntry?.remove();
     _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_needsMarquee) {
-      return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
-    }
-    return SizedBox(
-      height: 20,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        controller: _scrollController,
-        physics: const NeverScrollableScrollPhysics(),
-        child: Row(
-          children: [
-            Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
-            const SizedBox(width: 40),
-            Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
-          ],
-        ),
-      ),
+    final child = _needsMarquee
+        ? SizedBox(
+            key: _key,
+            height: 20,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              controller: _scrollController,
+              physics: const NeverScrollableScrollPhysics(),
+              child: Row(
+                children: [
+                  Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+                  const SizedBox(width: 40),
+                  Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+                ],
+              ),
+            ),
+          )
+        : Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
+
+    return GestureDetector(
+      onLongPress: _showTooltip,
+      onLongPressUp: _hideTooltip,
+      child: child,
     );
   }
 }
