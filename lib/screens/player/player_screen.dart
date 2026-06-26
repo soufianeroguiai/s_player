@@ -79,6 +79,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final List<String> _favorites = [];
   final List<String> _playlist = [];
 
+  double _startSubtitleSize = 24.0;
+  double _startBottomPadding = 0.0;
+  Offset _startFocalPoint = Offset.zero;
+  bool _subtitleGestureActive = false;
+  final ValueNotifier<bool> _showVolNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> _showBrightNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> _showSeekNotifier = ValueNotifier(false);
+  Timer? _indicatorTimer;
+
+  String? _seekHintText;
+  Timer? _seekHintTimer;
+
   @override
   void initState() {
     super.initState();
@@ -647,6 +659,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final s = context.watch<SettingsProvider>();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
 
     if (PipService.isInPipMode.value) {
       return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
@@ -680,19 +694,184 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ? null
                       : (details) {
                           final x = details.localPosition.dx;
-                          final screenWidth = MediaQuery.of(context).size.width;
                           if (x < screenWidth / 3) {
                             final target = _position - const Duration(seconds: 10);
                             _player.seek(target.isNegative ? Duration.zero : target);
+                            _showSeekHint(-10);
                           } else if (x > screenWidth * 2 / 3) {
                             final target = _position + const Duration(seconds: 10);
                             _player.seek(target > _duration ? _duration : target);
+                            _showSeekHint(10);
                           } else {
                             _isPlaying ? _player.pause() : _player.play();
                           }
                         },
+                  onScaleStart: (details) {
+                    if (_isLocked) return;
+                    if (details.pointerCount == 2 && !_isPlaying) {
+                      _startSubtitleSize = s.subtitleFontSize;
+                      _startBottomPadding = s.bottomPadding;
+                      _startFocalPoint = details.focalPoint;
+                      _subtitleGestureActive = true;
+                    } else {
+                      _seekMsNotifier.value = _position.inMilliseconds.toDouble();
+                      _subtitleGestureActive = false;
+                    }
+                  },
+                  onScaleUpdate: (details) {
+                    if (_isLocked) return;
+
+                    if (details.pointerCount == 2 && _subtitleGestureActive && !_isPlaying) {
+                      final newSize = (_startSubtitleSize * details.scale).clamp(10.0, 150.0);
+                      s.setSubtitleFontSize(newSize);
+
+                      final dy = details.focalPoint.dy - _startFocalPoint.dy;
+                      final newPadding = (_startBottomPadding - dy).clamp(0.0, screenHeight * 0.85);
+                      s.setBottomPadding(newPadding);
+                      return;
+                    }
+
+                    if (details.pointerCount != 1) return;
+                    if (details.focalPointDelta.distance < 0.5) return;
+
+                    final isRight = details.focalPoint.dx > screenWidth / 2;
+                    final dx = details.focalPointDelta.dx.abs();
+                    final dy = details.focalPointDelta.dy.abs();
+                    final isHorizontal = dx > dy;
+
+                    if (isHorizontal) {
+                      final seekFactor = (_duration.inMilliseconds * 0.25)
+                          .clamp(30000.0, 600000.0);
+                      final change = (details.focalPointDelta.dx / screenWidth) * seekFactor;
+                      _seekMsNotifier.value = (_seekMsNotifier.value + change)
+                          .clamp(0.0, _duration.inMilliseconds.toDouble());
+                      _showSeekNotifier.value = true;
+                      _showVolNotifier.value = false;
+                      _showBrightNotifier.value = false;
+                    } else {
+                      final delta = -details.focalPointDelta.dy / 180.0;
+                      if (isRight) {
+                        _onVolumeChanged(_volumeLevel + delta);
+                        _showVolNotifier.value = true;
+                        _showBrightNotifier.value = false;
+                        _showSeekNotifier.value = false;
+                      } else {
+                        final newBright = (_brightnessNotifier.value + delta).clamp(0.05, 1.0);
+                        _brightnessNotifier.value = newBright;
+                        ScreenBrightness.instance.setApplicationScreenBrightness(newBright);
+                        _showBrightNotifier.value = true;
+                        _showVolNotifier.value = false;
+                        _showSeekNotifier.value = false;
+                      }
+                      _resetIndicatorTimer();
+                    }
+                  },
+                  onScaleEnd: (details) {
+                    if (_isLocked) return;
+                    _subtitleGestureActive = false;
+                    if (_showSeekNotifier.value) {
+                      _player.seek(Duration(milliseconds: _seekMsNotifier.value.toInt()));
+                      _showSeekNotifier.value = false;
+                    }
+                  },
                   child: _buildVideoWidget(s),
                 ),
+
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showSeekNotifier,
+                  builder: (context, show, child) {
+                    if (!show) return const SizedBox.shrink();
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _seekMsNotifier,
+                      builder: (context, seekMs, child) {
+                        return Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.75),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Symbols.fast_forward_rounded, color: Colors.white, size: 32),
+                              const SizedBox(height: 8),
+                              Text(
+                                _fmt(Duration(milliseconds: seekMs.toInt())),
+                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                              ),
+                            ]),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showVolNotifier,
+                  builder: (context, show, child) {
+                    if (!show) return const SizedBox.shrink();
+                    final bool isBoosted = _volumeLevel > 1.0;
+                    return Positioned(
+                      left: 20,
+                      top: MediaQuery.of(context).size.height * 0.22,
+                      child: PlayerIndicators.buildFloatingIndicator(
+                        icon: _volumeLevel == 0
+                            ? Icons.volume_off_rounded
+                            : isBoosted
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_down_rounded,
+                        displayValue: (_volumeLevel / 2.0).clamp(0.0, 1.0),
+                        labelText: '${(_volumeLevel * 100).round()}%',
+                        color: isBoosted ? Colors.orangeAccent : const Color(0xFF4FC3F7),
+                      ),
+                    );
+                  },
+                ),
+
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showBrightNotifier,
+                  builder: (context, show, child) {
+                    if (!show) return const SizedBox.shrink();
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _brightnessNotifier,
+                      builder: (context, brightness, child) {
+                        return Positioned(
+                          right: 20,
+                          top: MediaQuery.of(context).size.height * 0.22,
+                          child: PlayerIndicators.buildFloatingIndicator(
+                            icon: brightness < 0.15
+                                ? Icons.brightness_2_rounded
+                                : brightness < 0.5
+                                    ? Icons.brightness_5_rounded
+                                    : Icons.brightness_7_rounded,
+                            displayValue: brightness,
+                            labelText: '${(brightness * 100).round()}%',
+                            color: const Color(0xFFFFD54F),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+
+                if (_seekHintText != null)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.72),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Text(
+                        _seekHintText!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
 
                 if (_fitOverlayText != null)
                   Positioned(
@@ -811,15 +990,43 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
+  void _showSeekHint(int seconds) {
+    setState(() => _seekHintText = seconds > 0 ? '+${seconds}s ⏩' : '${seconds}s ⏪');
+    _seekHintTimer?.cancel();
+    _seekHintTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _seekHintText = null);
+    });
+  }
+
+  void _resetIndicatorTimer() {
+    _indicatorTimer?.cancel();
+    _indicatorTimer = Timer(const Duration(seconds: 1), () {
+      _showVolNotifier.value = false;
+      _showBrightNotifier.value = false;
+    });
+  }
+
+  String _fmt(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     PipService.isInPipMode.removeListener(_onPipModeChanged);
     _brightnessNotifier.dispose();
     _seekMsNotifier.dispose();
+    _showVolNotifier.dispose();
+    _showBrightNotifier.dispose();
+    _showSeekNotifier.dispose();
     _hideTimer?.cancel();
     _saveTimer?.cancel();
+    _indicatorTimer?.cancel();
     _fitOverlayTimer?.cancel();
+    _seekHintTimer?.cancel();
     try {
       ScreenBrightness.instance.resetApplicationScreenBrightness();
     } catch (_) {}
