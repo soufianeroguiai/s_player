@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -8,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import '../../models/video_item.dart';
 import '../../providers/library_provider.dart';
@@ -35,6 +38,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   late final VideoController _controller;
 
   ActiveMenu _currentMenu = ActiveMenu.none;
+  bool _showQuickActions = false;
 
   double _volumeLevel = 1.0;
 
@@ -66,6 +70,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
   final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
 
+  // للمفضلة وقائمة التشغيل
+  final List<String> _favorites = [];
+  final List<String> _playlist = [];
+
   @override
   void initState() {
     super.initState();
@@ -87,6 +95,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _volumeLevel = (settings.defaultAudioBoost / 100.0).clamp(0.0, 2.0);
 
     _loadPersistedVolumeAndBrightness();
+    _loadFavorites();
+    _loadPlaylist();
 
     _player = Player();
     _controller = VideoController(_player);
@@ -112,6 +122,71 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Future<void> _savePersistedVolume() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('player_volume_level', _volumeLevel);
+  }
+
+  Future<void> _loadFavorites() async {
+    final p = await SharedPreferences.getInstance();
+    final favs = p.getStringList('favorite_paths') ?? [];
+    _favorites.addAll(favs);
+  }
+
+  Future<void> _loadPlaylist() async {
+    final p = await SharedPreferences.getInstance();
+    final list = p.getStringList('playlist_paths') ?? [];
+    _playlist.addAll(list);
+  }
+
+  bool _isFavorite(String path) => _favorites.contains(path);
+
+  void _toggleFavorite() {
+    final path = widget.video.path;
+    if (_isFavorite(path)) {
+      _favorites.remove(path);
+    } else {
+      _favorites.add(path);
+    }
+    SharedPreferences.getInstance().then((p) => p.setStringList('favorite_paths', _favorites));
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_isFavorite(path) ? 'تمت إضافة للمفضلة' : 'تمت إزالة من المفضلة')),
+    );
+  }
+
+  void _addToPlaylist() {
+    final path = widget.video.path;
+    if (!_playlist.contains(path)) {
+      _playlist.add(path);
+      SharedPreferences.getInstance().then((p) => p.setStringList('playlist_paths', _playlist));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تمت الإضافة إلى قائمة التشغيل')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الملف موجود مسبقاً في القائمة')),
+      );
+    }
+  }
+
+  Future<void> _captureScreenshot() async {
+    try {
+      final Uint8List? bytes = await _controller.screenshot(format: 'image/jpeg');
+      if (bytes != null) {
+        final dir = await getApplicationDocumentsDirectory();
+        final file = File('${dir.path}/screenshot_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await file.writeAsBytes(bytes);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم حفظ اللقطة: ${file.path}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشل التقاط اللقطة: $e')),
+      );
+    }
+  }
+
+  void _shareVideo() {
+    Share.shareXFiles([XFile(widget.video.path)], subject: widget.video.name);
   }
 
   Future<void> _loadFitMode() async {
@@ -144,6 +219,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       if (_isLocked) {
         _showControls = false;
         _currentMenu = ActiveMenu.none;
+        _showQuickActions = false;
       }
     });
   }
@@ -257,12 +333,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       await _player.setSubtitleTrack(SubtitleTrack.no());
       final entries = await SubtitleService.load(path, encodingName: encoding);
       if (entries.isEmpty) return;
+
       _lastSubtitleEntries = entries;
       await _applySubtitleSyncOffset();
+
       if (mounted) {
         setState(() => _showSubtitles = true);
         if (!silent) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ تم تحميل الترجمة')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('✅ تم تحميل الترجمة')));
         }
       }
     } catch (e) {
@@ -291,7 +370,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void _scheduleHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && _isPlaying && !_isLocked && _currentMenu == ActiveMenu.none) {
+      if (mounted && _isPlaying && !_isLocked && _currentMenu == ActiveMenu.none && !_showQuickActions) {
         setState(() => _showControls = false);
       }
     });
@@ -303,8 +382,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _toggleControls() {
     if (_isLocked) return;
-    if (_currentMenu != ActiveMenu.none) {
-      setState(() => _currentMenu = ActiveMenu.none);
+    if (_currentMenu != ActiveMenu.none || _showQuickActions) {
+      setState(() {
+        _currentMenu = ActiveMenu.none;
+        _showQuickActions = false;
+      });
       _scheduleHide();
       return;
     }
@@ -336,6 +418,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final entries = _lastSubtitleEntries;
     if (entries == null || entries.isEmpty) return;
     final offset = Duration(milliseconds: (_subtitleSync * 1000).round());
+
     final srtContent = StringBuffer();
     for (int i = 0; i < entries.length; i++) {
       final e = entries[i];
@@ -343,11 +426,288 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       final end = e.end + offset;
       if (end.isNegative) continue;
       srtContent.writeln('${i + 1}');
-      srtContent.writeln('${_formatSrtTime(start.isNegative ? Duration.zero : start)} --> ${_formatSrtTime(end)}');
+      srtContent.writeln(
+          '${_formatSrtTime(start.isNegative ? Duration.zero : start)} --> ${_formatSrtTime(end)}');
       srtContent.writeln(e.text);
       srtContent.writeln();
     }
     await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
+  }
+
+  void _showSettingsMenu() {
+    final settings = context.read<SettingsProvider>();
+    final cs = Theme.of(context).colorScheme;
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 10,
+        80,
+        MediaQuery.of(context).size.width,
+        0,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'speed',
+          child: Row(children: [
+            Icon(Symbols.speed_rounded, color: cs.primary),
+            const SizedBox(width: 12),
+            Text('سرعة التشغيل (${settings.defaultSpeed}x)'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'fit',
+          child: Row(children: [
+            Icon(Symbols.aspect_ratio_rounded, color: cs.primary),
+            const SizedBox(width: 12),
+            Text('وضع الملء (${modeName(_fitMode)})'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'remember',
+          child: Row(children: [
+            Icon(settings.rememberPosition ? Symbols.bookmark_rounded : Symbols.bookmark_border_rounded, color: cs.primary),
+            const SizedBox(width: 12),
+            Text(settings.rememberPosition ? 'إيقاف تذكر الموضع' : 'تفعيل تذكر الموضع'),
+          ]),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'speed') {
+        showSpeedPicker(context, settings);
+      } else if (value == 'fit') {
+        _toggleFit();
+      } else if (value == 'remember') {
+        settings.setRememberPosition(!settings.rememberPosition);
+      }
+    });
+  }
+
+  Widget _buildQuickActionsBar() {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _qaBtn(Symbols.star_rounded, _isFavorite(widget.video.path) ? Colors.amber : Colors.white70, _toggleFavorite),
+          const SizedBox(width: 10),
+          _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
+          const SizedBox(width: 10),
+          _qaBtn(Symbols.camera_rounded, Colors.white70, _captureScreenshot),
+          const SizedBox(width: 10),
+          _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
+        ],
+      ),
+    );
+  }
+
+  Widget _qaBtn(IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Icon(icon, color: color, size: 26),
+    );
+  }
+
+  Widget _buildSidePanel() {
+    const double panelWidth = 340.0;
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      top: 0,
+      bottom: 0,
+      right: _currentMenu != ActiveMenu.none ? 0 : -panelWidth,
+      width: panelWidth,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xD9000000),
+          border: Border(left: BorderSide(color: Colors.white24, width: 1)),
+        ),
+        child: SafeArea(
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _currentMenu == ActiveMenu.subtitles ? 'إعدادات الترجمة' : 'إعدادات الصوت',
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Symbols.close_rounded, color: Colors.white70),
+                        onPressed: () {
+                          setState(() => _currentMenu = ActiveMenu.none);
+                          _scheduleHide();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white24, height: 1),
+                Expanded(
+                  child: _currentMenu == ActiveMenu.subtitles
+                      ? _buildSubtitlePanelContent()
+                      : _currentMenu == ActiveMenu.audio
+                          ? _buildAudioPanelContent()
+                          : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioPanelContent() {
+    final cs = Theme.of(context).colorScheme;
+    final uniqueAudio = _audioTracks.toSet().toList();
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          AudioBoostSection(boost: _volumeLevel * 100, onChanged: (v) => _onVolumeChanged(v / 100)),
+          const Divider(color: Colors.white24, height: 32),
+          if (uniqueAudio.isNotEmpty) ...[
+            const Text('المسارات الصوتية',
+                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...uniqueAudio.map((track) {
+              final name = track.title ?? track.language ?? 'مسار صوتي';
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(name, style: const TextStyle(color: Colors.white)),
+                subtitle: track.language != null
+                    ? Text(track.language!, style: const TextStyle(color: Colors.white54))
+                    : null,
+                trailing: _player.state.track.audio == track ? Icon(Icons.check, color: cs.primary) : null,
+                onTap: () => setState(() => _player.setAudioTrack(track)),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubtitlePanelContent() {
+    final cs = Theme.of(context).colorScheme;
+    final uniqueTracks = _subtitleTracks.toSet().toList();
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('تفعيل الترجمة', style: TextStyle(color: Colors.white, fontSize: 15)),
+              Switch(
+                value: _showSubtitles,
+                onChanged: (v) {
+                  setState(() => _showSubtitles = v);
+                  if (!v) _player.setSubtitleTrack(SubtitleTrack.no());
+                },
+                activeColor: cs.primary,
+              ),
+            ],
+          ),
+          if (uniqueTracks.isNotEmpty) ...[
+            const Divider(color: Colors.white24, height: 24),
+            ...uniqueTracks.map((track) {
+              final name = track.title ?? track.language ?? 'ترجمة';
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(name, style: const TextStyle(color: Colors.white)),
+                trailing:
+                    _player.state.track.subtitle == track ? Icon(Icons.check, color: cs.primary) : null,
+                onTap: () {
+                  _player.setSubtitleTrack(track);
+                  setState(() => _showSubtitles = true);
+                },
+              );
+            }),
+          ],
+          const Divider(color: Colors.white24, height: 24),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.folder_open, color: Colors.white70),
+            title: const Text('اختيار ملف ترجمة يدوي', style: TextStyle(color: Colors.white)),
+            onTap: () {
+              _pickSubtitle();
+              setState(() => _currentMenu = ActiveMenu.none);
+            },
+          ),
+          const Divider(color: Colors.white24, height: 24),
+          const Text('المزامنة والسرعة',
+              style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('تأخير الترجمة', style: TextStyle(color: Colors.white, fontSize: 14)),
+              Text('${_subtitleSync > 0 ? '+' : ''}${_subtitleSync.toStringAsFixed(1)}s',
+                  style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          SliderTheme(
+            data: SliderThemeData(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6)),
+            child: Slider(
+              value: _subtitleSync,
+              min: -5.0,
+              max: 5.0,
+              divisions: 100,
+              onChanged: _onSubtitleSyncChanged,
+              activeColor: cs.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('المظهر والتخصيص',
+              style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const SubtitleAppearancePanel(),
+        ],
+      ),
+    );
+  }
+
+  void showSpeedPicker(BuildContext context, SettingsProvider s) {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+              child: Text('سرعة التشغيل', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+          const Divider(height: 1),
+          ...[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((sp) => ListTile(
+                title: Text('${sp}x'),
+                trailing: s.defaultSpeed == sp ? Icon(Symbols.check_rounded, color: cs.primary) : null,
+                onTap: () {
+                  s.setDefaultSpeed(sp);
+                  _player.setRate(sp);
+                  Navigator.pop(context);
+                },
+              )),
+        ]),
+      ),
+    );
   }
 
   @override
@@ -363,8 +723,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       canPop: !_isLocked,
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) {
-          if (_currentMenu != ActiveMenu.none) {
-            setState(() => _currentMenu = ActiveMenu.none);
+          if (_currentMenu != ActiveMenu.none || _showQuickActions) {
+            setState(() {
+              _currentMenu = ActiveMenu.none;
+              _showQuickActions = false;
+            });
             return;
           }
           if (!_isLocked) await _enterPip();
@@ -378,19 +741,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             : Stack(children: [
                 GestureDetector(
                   onTap: _toggleControls,
-                  onDoubleTapDown: _isLocked ? null : (details) {
-                    final x = details.localPosition.dx;
-                    final screenWidth = MediaQuery.of(context).size.width;
-                    if (x < screenWidth / 3) {
-                      final target = _position - const Duration(seconds: 10);
-                      _player.seek(target.isNegative ? Duration.zero : target);
-                    } else if (x > screenWidth * 2 / 3) {
-                      final target = _position + const Duration(seconds: 10);
-                      _player.seek(target > _duration ? _duration : target);
-                    } else {
-                      _isPlaying ? _player.pause() : _player.play();
-                    }
-                  },
+                  onDoubleTapDown: _isLocked
+                      ? null
+                      : (details) {
+                          final x = details.localPosition.dx;
+                          final screenWidth = MediaQuery.of(context).size.width;
+                          if (x < screenWidth / 3) {
+                            final target = _position - const Duration(seconds: 10);
+                            _player.seek(target.isNegative ? Duration.zero : target);
+                          } else if (x > screenWidth * 2 / 3) {
+                            final target = _position + const Duration(seconds: 10);
+                            _player.seek(target > _duration ? _duration : target);
+                          } else {
+                            _isPlaying ? _player.pause() : _player.play();
+                          }
+                        },
                   child: Video(
                     controller: _controller,
                     fit: getBoxFit(_fitMode),
@@ -402,26 +767,39 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
                 ),
+
                 if (_fitOverlayText != null)
                   Positioned(
-                    top: 100, left: 0, right: 0,
+                    top: 100,
+                    left: 0,
+                    right: 0,
                     child: Center(
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(color: Colors.black.withOpacity(0.55), borderRadius: BorderRadius.circular(20)),
-                        child: Text(_fitOverlayText!, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(_fitOverlayText!,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ),
+
                 if (_isLocked)
                   Positioned(
-                    bottom: 100, left: 0, right: 0,
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
                     child: Center(
                       child: GestureDetector(
                         onTap: _toggleLock,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          decoration: BoxDecoration(color: Colors.orange.withOpacity(0.85), borderRadius: BorderRadius.circular(30)),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(30),
+                          ),
                           child: const Row(mainAxisSize: MainAxisSize.min, children: [
                             Icon(Icons.lock_rounded, color: Colors.white, size: 20),
                             SizedBox(width: 8),
@@ -431,33 +809,55 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ),
                     ),
                   ),
+
                 if (_showControls && !_isLocked) ...[
                   Positioned(
-                    top: 0, left: 0, right: 0,
+                    top: 0,
+                    left: 0,
+                    right: 0,
                     child: PlayerTopBar(
                       videoName: widget.video.name,
                       onBack: () => Navigator.pop(context),
-                      onToggleFit: _toggleFit,
-                      onToggleOrientation: _toggleOrientation,
-                      onPip: _enterPip,
-                      isLandscape: _isLandscape,
-                      showSubtitles: _showSubtitles,
                       onAudioMenu: () {
                         setState(() {
                           _currentMenu = _currentMenu == ActiveMenu.audio ? ActiveMenu.none : ActiveMenu.audio;
+                          _showQuickActions = false;
                           if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
                         });
                       },
                       onSubtitleMenu: () {
                         setState(() {
                           _currentMenu = _currentMenu == ActiveMenu.subtitles ? ActiveMenu.none : ActiveMenu.subtitles;
+                          _showQuickActions = false;
                           if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
                         });
                       },
+                      onSettingsMenu: () {
+                        _showQuickActions = false;
+                        _showSettingsMenu();
+                      },
+                      onQuickActions: () {
+                        setState(() {
+                          _currentMenu = ActiveMenu.none;
+                          _showQuickActions = !_showQuickActions;
+                          if (_showQuickActions) cancelHideTimer(); else _scheduleHide();
+                        });
+                      },
+                      isAudioActive: _currentMenu == ActiveMenu.audio,
+                      isSubtitleActive: _currentMenu == ActiveMenu.subtitles,
+                      isQuickActionsActive: _showQuickActions,
                     ),
                   ),
+                  if (_showQuickActions)
+                    Positioned(
+                      top: 80,
+                      right: 12,
+                      child: _buildQuickActionsBar(),
+                    ),
                   Positioned(
-                    bottom: 0, left: 0, right: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
                     child: PlayerBottomBar(
                       position: _position,
                       duration: _duration,
@@ -481,38 +881,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
                 ],
-                // ── لوحة الصوت (أسفل الشاشة مع معاينة) ──
-                if (_currentMenu == ActiveMenu.audio)
-                  Positioned(
-                    bottom: 0, left: 0, right: 0,
-                    child: LiveAudioSettings(
-                      volumeLevel: _volumeLevel,
-                      audioTracks: _audioTracks,
-                      currentTrack: _player.state.track.audio,
-                      onVolumeChanged: _onVolumeChanged,
-                      onTrackSelected: (track) => _player.setAudioTrack(track),
-                      onClose: () => setState(() => _currentMenu = ActiveMenu.none),
-                    ),
-                  ),
-                // ── لوحة الترجمة (أسفل الشاشة مع معاينة حية) ──
-                if (_currentMenu == ActiveMenu.subtitles)
-                  Positioned(
-                    bottom: 0, left: 0, right: 0,
-                    child: LiveSubtitleSettings(
-                      showSubtitles: _showSubtitles,
-                      subtitleTracks: _subtitleTracks,
-                      currentTrack: _player.state.track.subtitle,
-                      subtitleSync: _subtitleSync,
-                      onToggleSubtitles: (v) => setState(() => _showSubtitles = v),
-                      onTrackSelected: (track) {
-                        _player.setSubtitleTrack(track);
-                        setState(() => _showSubtitles = true);
-                      },
-                      onSyncChanged: _onSubtitleSyncChanged,
-                      onPickSubtitle: _pickSubtitle,
-                      onClose: () => setState(() => _currentMenu = ActiveMenu.none),
-                    ),
-                  ),
+
+                _buildSidePanel(),
               ]),
       ),
     );
@@ -527,7 +897,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _hideTimer?.cancel();
     _saveTimer?.cancel();
     _fitOverlayTimer?.cancel();
-    try { ScreenBrightness.instance.resetApplicationScreenBrightness(); } catch (_) {}
+    try {
+      ScreenBrightness.instance.resetApplicationScreenBrightness();
+    } catch (_) {}
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);

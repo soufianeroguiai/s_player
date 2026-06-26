@@ -1,20 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-// ══════════════════════════════════════════════
-// الشريط العلوي — مبسّط: رجوع + اسم الفيديو + زرّا الصوت والترجمة
-// ══════════════════════════════════════════════
 class PlayerTopBar extends StatelessWidget {
   final String videoName;
   final VoidCallback onBack;
   final VoidCallback onAudioMenu;
   final VoidCallback onSubtitleMenu;
-  final bool showSubtitles;
-  // الخصائص التالية مُبقاة للتوافق لكن لم تعد تُظهر في TopBar
-  final VoidCallback? onToggleFit;
-  final VoidCallback? onToggleOrientation;
-  final VoidCallback? onPip;
-  final bool isLandscape;
+  final VoidCallback onSettingsMenu;
+  final VoidCallback onQuickActions;
+  final bool isAudioActive;
+  final bool isSubtitleActive;
+  final bool isQuickActionsActive;
 
   const PlayerTopBar({
     super.key,
@@ -22,11 +18,11 @@ class PlayerTopBar extends StatelessWidget {
     required this.onBack,
     required this.onAudioMenu,
     required this.onSubtitleMenu,
-    required this.showSubtitles,
-    this.onToggleFit,
-    this.onToggleOrientation,
-    this.onPip,
-    this.isLandscape = true,
+    required this.onSettingsMenu,
+    required this.onQuickActions,
+    this.isAudioActive = false,
+    this.isSubtitleActive = false,
+    this.isQuickActionsActive = false,
   });
 
   @override
@@ -59,15 +55,25 @@ class PlayerTopBar extends StatelessWidget {
               ),
             ),
           ),
-          // زرّا الصوت والترجمة في الأعلى
-          _TopIconBtn(
+          _AnimatedIconBtn(
+            icon: Symbols.apps_rounded,
+            color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
+            onTap: onQuickActions,
+          ),
+          _AnimatedIconBtn(
             icon: Symbols.graphic_eq_rounded,
+            color: isAudioActive ? Colors.amberAccent : Colors.white70,
             onTap: onAudioMenu,
           ),
-          _TopIconBtn(
-            icon: showSubtitles ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
+          _AnimatedIconBtn(
+            icon: isSubtitleActive ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
+            color: isSubtitleActive ? Colors.amberAccent : Colors.white60,
             onTap: onSubtitleMenu,
-            color: showSubtitles ? Colors.lightBlueAccent : Colors.white60,
+          ),
+          _AnimatedIconBtn(
+            icon: Symbols.more_vert_rounded,
+            color: Colors.white70,
+            onTap: onSettingsMenu,
           ),
         ]),
       ),
@@ -75,25 +81,74 @@ class PlayerTopBar extends StatelessWidget {
   }
 }
 
-class _TopIconBtn extends StatelessWidget {
+class _AnimatedIconBtn extends StatefulWidget {
   final IconData icon;
-  final VoidCallback onTap;
   final Color color;
-  const _TopIconBtn({required this.icon, required this.onTap, this.color = Colors.white70});
+  final VoidCallback onTap;
+
+  const _AnimatedIconBtn({required this.icon, required this.color, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => IconButton(
-        icon: Icon(icon, color: color, size: 24),
-        onPressed: onTap,
-      );
+  State<_AnimatedIconBtn> createState() => _AnimatedIconBtnState();
 }
 
-// ══════════════════════════════════════════════
-// الشريط السفلي الشامل
-// ┌─────────────────────────────────────────┐
-// │  00:31 ═══════●══════════════════ 23:35 │
-// │    [PiP]  [◀10] [⏸] [10▶]  [Fit] [🔄] │
-// └─────────────────────────────────────────┘
-// ══════════════════════════════════════════════
+class _AnimatedIconBtnState extends State<_AnimatedIconBtn>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.7).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails details) {
+    _controller.forward();
+  }
+
+  void _onTapUp(TapUpDetails details) {
+    _controller.reverse();
+    widget.onTap();
+  }
+
+  void _onTapCancel() {
+    _controller.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      child: AnimatedBuilder(
+        animation: _scaleAnimation,
+        builder: (context, child) => Transform.scale(
+          scale: _scaleAnimation.value,
+          child: child,
+        ),
+        child: IconButton(
+          icon: Icon(widget.icon, color: widget.color, size: 24),
+          onPressed: null,
+        ),
+      ),
+    );
+  }
+}
+
 class PlayerBottomBar extends StatelessWidget {
   final Duration position;
   final Duration duration;
@@ -152,12 +207,10 @@ class PlayerBottomBar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            // ── شريط التقدم الزمني ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Row(children: [
-                Text(_fmt(position),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(_fmt(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 Expanded(
                   child: SliderTheme(
                     data: SliderThemeData(
@@ -172,59 +225,26 @@ class PlayerBottomBar extends StatelessWidget {
                     child: Slider(value: progress, onChanged: onSeek),
                   ),
                 ),
-                Text(_fmt(duration),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(_fmt(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
               ]),
             ),
-
-            // ── صف الأزرار ──
             SizedBox(
               height: 52,
               child: Row(children: [
-                // ── الطرف الأيسر: PiP + قفل ──
-                _BottomBtn(
-                  icon: Symbols.picture_in_picture_rounded,
-                  onTap: onPip,
-                  size: 22,
-                ),
-                _BottomBtn(
-                  icon: Symbols.lock_rounded,
-                  onTap: onToggleLock,
-                  size: 22,
-                ),
-
+                _BottomBtn(icon: Symbols.picture_in_picture_rounded, onTap: onPip, size: 22),
+                _BottomBtn(icon: Symbols.lock_rounded, onTap: onToggleLock, size: 22),
                 const Spacer(),
-
-                // ── وسط: تأخير + play/pause + تقديم ──
-                _BottomBtn(
-                  icon: Symbols.replay_10_rounded,
-                  onTap: onSkipBack,
-                  size: 28,
-                ),
+                _BottomBtn(icon: Symbols.replay_10_rounded, onTap: onSkipBack, size: 28),
                 const SizedBox(width: 8),
                 _PlayBtn(isPlaying: isPlaying, onTap: onPlayPause, color: primaryColor),
                 const SizedBox(width: 8),
-                _BottomBtn(
-                  icon: Symbols.forward_10_rounded,
-                  onTap: onSkipForward,
-                  size: 28,
-                ),
-
+                _BottomBtn(icon: Symbols.forward_10_rounded, onTap: onSkipForward, size: 28),
                 const Spacer(),
-
-                // ── الطرف الأيمن: تدوير + تكبير/تصغير فيديو ──
                 _BottomBtn(
-                  icon: isLandscape
-                      ? Symbols.screen_rotation_rounded
-                      : Symbols.stay_current_portrait_rounded,
-                  onTap: onToggleOrientation,
-                  size: 22,
+                  icon: isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded,
+                  onTap: onToggleOrientation, size: 22,
                 ),
-                _BottomBtn(
-                  icon: Symbols.aspect_ratio_rounded,
-                  onTap: onToggleFit,
-                  size: 22,
-                ),
+                _BottomBtn(icon: Symbols.aspect_ratio_rounded, onTap: onToggleFit, size: 22),
               ]),
             ),
           ]),
@@ -280,22 +300,4 @@ class _BottomBtn extends StatelessWidget {
       ),
     );
   }
-}
-
-/// زر تحكم مستقل (مُبقى للتوافق مع استدعاءات قديمة)
-class CtrlBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const CtrlBtn(this.icon, this.onTap, {super.key});
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 50,
-          height: 50,
-          decoration:
-              BoxDecoration(color: Colors.white.withOpacity(0.12), shape: BoxShape.circle),
-          child: Icon(icon, color: Colors.white, size: 28),
-        ),
-      );
 }
