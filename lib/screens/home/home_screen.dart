@@ -537,16 +537,88 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('حذف المجلد'), content: Text('هل أنت متأكد من حذف ${videos.length} فيديو؟'), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), TextButton(onPressed: () { Navigator.pop(ctx); for (final v in videos) { final file = File(v.path); if (file.existsSync()) file.deleteSync(); } context.read<LibraryProvider>().scan(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف ${videos.length} فيديو'))); }, child: const Text('حذف', style: TextStyle(color: Colors.red)))]));
   }
 
-  Widget _infoRow(String label, String value) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: const TextStyle(fontWeight: FontWeight.w600)), Text(value)]));
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(value),
+      ]),
+    );
+  }
 
   void _showHiddenVideos() {
     final lib = context.read<LibraryProvider>();
     final hidden = lib.allVideos.where((v) => lib.hiddenPaths.contains(v.path)).toList();
     final cs = Theme.of(context).colorScheme;
-    showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => DraggableScrollableSheet(initialChildSize: 0.7, maxChildSize: 0.95, minChildSize: 0.4, expand: false, builder: (ctx, scroll) => Column(children: [
-      Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 8), child: Row(children: [Icon(Symbols.visibility_off_rounded, color: cs.primary, size: 20), const SizedBox(width: 8), Text('الملفات المخفية (${hidden.length})', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface)), const Spacer(), if (hidden.isNotEmpty) TextButton(onPressed: () { lib.clearHidden(); Navigator.pop(ctx); }, child: const Text('إظهار الكل'))])),
-      const Divider(height: 1),
-      if (hidden.isEmpty) Expanded(child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Symbols.visibility_rounded, size: 48, color: cs.onSurfaceVariant), const SizedBox(height: 12), Text('لا يوجد ملفات مخفية', style: TextStyle(color: cs.onSurfaceVariant))]))) else Expanded(child: ListView.builder(controller: scroll, itemCount: hidden.length, itemBuilder: (_, i) { final v = hidden[i]; return ListTile(leading: Container(width: 48, height: 48, decoration: BoxDecoration(color: cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(8)), child: Icon(Symbols.video_file_rounded, color: cs.onSurfaceVariant)), title: Text(v.name, maxLines: 1, overflow: TextOverflow.ellipsis), subtitle: Text(v.formattedSize, style: const TextStyle(fontSize: 12)), trailing: TextButton(onPressed: () => lib.unhideVideo(v.path), child: const Text('إظهار'))); }))),
-    ])));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.95,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (ctx, scroll) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(children: [
+              Icon(Symbols.visibility_off_rounded, color: cs.primary, size: 20),
+              const SizedBox(width: 8),
+              Text('الملفات المخفية (${hidden.length})',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface)),
+              const Spacer(),
+              if (hidden.isNotEmpty)
+                TextButton(
+                  onPressed: () {
+                    lib.clearHidden();
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('إظهار الكل'),
+                ),
+            ]),
+          ),
+          const Divider(height: 1),
+          if (hidden.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Symbols.visibility_rounded, size: 48, color: cs.onSurfaceVariant),
+                  const SizedBox(height: 12),
+                  Text('لا يوجد ملفات مخفية', style: TextStyle(color: cs.onSurfaceVariant)),
+                ]),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                controller: scroll,
+                itemCount: hidden.length,
+                itemBuilder: (_, i) {
+                  final v = hidden[i];
+                  return ListTile(
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Symbols.video_file_rounded, color: cs.onSurfaceVariant),
+                    ),
+                    title: Text(v.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(v.formattedSize, style: const TextStyle(fontSize: 12)),
+                    trailing: TextButton(
+                      onPressed: () => lib.unhideVideo(v.path),
+                      child: const Text('إظهار'),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ]),
+      ),
+    );
   }
 }
