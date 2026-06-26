@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final List<String> _playlist = [];
 
   bool _isFabVisible = true;
+  Timer? _showFabTimer;
 
   final List<(IconData, String)> _tabs = const [
     (Symbols.video_library_rounded, 'المكتبة'),
@@ -62,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void dispose() {
     _rotateController.dispose();
+    _showFabTimer?.cancel();
     super.dispose();
   }
 
@@ -348,11 +351,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Container(
         height: 64,
         decoration: BoxDecoration(
-          color: cs.surface.withOpacity(0.85),
           borderRadius: BorderRadius.circular(32),
-          boxShadow: [
-            BoxShadow(color: cs.shadow.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 2)),
-          ],
+          color: Colors.transparent,
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -360,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             AnimatedPositioned(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              left: _currentIndex * tabWidth + 8,
+              left: (_currentIndex == 3 ? 0 : _currentIndex) * tabWidth + 8,
               top: 8,
               bottom: 8,
               width: pillWidth,
@@ -377,7 +377,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 final isActive = _currentIndex == index;
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _currentIndex = index),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      if (index == 3) {
+                        _showMoreMenu();
+                        return;
+                      }
+                      setState(() => _currentIndex = index);
+                    },
                     child: Icon(
                       icon,
                       color: isActive ? cs.primary : cs.onSurfaceVariant,
@@ -391,6 +398,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
       ),
     );
+  }
+
+  void _onScrollUpdate(double delta) {
+    if (delta > 10 && _isFabVisible) {
+      setState(() => _isFabVisible = false);
+    }
+    _showFabTimer?.cancel();
+    _showFabTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!_isFabVisible && mounted) {
+        setState(() => _isFabVisible = true);
+      }
+    });
   }
 
   @override
@@ -416,9 +435,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: NotificationListener<ScrollUpdateNotification>(
         onNotification: (notification) {
           if (notification.dragDetails != null) {
-            final delta = notification.dragDetails!.delta.dy;
-            if (delta > 10 && _isFabVisible) setState(() => _isFabVisible = false);
-            if (delta < -10 && !_isFabVisible) setState(() => _isFabVisible = true);
+            _onScrollUpdate(notification.dragDetails!.delta.dy);
           }
           return false;
         },
@@ -436,6 +453,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ? FloatingActionButton(
               onPressed: _playLastVideo,
               backgroundColor: cs.primary,
+              shape: const CircleBorder(),
               child: const Icon(Symbols.play_arrow_rounded, color: Colors.white),
             )
           : null,
