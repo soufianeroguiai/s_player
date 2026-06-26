@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:media_kit/media_kit.dart';
 import '../../providers/settings_provider.dart';
 
 class SubtitleAppearancePanel extends StatefulWidget {
@@ -68,7 +67,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          // ── الترجمة (تشغيل/إيقاف + لغة) ──
           _SectionTile(
             icon: Symbols.subtitles_rounded,
             title: 'الترجمة',
@@ -89,7 +87,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             _buildSubtitleToggleSection(),
           ],
 
-          // ── الترجمات المدمجة ──
           _SectionTile(
             icon: Symbols.video_file_rounded,
             title: 'الترجمات المدمجة',
@@ -105,7 +102,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             _buildEmbeddedTracksSection(),
           ],
 
-          // ── الترجمات الخارجية ──
           _SectionTile(
             icon: Symbols.folder_open_rounded,
             title: 'الترجمات الخارجية',
@@ -121,7 +117,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             _buildExternalSubtitleSection(),
           ],
 
-          // ── المظهر ──
           _SectionTile(
             icon: Symbols.palette_rounded,
             title: 'المظهر',
@@ -137,7 +132,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             _buildAppearanceSection(s),
           ],
 
-          // ── المزامنة ──
           _SectionTile(
             icon: Symbols.timeline_rounded,
             title: 'المزامنة',
@@ -153,7 +147,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             _buildSyncSection(),
           ],
 
-          // ── الترميز ──
           _SectionTile(
             icon: Symbols.text_fields_rounded,
             title: 'الترميز',
@@ -169,7 +162,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             _buildEncodingSection(s),
           ],
 
-          // ── خيارات متقدمة ──
           _SectionTile(
             icon: Symbols.tune_rounded,
             title: 'خيارات متقدمة',
@@ -285,11 +277,7 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // حجم الخط
-        _SettingRow(
-          label: 'حجم الخط',
-          value: '${s.subtitleFontSize.toInt()} px',
-        ),
+        _SettingRow(label: 'حجم الخط', value: '${s.subtitleFontSize.toInt()} px'),
         SliderTheme(
           data: SliderThemeData(
             trackHeight: 3,
@@ -307,8 +295,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
           ),
         ),
         const SizedBox(height: 14),
-
-        // نوع الخط
         _SettingRow(label: 'نوع الخط', value: s.fontFamily),
         const SizedBox(height: 8),
         SizedBox(
@@ -336,8 +322,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
           ),
         ),
         const SizedBox(height: 14),
-
-        // لون الخط
         _SettingRow(label: 'لون الخط'),
         const SizedBox(height: 6),
         _ColorPickerRow(
@@ -345,8 +329,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
           onColorChanged: s.setSubtitleColor,
         ),
         const SizedBox(height: 14),
-
-        // لون الخلفية
         Row(children: [
           const Expanded(child: _SettingRow(label: 'خلفية النص')),
           Switch(
@@ -362,10 +344,7 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             onColorChanged: s.setSubtitleBgColor,
           ),
           const SizedBox(height: 6),
-          _SettingRow(
-            label: 'الشفافية',
-            value: '${(s.subtitleBgOpacity * 100).toInt()}%',
-          ),
+          _SettingRow(label: 'الشفافية', value: '${(s.subtitleBgOpacity * 100).toInt()}%'),
           SliderTheme(
             data: SliderThemeData(
               trackHeight: 3,
@@ -382,6 +361,15 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             ),
           ),
         ],
+        const SizedBox(height: 14),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('خط مائل', style: TextStyle(color: Colors.white, fontSize: 13)),
+          value: s.subtitleItalic,
+          onChanged: s.setSubtitleItalic,
+          activeColor: cs.primary,
+        ),
       ]),
     );
   }
@@ -451,17 +439,15 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
         color: Colors.white.withOpacity(0.04),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Column(children: [
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('حفظ الإعدادات كافتراضية', style: TextStyle(color: Colors.white, fontSize: 13)),
-          subtitle: const Text('تنطبق على جميع الفيديوهات', style: TextStyle(color: Colors.white38, fontSize: 11)),
-          value: s.rememberPosition,
-          onChanged: s.setRememberPosition,
-          activeColor: Theme.of(context).colorScheme.primary,
-        ),
-      ]),
+      child: SwitchListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: const Text('حفظ الإعدادات كافتراضية', style: TextStyle(color: Colors.white, fontSize: 13)),
+        subtitle: const Text('تنطبق على جميع الفيديوهات', style: TextStyle(color: Colors.white38, fontSize: 11)),
+        value: s.rememberPosition,
+        onChanged: s.setRememberPosition,
+        activeColor: Theme.of(context).colorScheme.primary,
+      ),
     );
   }
 }

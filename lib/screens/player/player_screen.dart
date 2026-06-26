@@ -545,7 +545,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           subtitleTracks: _subtitleTracks,
                           currentSubtitleTrack: _player.state.track.subtitle,
                           onTrackSelected: (track) {
-                            _player.setSubtitleTrack(track);
+                            if (track is SubtitleTrack) {
+                              _player.setSubtitleTrack(track);
+                            }
                             setState(() => _showSubtitles = true);
                           },
                           onPickSubtitle: _pickSubtitle,
