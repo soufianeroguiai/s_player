@@ -351,58 +351,61 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Container(
         height: 64,
         decoration: BoxDecoration(
-          color: cs.surface.withOpacity(0.45),
+          color: cs.surface.withOpacity(0.75),
           borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
+          border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 16,
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 20,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              left: (_currentIndex == 3 ? 0 : _currentIndex) * tabWidth + 8,
-              top: 8,
-              bottom: 8,
-              width: pillWidth,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(24),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                left: (_currentIndex == 3 ? 0 : _currentIndex) * tabWidth + 8,
+                top: 8,
+                bottom: 8,
+                width: pillWidth,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
                 ),
               ),
-            ),
-            Row(
-              children: List.generate(_tabs.length, (index) {
-                final icon = _tabs[index];
-                final isActive = _currentIndex == index;
-                return Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      if (index == 3) {
-                        _showMoreMenu();
-                        return;
-                      }
-                      setState(() => _currentIndex = index);
-                    },
-                    child: Icon(
-                      icon,
-                      color: isActive ? cs.primary : cs.onSurfaceVariant,
-                      size: isActive ? 28 : 26,
+              Row(
+                children: List.generate(_tabs.length, (index) {
+                  final icon = _tabs[index];
+                  final isActive = _currentIndex == index;
+                  return Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (index == 3) {
+                          _showMoreMenu();
+                          return;
+                        }
+                        setState(() => _currentIndex = index);
+                      },
+                      child: Icon(
+                        icon,
+                        color: isActive ? cs.primary : cs.onSurfaceVariant,
+                        size: isActive ? 28 : 26,
+                      ),
                     ),
-                  ),
-                );
-              }),
-            ),
-          ],
+                  );
+                }),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -429,6 +432,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final lib = context.watch<LibraryProvider>();
 
     return Scaffold(
+      extendBody: true, // ← يجعل الـ body يمتد تحت الشريط فتختفي الطبقة خلفه
       appBar: AppBar(
         title: const Text('SR Player'),
         centerTitle: false,
