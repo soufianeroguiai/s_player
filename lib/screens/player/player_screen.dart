@@ -19,6 +19,7 @@ import 'player_indicators.dart';
 import 'player_controls.dart';
 import 'player_audio_panel.dart';
 import 'player_subtitle_panel.dart';
+import 'player_settings_panel.dart';
 import 'player_fit_mode.dart';
 import 'subtitle_style_builder.dart';
 
@@ -39,6 +40,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showQuickActions = false;
 
   double _volumeLevel = 1.0;
+  double _audioDelay = 0.0;
 
   bool _initialized = false;
   bool _showControls = true;
@@ -65,6 +67,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   List<SubtitleEntry>? _lastSubtitleEntries;
   bool _hasExternalSubtitle = false;
+  String? _externalSubtitlePath;
 
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
   final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
@@ -431,52 +434,62 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
   }
 
-  void _showSettingsMenu() {
+  void _showSettingsPanel() {
     final settings = context.read<SettingsProvider>();
-    final cs = Theme.of(context).colorScheme;
-    showMenu<String>(
+    showModalBottomSheet(
       context: context,
-      position: RelativeRect.fromLTRB(
-        MediaQuery.of(context).size.width - 10,
-        80,
-        MediaQuery.of(context).size.width,
-        0,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xD9000000),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      items: [
-        PopupMenuItem(
-          value: 'speed',
-          child: Row(children: [
-            Icon(Symbols.speed_rounded, color: cs.primary),
-            const SizedBox(width: 12),
-            Text('سرعة التشغيل (${settings.defaultSpeed}x)'),
-          ]),
+      builder: (_) => SafeArea(
+        child: PlayerSettingsPanel(
+          isFavorite: _isFavorite(widget.video.path),
+          onToggleFavorite: _toggleFavorite,
+          onAddToPlaylist: _addToPlaylist,
+          onCaptureScreenshot: _captureScreenshot,
+          onToggleFit: _toggleFit,
+          onToggleOrientation: _toggleOrientation,
+          onEnterPip: _enterPip,
+          onShowInfo: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: widget.video)));
+          },
+          onSleepTimer: null,
+          onShowSpeedPicker: () {
+            Navigator.pop(context);
+            _showSpeedPicker(settings);
+          },
+          onToggleRememberPosition: () {
+            settings.setRememberPosition(!settings.rememberPosition);
+            Navigator.pop(context);
+          },
+          rememberPosition: settings.rememberPosition,
+          currentSpeed: _speed,
+          currentFitMode: modeName(_fitMode),
+          onClose: () => Navigator.pop(context),
         ),
-        PopupMenuItem(
-          value: 'fit',
-          child: Row(children: [
-            Icon(Symbols.aspect_ratio_rounded, color: cs.primary),
-            const SizedBox(width: 12),
-            Text('وضع الملء (${modeName(_fitMode)})'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'remember',
-          child: Row(children: [
-            Icon(settings.rememberPosition ? Symbols.bookmark_rounded : Symbols.bookmark_border_rounded, color: cs.primary),
-            const SizedBox(width: 12),
-            Text(settings.rememberPosition ? 'إيقاف تذكر الموضع' : 'تفعيل تذكر الموضع'),
-          ]),
-        ),
-      ],
-    ).then((value) {
-      if (value == 'speed') {
-        _showSpeedPicker(settings);
-      } else if (value == 'fit') {
-        _toggleFit();
-      } else if (value == 'remember') {
-        settings.setRememberPosition(!settings.rememberPosition);
+      ),
+    );
+  }
+
+  Future<void> _captureScreenshot() async {
+    try {
+      final Uint8List? bytes = await _controller.screenshot(format: 'image/jpeg');
+      if (bytes != null) {
+        final dir = await getApplicationDocumentsDirectory();
+        final file = File('${dir.path}/screenshot_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await file.writeAsBytes(bytes);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم حفظ اللقطة: ${file.path}')),
+        );
       }
-    });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشل التقاط اللقطة: $e')),
+      );
+    }
   }
 
   Widget _buildFloatingActions() {
@@ -574,36 +587,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Widget _buildAudioPanelContent() {
-    final cs = Theme.of(context).colorScheme;
-    final uniqueAudio = _audioTracks.toSet().toList();
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          AudioBoostSection(boost: _volumeLevel * 100, onChanged: (v) => _onVolumeChanged(v / 100)),
-          const Divider(color: Colors.white24, height: 32),
-          if (uniqueAudio.isNotEmpty) ...[
-            const Text('المسارات الصوتية',
-                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ...uniqueAudio.map((track) {
-              final name = track.title ?? track.language ?? 'مسار صوتي';
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(name, style: const TextStyle(color: Colors.white)),
-                subtitle: track.language != null
-                    ? Text(track.language!, style: const TextStyle(color: Colors.white54))
-                    : null,
-                trailing: _player.state.track.audio == track ? Icon(Icons.check, color: cs.primary) : null,
-                onTap: () => setState(() => _player.setAudioTrack(track)),
-              );
-            }),
-          ],
-        ],
-      ),
+    return AudioSettingsPanel(
+      player: _player,
+      volumeLevel: _volumeLevel,
+      onVolumeChanged: _onVolumeChanged,
+      audioTracks: _audioTracks,
+      currentAudioTrack: _player.state.track.audio,
+      onTrackSelected: (track) => setState(() => _player.setAudioTrack(track)),
+      audioDelay: _audioDelay,
+      onAudioDelayChanged: (v) {
+        setState(() => _audioDelay = v);
+        _player.setAudioDelay(v / 1000.0);
+      },
+      onClose: () => setState(() => _currentMenu = ActiveMenu.none),
     );
   }
 
@@ -763,10 +759,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           if (_showQuickActions) cancelHideTimer(); else _scheduleHide();
                         });
                       },
-                      onSettingsMenu: () {
-                        _showQuickActions = false;
-                        _showSettingsMenu();
-                      },
+                      onSettingsMenu: _showSettingsPanel,
                       isAudioActive: _currentMenu == ActiveMenu.audio,
                       isSubtitleActive: _currentMenu == ActiveMenu.subtitles,
                       isQuickActionsActive: _showQuickActions,

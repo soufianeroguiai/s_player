@@ -51,7 +51,6 @@ class _AudioSettingsPanelState extends State<AudioSettingsPanel> {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          // ✅ يظهر فقط إذا كان هناك أكثر من مسار صوتي
           if (_hasMultipleTracks) ...[
             _SectionTile(
               icon: Symbols.audiotrack_rounded,
@@ -69,7 +68,6 @@ class _AudioSettingsPanelState extends State<AudioSettingsPanel> {
             ],
           ],
 
-          // مستوى الصوت
           _SectionTile(
             icon: Symbols.volume_up_rounded,
             title: 'مستوى الصوت',
@@ -85,7 +83,6 @@ class _AudioSettingsPanelState extends State<AudioSettingsPanel> {
             _buildVolumeSection(),
           ],
 
-          // مزامنة الصوت
           _SectionTile(
             icon: Symbols.timeline_rounded,
             title: 'مزامنة الصوت',
@@ -101,7 +98,6 @@ class _AudioSettingsPanelState extends State<AudioSettingsPanel> {
             _buildAudioSyncSection(),
           ],
 
-          // معلومات الصوت
           _SectionTile(
             icon: Symbols.info_rounded,
             title: 'معلومات الصوت',
@@ -267,7 +263,6 @@ class _AudioSettingsPanelState extends State<AudioSettingsPanel> {
               _infoTile('اللغة', track.language ?? 'غير معروف'),
               _infoTile('العنوان', track.title ?? 'غير معروف'),
               _infoTile('الترميز', track.codec ?? 'غير معروف'),
-              _infoTile('معدل العينة', track.sampleRate != null ? '${track.sampleRate} Hz' : 'غير معروف'),
               _infoTile('القناة', track.channels != null ? '${track.channels}' : 'غير معروف'),
               _infoTile('معدل البت', track.bitrate != null ? '${track.bitrate} kbps' : 'غير معروف'),
             ])
