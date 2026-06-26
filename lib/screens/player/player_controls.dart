@@ -6,7 +6,6 @@ class PlayerTopBar extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onAudioMenu;
   final VoidCallback onSubtitleMenu;
-  final VoidCallback onSettingsMenu;
   final VoidCallback onQuickActions;
   final bool isAudioActive;
   final bool isSubtitleActive;
@@ -18,7 +17,6 @@ class PlayerTopBar extends StatelessWidget {
     required this.onBack,
     required this.onAudioMenu,
     required this.onSubtitleMenu,
-    required this.onSettingsMenu,
     required this.onQuickActions,
     this.isAudioActive = false,
     this.isSubtitleActive = false,
@@ -43,10 +41,8 @@ class PlayerTopBar extends StatelessWidget {
             onPressed: onBack,
           ),
           Expanded(
-            child: Text(
-              videoName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: _MarqueeText(
+              text: videoName,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
@@ -70,12 +66,65 @@ class PlayerTopBar extends StatelessWidget {
             color: isSubtitleActive ? Colors.amberAccent : Colors.white60,
             onTap: onSubtitleMenu,
           ),
-          _AnimatedIconBtn(
-            icon: Symbols.more_vert_rounded,
-            color: Colors.white70,
-            onTap: onSettingsMenu,
-          ),
         ]),
+      ),
+    );
+  }
+}
+
+class _MarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  const _MarqueeText({required this.text, required this.style});
+
+  @override
+  State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    );
+    _animation = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(-1.5, 0),
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final textPainter = TextPainter(
+        text: TextSpan(text: widget.text, style: widget.style),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: MediaQuery.of(context).size.width * 0.5);
+      if (textPainter.width > MediaQuery.of(context).size.width * 0.5) {
+        _controller.repeat(reverse: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: SlideTransition(
+        position: _animation,
+        child: Text(
+          widget.text,
+          style: widget.style,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+        ),
       ),
     );
   }
@@ -149,7 +198,7 @@ class _AnimatedIconBtnState extends State<_AnimatedIconBtn>
   }
 }
 
-class PlayerBottomBar extends StatelessWidget {
+class PlayerBottomBar extends StatefulWidget {
   final Duration position;
   final Duration duration;
   final ValueChanged<double> onSeek;
@@ -181,6 +230,13 @@ class PlayerBottomBar extends StatelessWidget {
     this.isLandscape = true,
   });
 
+  @override
+  State<PlayerBottomBar> createState() => _PlayerBottomBarState();
+}
+
+class _PlayerBottomBarState extends State<PlayerBottomBar> {
+  bool _isSliding = false;
+
   String _fmt(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -190,8 +246,8 @@ class PlayerBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+    final progress = widget.duration.inMilliseconds > 0
+        ? (widget.position.inMilliseconds / widget.duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
 
     return Container(
@@ -210,41 +266,54 @@ class PlayerBottomBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Row(children: [
-                Text(_fmt(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(_fmt(widget.position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 Expanded(
                   child: SliderTheme(
                     data: SliderThemeData(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      trackHeight: _isSliding ? 6 : 3,
+                      thumbShape: RoundSliderThumbShape(enabledThumbRadius: _isSliding ? 10 : 6),
                       overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                      activeTrackColor: primaryColor,
+                      activeTrackColor: widget.primaryColor,
                       inactiveTrackColor: Colors.white24,
-                      thumbColor: primaryColor,
-                      overlayColor: primaryColor.withOpacity(0.25),
+                      thumbColor: widget.primaryColor,
+                      overlayColor: widget.primaryColor.withOpacity(0.25),
                     ),
-                    child: Slider(value: progress, onChanged: onSeek),
+                    child: Slider(
+                      value: progress,
+                      onChanged: (v) {
+                        setState(() => _isSliding = true);
+                        widget.onSeek(v);
+                      },
+                      onChangeEnd: (_) {
+                        setState(() => _isSliding = false);
+                      },
+                    ),
                   ),
                 ),
-                Text(_fmt(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(_fmt(widget.duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
               ]),
             ),
             SizedBox(
               height: 52,
               child: Row(children: [
-                _BottomBtn(icon: Symbols.picture_in_picture_rounded, onTap: onPip, size: 22),
-                _BottomBtn(icon: Symbols.lock_rounded, onTap: onToggleLock, size: 22),
+                _BottomBtn(icon: Symbols.picture_in_picture_rounded, onTap: widget.onPip, size: 22),
+                _BottomBtn(icon: Symbols.lock_rounded, onTap: widget.onToggleLock, size: 22),
                 const Spacer(),
-                _BottomBtn(icon: Symbols.replay_10_rounded, onTap: onSkipBack, size: 28),
+                _BottomBtn(icon: Symbols.replay_10_rounded, onTap: widget.onSkipBack, size: 28),
                 const SizedBox(width: 8),
-                _PlayBtn(isPlaying: isPlaying, onTap: onPlayPause, color: primaryColor),
+                _PlayBtn(
+                  isPlaying: widget.isPlaying,
+                  onTap: widget.onPlayPause,
+                  color: widget.primaryColor,
+                ),
                 const SizedBox(width: 8),
-                _BottomBtn(icon: Symbols.forward_10_rounded, onTap: onSkipForward, size: 28),
+                _BottomBtn(icon: Symbols.forward_10_rounded, onTap: widget.onSkipForward, size: 28),
                 const Spacer(),
                 _BottomBtn(
-                  icon: isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded,
-                  onTap: onToggleOrientation, size: 22,
+                  icon: widget.isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded,
+                  onTap: widget.onToggleOrientation, size: 22,
                 ),
-                _BottomBtn(icon: Symbols.aspect_ratio_rounded, onTap: onToggleFit, size: 22),
+                _BottomBtn(icon: Symbols.aspect_ratio_rounded, onTap: widget.onToggleFit, size: 22),
               ]),
             ),
           ]),
@@ -254,28 +323,66 @@ class PlayerBottomBar extends StatelessWidget {
   }
 }
 
-class _PlayBtn extends StatelessWidget {
+class _PlayBtn extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onTap;
   final Color color;
   const _PlayBtn({required this.isPlaying, required this.onTap, required this.color});
 
   @override
+  State<_PlayBtn> createState() => _PlayBtnState();
+}
+
+class _PlayBtnState extends State<_PlayBtn> with SingleTickerProviderStateMixin {
+  late AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    if (_rotationController.isCompleted) {
+      _rotationController.reverse();
+    } else {
+      _rotationController.forward();
+    }
+    widget.onTap();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.85),
-          shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 12)],
+      onTap: _handleTap,
+      child: AnimatedBuilder(
+        animation: _rotationController,
+        builder: (context, child) => Transform.rotate(
+          angle: _rotationController.value * 3.14159,
+          child: child,
         ),
-        child: Icon(
-          isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
-          color: Colors.white,
-          size: 32,
+        child: Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            color: Colors.transparent,
+          ),
+          child: Icon(
+            widget.isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
+            color: Colors.white,
+            size: 32,
+          ),
         ),
       ),
     );

@@ -145,7 +145,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     SharedPreferences.getInstance().then((p) => p.setStringList('favorite_paths', _favorites));
     setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_isFavorite(path) ? 'تمت إزالة من المفضلة' : 'تمت إضافة للمفضلة')),
+      SnackBar(content: Text(_isFavorite(path) ? 'تمت إضافة للمفضلة' : 'تمت إزالة من المفضلة')),
     );
   }
 
@@ -413,54 +413,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
   }
 
-  void _showSettingsMenu() {
-    final settings = context.read<SettingsProvider>();
-    final cs = Theme.of(context).colorScheme;
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        MediaQuery.of(context).size.width - 10,
-        80,
-        MediaQuery.of(context).size.width,
-        0,
-      ),
-      items: [
-        PopupMenuItem(
-          value: 'speed',
-          child: Row(children: [
-            Icon(Symbols.speed_rounded, color: cs.primary),
-            const SizedBox(width: 12),
-            Text('سرعة التشغيل (${settings.defaultSpeed}x)'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'fit',
-          child: Row(children: [
-            Icon(Symbols.aspect_ratio_rounded, color: cs.primary),
-            const SizedBox(width: 12),
-            Text('وضع الملء (${modeName(_fitMode)})'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'remember',
-          child: Row(children: [
-            Icon(settings.rememberPosition ? Symbols.bookmark_rounded : Symbols.bookmark_border_rounded, color: cs.primary),
-            const SizedBox(width: 12),
-            Text(settings.rememberPosition ? 'إيقاف تذكر الموضع' : 'تفعيل تذكر الموضع'),
-          ]),
-        ),
-      ],
-    ).then((value) {
-      if (value == 'speed') {
-        _showSpeedPicker(settings);
-      } else if (value == 'fit') {
-        _toggleFit();
-      } else if (value == 'remember') {
-        settings.setRememberPosition(!settings.rememberPosition);
-      }
-    });
-  }
-
   Widget _buildQuickActionsBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -661,31 +613,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  void _showSpeedPicker(SettingsProvider s) {
-    final cs = Theme.of(context).colorScheme;
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Padding(
-              padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-              child: Text('سرعة التشغيل', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
-          const Divider(height: 1),
-          ...[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((sp) => ListTile(
-                title: Text('${sp}x'),
-                trailing: s.defaultSpeed == sp ? Icon(Symbols.check_rounded, color: cs.primary) : null,
-                onTap: () {
-                  s.setDefaultSpeed(sp);
-                  _player.setRate(sp);
-                  Navigator.pop(context);
-                },
-              )),
-        ]),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -694,6 +621,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (PipService.isInPipMode.value) {
       return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
     }
+
+    final bool controlsVisible = _showControls && !_isLocked && _currentMenu == ActiveMenu.none && !_showQuickActions;
 
     return PopScope(
       canPop: !_isLocked,
@@ -786,7 +715,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     ),
                   ),
 
-                if (_showControls && !_isLocked) ...[
+                if (controlsVisible) ...[
                   Positioned(
                     top: 0,
                     left: 0,
@@ -807,10 +736,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           _showQuickActions = false;
                           if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
                         });
-                      },
-                      onSettingsMenu: () {
-                        _showQuickActions = false;
-                        _showSettingsMenu();
                       },
                       onQuickActions: () {
                         setState(() {
