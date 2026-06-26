@@ -92,7 +92,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Timer? _seekHintTimer;
 
   bool _showLockHint = false;
-  double _lockDragOffset = 0.0;
+  double _lockIconOffset = 0.0;
 
   @override
   void initState() {
@@ -223,7 +223,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _currentMenu = ActiveMenu.none;
         _showQuickActions = false;
         _showLockHint = false;
-        _lockDragOffset = 0.0;
+        _lockIconOffset = 0.0;
       }
     });
   }
@@ -405,7 +405,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (_isLocked) {
       setState(() {
         _showLockHint = true;
-        _lockDragOffset = 0.0;
+        _lockIconOffset = 0.0;
       });
       return;
     }
@@ -788,49 +788,74 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                // نافذة القفل (في موضعها العلوي السابق، مع سحب أفقي للأيقونة فقط)
-                if (_isLocked && _showLockHint)
+                // نافذة القفل في الأسفل، عرض محدود، الأيقونة تتحرك داخله فقط
+                if (_isLocked)
                   Positioned(
-                    top: 100,
+                    bottom: 40,
                     left: 0,
                     right: 0,
-                    child: GestureDetector(
-                      onHorizontalDragUpdate: (details) {
-                        setState(() {
-                          _lockDragOffset = (_lockDragOffset + details.delta.dx).clamp(0.0, 120.0);
-                        });
-                      },
-                      onHorizontalDragEnd: (_) {
-                        if (_lockDragOffset >= 90) {
-                          _toggleLock();
-                        }
-                        setState(() {
-                          _lockDragOffset = 0.0;
-                          _showLockHint = false;
-                        });
-                      },
-                      child: Transform.translate(
-                        offset: Offset(_lockDragOffset, 0),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: cs.primary.withOpacity(0.85),
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _lockDragOffset >= 90 ? Symbols.lock_open_rounded : Symbols.lock_rounded,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _lockDragOffset >= 90 ? 'افتح' : 'اسحب لفتح القفل',
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                              ),
-                            ],
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() => _showLockHint = true);
+                          Future.delayed(const Duration(seconds: 2), () {
+                            if (mounted) setState(() => _showLockHint = false);
+                          });
+                        },
+                        onHorizontalDragUpdate: (details) {
+                          setState(() {
+                            _lockIconOffset = (_lockIconOffset + details.delta.dx).clamp(0.0, 100.0);
+                          });
+                        },
+                        onHorizontalDragEnd: (_) {
+                          if (_lockIconOffset >= 70) {
+                            _toggleLock();
+                          }
+                          setState(() {
+                            _lockIconOffset = 0.0;
+                            _showLockHint = false;
+                          });
+                        },
+                        child: AnimatedOpacity(
+                          opacity: _showLockHint ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Container(
+                            width: 220,
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Stack(
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                const Center(
+                                  child: Text(
+                                    'اسحب لفتح القفل',
+                                    style: TextStyle(color: Colors.white, fontSize: 14),
+                                  ),
+                                ),
+                                PositionedDirectional(
+                                  start: _lockIconOffset,
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white24,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _lockIconOffset >= 70
+                                          ? Symbols.lock_open_rounded
+                                          : Symbols.lock_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
