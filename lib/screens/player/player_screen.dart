@@ -27,7 +27,7 @@ import 'player_settings_panel.dart';
 import 'player_fit_mode.dart';
 import 'subtitle_style_builder.dart';
 
-enum ActiveMenu { none, subtitles, audio }
+enum ActiveMenu { none, subtitles, audio, settings }
 
 class PlayerScreen extends StatefulWidget {
   final VideoItem video;
@@ -438,41 +438,139 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
   }
 
-  void _showSettingsPanel() {
-    final settings = context.read<SettingsProvider>();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xD9000000),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+  void _openSettingsPanel() {
+    setState(() {
+      _currentMenu = ActiveMenu.settings;
+      cancelHideTimer();
+    });
+  }
+
+  Widget _buildVideoWidget(SettingsProvider s) {
+    return Video(
+      key: ValueKey('video_${s.bottomPadding}_${s.horizontalMargin}'),
+      controller: _controller,
+      fit: getBoxFit(_fitMode),
+      controls: NoVideoControls,
+      subtitleViewConfiguration: SubtitleViewConfiguration(
+        style: buildSubtitleTextStyle(s),
+        textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
+        padding: EdgeInsets.fromLTRB(s.horizontalMargin, 0, s.horizontalMargin, s.bottomPadding),
       ),
-      builder: (_) => SafeArea(
-        child: PlayerSettingsPanel(
-          isFavorite: _isFavorite(widget.video.path),
-          onToggleFavorite: _toggleFavorite,
-          onAddToPlaylist: _addToPlaylist,
-          onCaptureScreenshot: _captureScreenshot,
-          onToggleFit: _toggleFit,
-          onToggleOrientation: _toggleOrientation,
-          onEnterPip: _enterPip,
-          onShowInfo: () {
-            Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: widget.video)));
-          },
-          onSleepTimer: null,
-          onShowSpeedPicker: () {
-            Navigator.pop(context);
-            _showSpeedPicker(settings);
-          },
-          onToggleRememberPosition: () {
-            settings.setRememberPosition(!settings.rememberPosition);
-            Navigator.pop(context);
-          },
-          rememberPosition: settings.rememberPosition,
-          currentSpeed: _speed,
-          currentFitMode: modeName(_fitMode),
-          onClose: () => Navigator.pop(context),
+    );
+  }
+
+  Widget _buildSidePanel() {
+    const double panelWidth = 340.0;
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      top: 0,
+      bottom: 0,
+      right: _currentMenu != ActiveMenu.none ? 0 : -panelWidth,
+      width: panelWidth,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xD9000000),
+          border: Border(left: BorderSide(color: Colors.white24, width: 1)),
+        ),
+        child: SafeArea(
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _currentMenu == ActiveMenu.subtitles
+                            ? 'إعدادات الترجمة'
+                            : _currentMenu == ActiveMenu.audio
+                                ? 'إعدادات الصوت'
+                                : 'المزيد',
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Symbols.close_rounded, color: Colors.white70),
+                        onPressed: () {
+                          setState(() => _currentMenu = ActiveMenu.none);
+                          _scheduleHide();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white24, height: 1),
+                Expanded(
+                  child: _currentMenu == ActiveMenu.subtitles
+                      ? SubtitleAppearancePanel(
+                          subtitleTracks: _subtitleTracks,
+                          currentSubtitleTrack: _player.state.track.subtitle,
+                          onTrackSelected: (track) {
+                            if (track is SubtitleTrack) _player.setSubtitleTrack(track);
+                            setState(() => _showSubtitles = true);
+                          },
+                          onPickSubtitle: _pickSubtitle,
+                          onRemoveExternal: _removeExternalSubtitle,
+                          hasExternalSubtitle: _hasExternalSubtitle,
+                          showSubtitles: _showSubtitles,
+                          onToggleSubtitles: (v) {
+                            setState(() => _showSubtitles = v);
+                            if (!v) _player.setSubtitleTrack(SubtitleTrack.no());
+                          },
+                          subtitleSync: _subtitleSync,
+                          onSyncChanged: _onSubtitleSyncChanged,
+                        )
+                      : _currentMenu == ActiveMenu.audio
+                          ? AudioSettingsPanel(
+                              player: _player,
+                              volumeLevel: _volumeLevel,
+                              onVolumeChanged: _onVolumeChanged,
+                              audioTracks: _audioTracks,
+                              currentAudioTrack: _player.state.track.audio,
+                              onTrackSelected: (track) => setState(() => _player.setAudioTrack(track)),
+                              audioDelay: _audioDelay,
+                              onAudioDelayChanged: (v) {
+                                setState(() => _audioDelay = v);
+                              },
+                              onClose: () => setState(() => _currentMenu = ActiveMenu.none),
+                            )
+                          : _currentMenu == ActiveMenu.settings
+                              ? PlayerSettingsPanel(
+                                  isFavorite: _isFavorite(widget.video.path),
+                                  onToggleFavorite: _toggleFavorite,
+                                  onAddToPlaylist: _addToPlaylist,
+                                  onCaptureScreenshot: _captureScreenshot,
+                                  onToggleFit: _toggleFit,
+                                  onToggleOrientation: _toggleOrientation,
+                                  onEnterPip: _enterPip,
+                                  onShowInfo: () {
+                                    setState(() => _currentMenu = ActiveMenu.none);
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: widget.video)));
+                                  },
+                                  onSleepTimer: null,
+                                  onShowSpeedPicker: () {
+                                    final settings = context.read<SettingsProvider>();
+                                    _showSpeedPicker(settings);
+                                    setState(() => _currentMenu = ActiveMenu.none);
+                                  },
+                                  onToggleRememberPosition: () {
+                                    final settings = context.read<SettingsProvider>();
+                                    settings.setRememberPosition(!settings.rememberPosition);
+                                    setState(() => _currentMenu = ActiveMenu.none);
+                                  },
+                                  rememberPosition: context.read<SettingsProvider>().rememberPosition,
+                                  currentSpeed: _speed,
+                                  currentFitMode: modeName(_fitMode),
+                                  onClose: () => setState(() => _currentMenu = ActiveMenu.none),
+                                )
+                              : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -517,94 +615,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     return GestureDetector(
       onTap: onTap,
       child: Icon(icon, color: color, size: 26),
-    );
-  }
-
-  Widget _buildSidePanel() {
-    const double panelWidth = 340.0;
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      top: 0,
-      bottom: 0,
-      right: _currentMenu != ActiveMenu.none ? 0 : -panelWidth,
-      width: panelWidth,
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xD9000000),
-          border: Border(left: BorderSide(color: Colors.white24, width: 1)),
-        ),
-        child: SafeArea(
-          child: Directionality(
-            textDirection: TextDirection.rtl,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _currentMenu == ActiveMenu.subtitles ? 'إعدادات الترجمة' : 'إعدادات الصوت',
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Symbols.close_rounded, color: Colors.white70),
-                        onPressed: () {
-                          setState(() => _currentMenu = ActiveMenu.none);
-                          _scheduleHide();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Colors.white24, height: 1),
-                Expanded(
-                  child: _currentMenu == ActiveMenu.subtitles
-                      ? SubtitleAppearancePanel(
-                          subtitleTracks: _subtitleTracks,
-                          currentSubtitleTrack: _player.state.track.subtitle,
-                          onTrackSelected: (track) {
-                            if (track is SubtitleTrack) {
-                              _player.setSubtitleTrack(track);
-                            }
-                            setState(() => _showSubtitles = true);
-                          },
-                          onPickSubtitle: _pickSubtitle,
-                          onRemoveExternal: _removeExternalSubtitle,
-                          hasExternalSubtitle: _hasExternalSubtitle,
-                          showSubtitles: _showSubtitles,
-                          onToggleSubtitles: (v) {
-                            setState(() => _showSubtitles = v);
-                            if (!v) _player.setSubtitleTrack(SubtitleTrack.no());
-                          },
-                          subtitleSync: _subtitleSync,
-                          onSyncChanged: _onSubtitleSyncChanged,
-                        )
-                      : _currentMenu == ActiveMenu.audio
-                          ? AudioSettingsPanel(
-                              player: _player,
-                              volumeLevel: _volumeLevel,
-                              onVolumeChanged: _onVolumeChanged,
-                              audioTracks: _audioTracks,
-                              currentAudioTrack: _player.state.track.audio,
-                              onTrackSelected: (track) => setState(() => _player.setAudioTrack(track)),
-                              audioDelay: _audioDelay,
-                              onAudioDelayChanged: (v) {
-                                setState(() => _audioDelay = v);
-                                // `setAudioDelay` غير موجودة في بعض إصدارات media_kit، لذا نعلقها
-                                // يمكن إضافة تعويض عبر seek لاحقاً إذا لزم
-                              },
-                              onClose: () => setState(() => _currentMenu = ActiveMenu.none),
-                            )
-                          : const SizedBox.shrink(),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -681,16 +691,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                             _isPlaying ? _player.pause() : _player.play();
                           }
                         },
-                  child: Video(
-                    controller: _controller,
-                    fit: getBoxFit(_fitMode),
-                    controls: NoVideoControls,
-                    subtitleViewConfiguration: SubtitleViewConfiguration(
-                      style: buildSubtitleTextStyle(s),
-                      textAlign: s.subtitleRTL ? TextAlign.right : TextAlign.center,
-                      padding: EdgeInsets.fromLTRB(s.horizontalMargin, 0, s.horizontalMargin, s.bottomPadding),
-                    ),
-                  ),
+                  child: _buildVideoWidget(s),
                 ),
 
                 if (_fitOverlayText != null)
@@ -764,7 +765,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           if (_showQuickActions) cancelHideTimer(); else _scheduleHide();
                         });
                       },
-                      onSettingsMenu: _showSettingsPanel,
+                      onSettingsMenu: _openSettingsPanel,
                       isAudioActive: _currentMenu == ActiveMenu.audio,
                       isSubtitleActive: _currentMenu == ActiveMenu.subtitles,
                       isQuickActionsActive: _showQuickActions,

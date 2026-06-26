@@ -54,7 +54,7 @@ class PlayerTopBar extends StatelessWidget {
             ),
           ),
           _AnimatedIconBtn(
-            icon: isQuickActionsActive ? Symbols.arrow_drop_up_rounded : Symbols.arrow_drop_down_rounded,
+            icon: isQuickActionsActive ? Symbols.arrow_drop_down_rounded : Symbols.arrow_drop_up_rounded,
             color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
             onTap: onQuickActions,
           ),
