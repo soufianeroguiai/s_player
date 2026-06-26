@@ -54,7 +54,7 @@ class PlayerTopBar extends StatelessWidget {
             ),
           ),
           _AnimatedIconBtn(
-            icon: isQuickActionsActive ? Symbols.arrow_drop_down_rounded : Symbols.arrow_drop_up_rounded,
+            icon: isQuickActionsActive ? Symbols.arrow_drop_up_rounded : Symbols.arrow_drop_down_rounded,
             color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
             onTap: onQuickActions,
           ),
@@ -90,7 +90,8 @@ class _MarqueeText extends StatefulWidget {
 
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<Offset> _animation;
+  late Animation<double> _animation;
+  double _textWidth = 0;
 
   @override
   void initState() {
@@ -99,16 +100,20 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
       vsync: this,
       duration: const Duration(seconds: 8),
     );
-    _animation = Tween<Offset>(
-      begin: Offset.zero,
-      end: const Offset(-1.5, 0),
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
+    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(_controller);
+    WidgetsBinding.instance.addPostFrameCallback(_startIfNeeded);
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+  void _startIfNeeded(_) {
+    final textPainter = TextPainter(
+      text: TextSpan(text: widget.text, style: widget.style),
+      textDirection: TextDirection.rtl,
+    )..layout(maxWidth: double.infinity);
+    _textWidth = textPainter.width;
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox != null && _textWidth > renderBox.size.width) {
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override
@@ -120,24 +125,20 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      final textPainter = TextPainter(
-        text: TextSpan(text: widget.text, style: widget.style),
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: constraints.maxWidth);
-
-      if (textPainter.width > constraints.maxWidth && !_controller.isAnimating) {
-        _controller.repeat(reverse: true);
-      }
-
       return ClipRect(
-        child: SlideTransition(
-          position: _animation,
-          child: Text(
-            widget.text,
-            style: widget.style,
-            maxLines: 1,
-            softWrap: false,
-          ),
+        child: AnimatedBuilder(
+          animation: _animation,
+          builder: (context, child) {
+            final maxTranslate = (_textWidth - constraints.maxWidth).clamp(0.0, double.infinity);
+            if (maxTranslate <= 0) {
+              return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
+            }
+            final offset = maxTranslate * _animation.value;
+            return Transform.translate(
+              offset: Offset(-offset, 0),
+              child: Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+            );
+          },
         ),
       );
     });
