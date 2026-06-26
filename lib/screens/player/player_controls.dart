@@ -91,8 +91,6 @@ class _MarqueeText extends StatefulWidget {
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _animation;
-  double _textWidth = 0;
-  double _containerWidth = 0;
 
   @override
   void initState() {
@@ -108,9 +106,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        setState(() {
-          _containerWidth = context.size?.width ?? MediaQuery.of(context).size.width * 0.5;
-        });
+        setState(() {});
       }
     });
   }
@@ -393,12 +389,12 @@ class _PlayBtnState extends State<_PlayBtn> with SingleTickerProviderStateMixin 
           height: 64,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
+            border: Border.all(color: Colors.white70, width: 2),
             color: Colors.transparent,
           ),
           child: Icon(
             widget.isPlaying ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
-            color: Colors.white,
+            color: Colors.white70,
             size: 32,
           ),
         ),

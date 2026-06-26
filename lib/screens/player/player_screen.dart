@@ -64,6 +64,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _autoAudioSelected = false;
 
   List<SubtitleEntry>? _lastSubtitleEntries;
+  bool _hasExternalSubtitle = false;
 
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
   final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
@@ -279,7 +280,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Future<void> _loadSubtitleFromAdjacentFile(SettingsProvider s) async {
     if (_autoSubtitleSelected && _showSubtitles) return;
     final srtPath = SubtitleService.findSrt(widget.video.path);
-    if (srtPath != null) await _loadSrtFile(srtPath, s.subtitleEncoding, silent: true);
+    if (srtPath != null) {
+      await _loadSrtFile(srtPath, s.subtitleEncoding, silent: true);
+      _hasExternalSubtitle = true;
+    }
   }
 
   void _applyPreferredSubtitleLanguage(SettingsProvider s) {
@@ -315,6 +319,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
       _lastSubtitleEntries = entries;
       await _applySubtitleSyncOffset();
+      _hasExternalSubtitle = true;
 
       if (mounted) {
         setState(() => _showSubtitles = true);
@@ -344,6 +349,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       final settings = context.read<SettingsProvider>();
       await _loadSrtFile(result!.files.single.path!, settings.subtitleEncoding);
     }
+  }
+
+  void _removeExternalSubtitle() {
+    _hasExternalSubtitle = false;
+    _lastSubtitleEntries = null;
+    _player.setSubtitleTrack(SubtitleTrack.no());
+    if (_subtitleTracks.isNotEmpty) {
+      _player.setSubtitleTrack(_subtitleTracks.first);
+    }
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تمت إزالة الترجمة الخارجية')),
+    );
   }
 
   void _scheduleHide() {
@@ -523,7 +541,24 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 const Divider(color: Colors.white24, height: 1),
                 Expanded(
                   child: _currentMenu == ActiveMenu.subtitles
-                      ? _buildSubtitlePanelContent()
+                      ? SubtitleAppearancePanel(
+                          subtitleTracks: _subtitleTracks,
+                          currentSubtitleTrack: _player.state.track.subtitle,
+                          onTrackSelected: (track) {
+                            _player.setSubtitleTrack(track);
+                            setState(() => _showSubtitles = true);
+                          },
+                          onPickSubtitle: _pickSubtitle,
+                          onRemoveExternal: _removeExternalSubtitle,
+                          hasExternalSubtitle: _hasExternalSubtitle,
+                          showSubtitles: _showSubtitles,
+                          onToggleSubtitles: (v) {
+                            setState(() => _showSubtitles = v);
+                            if (!v) _player.setSubtitleTrack(SubtitleTrack.no());
+                          },
+                          subtitleSync: _subtitleSync,
+                          onSyncChanged: _onSubtitleSyncChanged,
+                        )
                       : _currentMenu == ActiveMenu.audio
                           ? _buildAudioPanelContent()
                           : const SizedBox.shrink(),
@@ -565,90 +600,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               );
             }),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubtitlePanelContent() {
-    final cs = Theme.of(context).colorScheme;
-    final uniqueTracks = _subtitleTracks.toSet().toList();
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('تفعيل الترجمة', style: TextStyle(color: Colors.white, fontSize: 15)),
-              Switch(
-                value: _showSubtitles,
-                onChanged: (v) {
-                  setState(() => _showSubtitles = v);
-                  if (!v) _player.setSubtitleTrack(SubtitleTrack.no());
-                },
-                activeColor: cs.primary,
-              ),
-            ],
-          ),
-          if (uniqueTracks.isNotEmpty) ...[
-            const Divider(color: Colors.white24, height: 24),
-            ...uniqueTracks.map((track) {
-              final name = track.title ?? track.language ?? 'ترجمة';
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(name, style: const TextStyle(color: Colors.white)),
-                trailing:
-                    _player.state.track.subtitle == track ? Icon(Icons.check, color: cs.primary) : null,
-                onTap: () {
-                  _player.setSubtitleTrack(track);
-                  setState(() => _showSubtitles = true);
-                },
-              );
-            }),
-          ],
-          const Divider(color: Colors.white24, height: 24),
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.folder_open, color: Colors.white70),
-            title: const Text('اختيار ملف ترجمة يدوي', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              _pickSubtitle();
-              setState(() => _currentMenu = ActiveMenu.none);
-            },
-          ),
-          const Divider(color: Colors.white24, height: 24),
-          const Text('المزامنة والسرعة',
-              style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('تأخير الترجمة', style: TextStyle(color: Colors.white, fontSize: 14)),
-              Text('${_subtitleSync > 0 ? '+' : ''}${_subtitleSync.toStringAsFixed(1)}s',
-                  style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          SliderTheme(
-            data: SliderThemeData(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6)),
-            child: Slider(
-              value: _subtitleSync,
-              min: -5.0,
-              max: 5.0,
-              divisions: 100,
-              onChanged: _onSubtitleSyncChanged,
-              activeColor: cs.primary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text('المظهر والتخصيص',
-              style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const SubtitleAppearancePanel(),
         ],
       ),
     );
