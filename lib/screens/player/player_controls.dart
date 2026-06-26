@@ -27,6 +27,9 @@ class PlayerTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // حساب عرض الشاشة
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -42,7 +45,12 @@ class PlayerTopBar extends StatelessWidget {
             icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white),
             onPressed: onBack,
           ),
-          Expanded(
+          
+          // تقييد عرض النص ليكون 35% كحد أقصى من مساحة الشاشة
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: screenWidth * 0.35, // يمكنك تعديل هذه النسبة حسب المساحة التي تريد تركها
+            ),
             child: _MarqueeText(
               text: videoName,
               style: const TextStyle(
@@ -53,6 +61,11 @@ class PlayerTopBar extends StatelessWidget {
               ),
             ),
           ),
+
+          // إضافة Spacer لملء الفراغ المتبقي ودفع الأيقونات لليمين (هنا يمكنك إضافة أيقوناتك مستقبلاً)
+          const Spacer(),
+
+          // الأيقونات الأصلية
           _AnimatedIconBtn(
             icon: isQuickActionsActive ? Symbols.arrow_drop_up_rounded : Symbols.arrow_drop_down_rounded,
             color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,

@@ -787,19 +787,25 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                if (_isLocked && _showLockHint)
+                if (_isLocked)
                   Positioned(
-                    top: 100,
+                    bottom: 0,
                     left: 0,
                     right: 0,
                     child: GestureDetector(
+                      onTap: () {
+                        setState(() => _showLockHint = true);
+                        Future.delayed(const Duration(seconds: 2), () {
+                          if (mounted) setState(() => _showLockHint = false);
+                        });
+                      },
                       onVerticalDragUpdate: (details) {
                         setState(() {
-                          _lockDragOffset = (_lockDragOffset + details.delta.dy).clamp(0.0, 150.0);
+                          _lockDragOffset = (_lockDragOffset - details.delta.dy).clamp(0.0, 100.0);
                         });
                       },
                       onVerticalDragEnd: (_) {
-                        if (_lockDragOffset >= 80) {
+                        if (_lockDragOffset >= 60) {
                           _toggleLock();
                         }
                         setState(() {
@@ -807,28 +813,46 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           _showLockHint = false;
                         });
                       },
-                      child: Transform.translate(
-                        offset: Offset(0, _lockDragOffset),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: cs.primary.withOpacity(0.85),
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _lockDragOffset >= 80 ? Icons.lock_open_rounded : Icons.lock_rounded,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _lockDragOffset >= 80 ? 'افتح' : 'اسحب للفتح',
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                              ),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 60 + _lockDragOffset * 0.5,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.7),
                             ],
+                          ),
+                        ),
+                        child: Center(
+                          child: AnimatedOpacity(
+                            opacity: _lockDragOffset > 0 || _showLockHint ? 1.0 : 0.4,
+                            duration: const Duration(milliseconds: 300),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(30),
+                                border: Border.all(color: Colors.white24),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _lockDragOffset >= 60 ? Symbols.lock_open_rounded : Symbols.lock_rounded,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    _lockDragOffset >= 60 ? 'افتح' : 'اسحب للأعلى لفتح القفل',
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
