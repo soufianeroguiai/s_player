@@ -788,7 +788,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                // نافذة القفل في الأسفل، عرض محدود، الأيقونة تتحرك داخله فقط
+                // نافذة القفل في الأسفل (بعرض محدود، الأيقونة تتحرك داخله فقط)
                 if (_isLocked)
                   Positioned(
                     bottom: 40,
@@ -821,13 +821,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           duration: const Duration(milliseconds: 300),
                           child: Container(
                             width: 220,
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                            height: 50,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
                               color: Colors.black.withOpacity(0.6),
                               borderRadius: BorderRadius.circular(30),
                               border: Border.all(color: Colors.white24),
                             ),
                             child: Stack(
+                              clipBehavior: Clip.none,
                               alignment: Alignment.centerLeft,
                               children: [
                                 const Center(
@@ -838,6 +840,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                 ),
                                 PositionedDirectional(
                                   start: _lockIconOffset,
+                                  top: 7,
                                   child: Container(
                                     width: 36,
                                     height: 36,
