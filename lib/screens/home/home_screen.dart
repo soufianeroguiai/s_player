@@ -38,11 +38,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isFabVisible = true;
   Timer? _showFabTimer;
 
-  final List<(IconData, String)> _tabs = const [
-    (Symbols.video_library_rounded, 'المكتبة'),
-    (Symbols.folder_rounded, 'المجلدات'),
-    (Symbols.history_rounded, 'الأخيرة'),
-    (Symbols.more_horiz_rounded, 'المزيد'),
+  final List<(IconData, IconData)> _tabs = const [
+    (Symbols.video_library_rounded, Symbols.video_library_fill),
+    (Symbols.folder_rounded, Symbols.folder_fill),
+    (Symbols.history_rounded, Symbols.history_fill),
+    (Symbols.more_horiz_rounded, Symbols.more_horiz_rounded),
   ];
 
   @override
@@ -351,8 +351,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Container(
         height: 64,
         decoration: BoxDecoration(
+          color: cs.surface.withOpacity(0.45),
           borderRadius: BorderRadius.circular(32),
-          color: Colors.transparent,
+          border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -373,7 +381,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
             Row(
               children: List.generate(_tabs.length, (index) {
-                final (icon, _) = _tabs[index];
+                final (icon, iconFilled) = _tabs[index];
                 final isActive = _currentIndex == index;
                 return Expanded(
                   child: GestureDetector(
@@ -386,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       setState(() => _currentIndex = index);
                     },
                     child: Icon(
-                      icon,
+                      isActive ? iconFilled : icon,
                       color: isActive ? cs.primary : cs.onSurfaceVariant,
                       size: 26,
                     ),
@@ -401,15 +409,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _onScrollUpdate(double delta) {
-    if (delta > 10 && _isFabVisible) {
-      setState(() => _isFabVisible = false);
-    }
-    _showFabTimer?.cancel();
-    _showFabTimer = Timer(const Duration(milliseconds: 500), () {
-      if (!_isFabVisible && mounted) {
-        setState(() => _isFabVisible = true);
+    if (delta > 10 || delta < -10) {
+      if (_isFabVisible) {
+        setState(() => _isFabVisible = false);
       }
-    });
+      _showFabTimer?.cancel();
+      _showFabTimer = Timer(const Duration(milliseconds: 600), () {
+        if (!_isFabVisible && mounted) {
+          setState(() => _isFabVisible = true);
+        }
+      });
+    }
   }
 
   @override
