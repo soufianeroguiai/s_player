@@ -413,23 +413,64 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     await _player.setSubtitleTrack(SubtitleTrack.data(srtContent.toString(), title: 'ترجمة خارجية'));
   }
 
-  Widget _buildQuickActionsBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(30),
+  void _showSettingsMenu() {
+    final settings = context.read<SettingsProvider>();
+    final cs = Theme.of(context).colorScheme;
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 10,
+        80,
+        MediaQuery.of(context).size.width,
+        0,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _qaBtn(Symbols.star_rounded, _isFavorite(widget.video.path) ? Colors.amber : Colors.white70, _toggleFavorite),
-          const SizedBox(width: 10),
-          _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
-          const SizedBox(width: 10),
-          _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
-        ],
-      ),
+      items: [
+        PopupMenuItem(
+          value: 'speed',
+          child: Row(children: [
+            Icon(Symbols.speed_rounded, color: cs.primary),
+            const SizedBox(width: 12),
+            Text('سرعة التشغيل (${settings.defaultSpeed}x)'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'fit',
+          child: Row(children: [
+            Icon(Symbols.aspect_ratio_rounded, color: cs.primary),
+            const SizedBox(width: 12),
+            Text('وضع الملء (${modeName(_fitMode)})'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'remember',
+          child: Row(children: [
+            Icon(settings.rememberPosition ? Symbols.bookmark_rounded : Symbols.bookmark_border_rounded, color: cs.primary),
+            const SizedBox(width: 12),
+            Text(settings.rememberPosition ? 'إيقاف تذكر الموضع' : 'تفعيل تذكر الموضع'),
+          ]),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'speed') {
+        _showSpeedPicker(settings);
+      } else if (value == 'fit') {
+        _toggleFit();
+      } else if (value == 'remember') {
+        settings.setRememberPosition(!settings.rememberPosition);
+      }
+    });
+  }
+
+  Widget _buildFloatingActions() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _qaBtn(Symbols.favorite_rounded, _isFavorite(widget.video.path) ? Colors.amber : Colors.white70, _toggleFavorite),
+        const SizedBox(height: 12),
+        _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
+        const SizedBox(height: 12),
+        _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
+      ],
     );
   }
 
@@ -613,6 +654,31 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
+  void _showSpeedPicker(SettingsProvider s) {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+              child: Text('سرعة التشغيل', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+          const Divider(height: 1),
+          ...[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((sp) => ListTile(
+                title: Text('${sp}x'),
+                trailing: s.defaultSpeed == sp ? Icon(Symbols.check_rounded, color: cs.primary) : null,
+                onTap: () {
+                  s.setDefaultSpeed(sp);
+                  _player.setRate(sp);
+                  Navigator.pop(context);
+                },
+              )),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -744,6 +810,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           if (_showQuickActions) cancelHideTimer(); else _scheduleHide();
                         });
                       },
+                      onSettingsMenu: () {
+                        _showQuickActions = false;
+                        _showSettingsMenu();
+                      },
                       isAudioActive: _currentMenu == ActiveMenu.audio,
                       isSubtitleActive: _currentMenu == ActiveMenu.subtitles,
                       isQuickActionsActive: _showQuickActions,
@@ -752,8 +822,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   if (_showQuickActions)
                     Positioned(
                       top: 80,
-                      right: 12,
-                      child: _buildQuickActionsBar(),
+                      right: 20,
+                      child: _buildFloatingActions(),
                     ),
                   Positioned(
                     bottom: 0,

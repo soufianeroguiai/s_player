@@ -7,6 +7,7 @@ class PlayerTopBar extends StatelessWidget {
   final VoidCallback onAudioMenu;
   final VoidCallback onSubtitleMenu;
   final VoidCallback onQuickActions;
+  final VoidCallback onSettingsMenu;
   final bool isAudioActive;
   final bool isSubtitleActive;
   final bool isQuickActionsActive;
@@ -18,6 +19,7 @@ class PlayerTopBar extends StatelessWidget {
     required this.onAudioMenu,
     required this.onSubtitleMenu,
     required this.onQuickActions,
+    required this.onSettingsMenu,
     this.isAudioActive = false,
     this.isSubtitleActive = false,
     this.isQuickActionsActive = false,
@@ -52,7 +54,7 @@ class PlayerTopBar extends StatelessWidget {
             ),
           ),
           _AnimatedIconBtn(
-            icon: Symbols.apps_rounded,
+            icon: isQuickActionsActive ? Symbols.arrow_drop_up_rounded : Symbols.arrow_drop_down_rounded,
             color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
             onTap: onQuickActions,
           ),
@@ -62,9 +64,14 @@ class PlayerTopBar extends StatelessWidget {
             onTap: onAudioMenu,
           ),
           _AnimatedIconBtn(
-            icon: isSubtitleActive ? Symbols.subtitles_rounded : Symbols.subtitles_off_rounded,
+            icon: isSubtitleActive ? Symbols.closed_caption_rounded : Symbols.closed_caption_off_rounded,
             color: isSubtitleActive ? Colors.amberAccent : Colors.white60,
             onTap: onSubtitleMenu,
+          ),
+          _AnimatedIconBtn(
+            icon: Symbols.more_vert_rounded,
+            color: Colors.white70,
+            onTap: onSettingsMenu,
           ),
         ]),
       ),
@@ -84,6 +91,8 @@ class _MarqueeText extends StatefulWidget {
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _animation;
+  double _textWidth = 0;
+  double _containerWidth = 0;
 
   @override
   void initState() {
@@ -98,12 +107,10 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final textPainter = TextPainter(
-        text: TextSpan(text: widget.text, style: widget.style),
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: MediaQuery.of(context).size.width * 0.5);
-      if (textPainter.width > MediaQuery.of(context).size.width * 0.5) {
-        _controller.repeat(reverse: true);
+      if (mounted) {
+        setState(() {
+          _containerWidth = context.size?.width ?? MediaQuery.of(context).size.width * 0.5;
+        });
       }
     });
   }
@@ -116,17 +123,28 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: SlideTransition(
-        position: _animation,
-        child: Text(
-          widget.text,
-          style: widget.style,
-          maxLines: 1,
-          overflow: TextOverflow.visible,
+    return LayoutBuilder(builder: (context, constraints) {
+      final textPainter = TextPainter(
+        text: TextSpan(text: widget.text, style: widget.style),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: constraints.maxWidth);
+
+      if (textPainter.width > constraints.maxWidth && !_controller.isAnimating) {
+        _controller.repeat(reverse: true);
+      }
+
+      return ClipRect(
+        child: SlideTransition(
+          position: _animation,
+          child: Text(
+            widget.text,
+            style: widget.style,
+            maxLines: 1,
+            softWrap: false,
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
