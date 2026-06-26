@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
+import 'package:media_kit/media_kit.dart';
 import '../../providers/settings_provider.dart';
 
 class LiveSubtitleSettings extends StatelessWidget {
@@ -9,7 +10,7 @@ class LiveSubtitleSettings extends StatelessWidget {
   final SubtitleTrack? currentTrack;
   final double subtitleSync;
   final ValueChanged<bool> onToggleSubtitles;
-  final ValueChanged<SubtitleTrack> onTrackSelected;
+  final void Function(SubtitleTrack) onTrackSelected;
   final ValueChanged<double> onSyncChanged;
   final VoidCallback onPickSubtitle;
   final VoidCallback onClose;
@@ -101,17 +102,18 @@ class SubtitleAppearanceLive extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>();
+    final cs = Theme.of(context).colorScheme;
     return Column(children: [
       Row(children: [
         const Icon(Symbols.format_size_rounded, color: Colors.white70, size: 20),
         const SizedBox(width: 8),
         const Expanded(child: Text('الحجم', style: TextStyle(color: Colors.white))),
-        Text('${s.subtitleFontSize.toInt()}', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+        Text('${s.subtitleFontSize.toInt()}', style: TextStyle(color: cs.primary)),
       ]),
       Slider(
         value: s.subtitleFontSize, min: 12, max: 80,
         onChanged: s.setSubtitleFontSize,
-        activeColor: Theme.of(context).colorScheme.primary,
+        activeColor: cs.primary,
       ),
       const SizedBox(height: 12),
       Row(children: [
@@ -128,7 +130,7 @@ class SubtitleAppearanceLive extends StatelessWidget {
         const Icon(Symbols.format_italic_rounded, color: Colors.white70, size: 20),
         const SizedBox(width: 8),
         const Expanded(child: Text('مائل', style: TextStyle(color: Colors.white))),
-        Switch(value: s.subtitleItalic, onChanged: s.setSubtitleItalic, activeColor: Theme.of(context).colorScheme.primary),
+        Switch(value: s.subtitleItalic, onChanged: s.setSubtitleItalic, activeColor: cs.primary),
       ]),
     ]);
   }

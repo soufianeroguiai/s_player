@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:media_kit/media_kit.dart';
 
 class LiveAudioSettings extends StatelessWidget {
   final double volumeLevel;
   final List<AudioTrack> audioTracks;
   final AudioTrack? currentTrack;
   final ValueChanged<double> onVolumeChanged;
-  final ValueChanged<AudioTrack> onTrackSelected;
+  final void Function(AudioTrack) onTrackSelected;
   final VoidCallback onClose;
 
   const LiveAudioSettings({
