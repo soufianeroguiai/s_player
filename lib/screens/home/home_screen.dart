@@ -38,11 +38,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isFabVisible = true;
   Timer? _showFabTimer;
 
-  final List<(IconData, IconData)> _tabs = const [
-    (Symbols.video_library_rounded, Symbols.video_library_fill),
-    (Symbols.folder_rounded, Symbols.folder_fill),
-    (Symbols.history_rounded, Symbols.history_fill),
-    (Symbols.more_horiz_rounded, Symbols.more_horiz_rounded),
+  final List<IconData> _tabs = const [
+    Symbols.video_library_rounded,
+    Symbols.folder_rounded,
+    Symbols.history_rounded,
+    Symbols.more_horiz_rounded,
   ];
 
   @override
@@ -381,7 +381,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
             Row(
               children: List.generate(_tabs.length, (index) {
-                final (icon, iconFilled) = _tabs[index];
+                final icon = _tabs[index];
                 final isActive = _currentIndex == index;
                 return Expanded(
                   child: GestureDetector(
@@ -394,9 +394,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       setState(() => _currentIndex = index);
                     },
                     child: Icon(
-                      isActive ? iconFilled : icon,
+                      icon,
                       color: isActive ? cs.primary : cs.onSurfaceVariant,
-                      size: 26,
+                      size: isActive ? 28 : 26,
                     ),
                   ),
                 );
