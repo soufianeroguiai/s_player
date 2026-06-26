@@ -49,7 +49,7 @@ class PlayerTopBar extends StatelessWidget {
           ),
           if (!isQuickActionsActive)
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: screenWidth * 0.35),
+              constraints: BoxConstraints(maxWidth: screenWidth * 0.25), // تم تغييرها من 0.35 إلى 0.25
               child: _MarqueeText(
                 text: videoName,
                 style: const TextStyle(
