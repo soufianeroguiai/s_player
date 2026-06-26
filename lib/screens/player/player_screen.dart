@@ -91,6 +91,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   String? _seekHintText;
   Timer? _seekHintTimer;
 
+  bool _showLockHint = false;
+  double _lockDragOffset = 0.0;
+
   @override
   void initState() {
     super.initState();
@@ -219,6 +222,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _showControls = false;
         _currentMenu = ActiveMenu.none;
         _showQuickActions = false;
+        _showLockHint = false;
       }
     });
   }
@@ -397,7 +401,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _toggleControls() {
-    if (_isLocked) return;
+    if (_isLocked) {
+      setState(() {
+        _showLockHint = true;
+        _lockDragOffset = 0.0;
+      });
+      return;
+    }
     if (_currentMenu != ActiveMenu.none || _showQuickActions) {
       setState(() {
         _currentMenu = ActiveMenu.none;
@@ -777,6 +787,54 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
+                if (_isLocked && _showLockHint)
+                  Positioned(
+                    top: 100,
+                    left: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onVerticalDragUpdate: (details) {
+                        setState(() {
+                          _lockDragOffset = (_lockDragOffset + details.delta.dy).clamp(0.0, 150.0);
+                        });
+                      },
+                      onVerticalDragEnd: (_) {
+                        if (_lockDragOffset >= 80) {
+                          _toggleLock();
+                        }
+                        setState(() {
+                          _lockDragOffset = 0.0;
+                          _showLockHint = false;
+                        });
+                      },
+                      child: Transform.translate(
+                        offset: Offset(0, _lockDragOffset),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: cs.primary.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _lockDragOffset >= 80 ? Icons.lock_open_rounded : Icons.lock_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _lockDragOffset >= 80 ? 'افتح' : 'اسحب للفتح',
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
                 ValueListenableBuilder<bool>(
                   valueListenable: _showSeekNotifier,
                   builder: (context, show, child) {
@@ -887,30 +945,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         ),
                         child: Text(_fitOverlayText!,
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                      ),
-                    ),
-                  ),
-
-                if (_isLocked)
-                  Positioned(
-                    bottom: 100,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: _toggleLock,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.85),
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.lock_rounded, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Text('مقفل — اضغط للفتح', style: TextStyle(color: Colors.white, fontSize: 13)),
-                          ]),
-                        ),
                       ),
                     ),
                   ),
