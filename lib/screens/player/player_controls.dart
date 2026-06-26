@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'dart:async';
 
 class PlayerTopBar extends StatelessWidget {
   final String videoName;
@@ -107,59 +108,75 @@ class _MarqueeText extends StatefulWidget {
 }
 
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
+  late ScrollController _scrollController;
   double _textWidth = 0;
+  bool _needsMarquee = false;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 8),
-    );
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(_controller);
-    WidgetsBinding.instance.addPostFrameCallback(_startIfNeeded);
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback(_measure);
   }
 
-  void _startIfNeeded(_) {
+  void _measure(_) {
     final textPainter = TextPainter(
       text: TextSpan(text: widget.text, style: widget.style),
-      textDirection: TextDirection.rtl,
+      textDirection: TextDirection.ltr,
     )..layout(maxWidth: double.infinity);
     _textWidth = textPainter.width;
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox != null && _textWidth > renderBox.size.width) {
-      _controller.repeat(reverse: true);
+      setState(() => _needsMarquee = true);
+      _startScroll();
     }
+  }
+
+  void _startScroll() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
+      if (!_scrollController.hasClients) return;
+      final maxScroll = _textWidth;
+      if (_scrollController.offset >= maxScroll) {
+        _scrollController.jumpTo(0.0);
+      } else {
+        _scrollController.animateTo(
+          _scrollController.offset + 1.2,
+          duration: const Duration(milliseconds: 30),
+          curve: Curves.linear,
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _timer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      return ClipRect(
-        child: AnimatedBuilder(
-          animation: _animation,
-          builder: (context, child) {
-            final maxTranslate = (_textWidth - constraints.maxWidth).clamp(0.0, double.infinity);
-            if (maxTranslate <= 0) {
-              return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
-            }
-            final offset = maxTranslate * _animation.value;
-            return Transform.translate(
-              offset: Offset(-offset, 0),
-              child: Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
-            );
-          },
+    if (!_needsMarquee) {
+      return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    return SizedBox(
+      height: 20,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        controller: _scrollController,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Row(
+          children: [
+            Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+            const SizedBox(width: 40),
+            Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+          ],
         ),
-      );
-    });
+      ),
+    );
   }
 }
 
