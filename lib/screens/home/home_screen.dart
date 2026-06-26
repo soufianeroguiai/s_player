@@ -36,6 +36,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   bool _isFabVisible = true;
 
+  // مفاتيح لحساب مواضع التبويبات
+  final List<GlobalKey> _tabKeys = [
+    GlobalKey(),
+    GlobalKey(),
+    GlobalKey(),
+    GlobalKey(),
+  ];
+
+  // بيانات التبويبات
+  final List<(IconData, String)> _tabs = const [
+    (Symbols.video_library_rounded, 'المكتبة'),
+    (Symbols.folder_rounded, 'المجلدات'),
+    (Symbols.history_rounded, 'الأخيرة'),
+    (Symbols.more_horiz_rounded, 'المزيد'),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -329,6 +345,80 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+  // --- الشريط السفلي المخصص ---
+  Widget _buildFloatingNavBar() {
+    final cs = Theme.of(context).colorScheme;
+    final width = MediaQuery.of(context).size.width;
+    final tabWidth = (width - 32) / _tabs.length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: GestureDetector(
+        onHorizontalDragUpdate: (details) {
+          final delta = details.primaryDelta ?? 0;
+          final newOffset = (_currentIndex * tabWidth) + delta;
+          final newIndex = (newOffset / tabWidth).round().clamp(0, _tabs.length - 1);
+          if (newIndex != _currentIndex) {
+            setState(() => _currentIndex = newIndex);
+          }
+        },
+        child: Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: cs.surface.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: cs.shadow.withOpacity(0.1),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // المؤشر المتحرك (Pill)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                left: _currentIndex * tabWidth,
+                top: 8,
+                bottom: 8,
+                width: tabWidth,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+              ),
+              // الأيقونات
+              Row(
+                children: List.generate(_tabs.length, (index) {
+                  final (icon, label) = _tabs[index];
+                  final isActive = _currentIndex == index;
+                  return Expanded(
+                    key: _tabKeys[index],
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _currentIndex = index);
+                      },
+                      child: Icon(
+                        icon,
+                        color: isActive ? cs.primary : cs.onSurfaceVariant,
+                        size: 26,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -406,34 +496,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          if (index == 3) {
-            _showMoreMenu();
-          } else {
-            setState(() => _currentIndex = index);
-          }
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Symbols.video_library_rounded),
-            label: 'المكتبة',
-          ),
-          NavigationDestination(
-            icon: Icon(Symbols.folder_rounded),
-            label: 'المجلدات',
-          ),
-          NavigationDestination(
-            icon: Icon(Symbols.history_rounded),
-            label: 'الأخيرة',
-          ),
-          NavigationDestination(
-            icon: Icon(Symbols.more_horiz_rounded),
-            label: 'المزيد',
-          ),
-        ],
-      ),
+      bottomNavigationBar: _buildFloatingNavBar(),
       floatingActionButton: _isFabVisible
           ? FloatingActionButton(
               onPressed: _playLastVideo,
