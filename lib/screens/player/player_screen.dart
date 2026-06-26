@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -70,7 +68,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
   final ValueNotifier<double> _seekMsNotifier = ValueNotifier(0.0);
 
-  // للمفضلة وقائمة التشغيل
   final List<String> _favorites = [];
   final List<String> _playlist = [];
 
@@ -148,7 +145,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     SharedPreferences.getInstance().then((p) => p.setStringList('favorite_paths', _favorites));
     setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_isFavorite(path) ? 'تمت إضافة للمفضلة' : 'تمت إزالة من المفضلة')),
+      SnackBar(content: Text(_isFavorite(path) ? 'تمت إزالة من المفضلة' : 'تمت إضافة للمفضلة')),
     );
   }
 
@@ -163,24 +160,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('الملف موجود مسبقاً في القائمة')),
-      );
-    }
-  }
-
-  Future<void> _captureScreenshot() async {
-    try {
-      final Uint8List? bytes = await _controller.screenshot(format: 'image/jpeg');
-      if (bytes != null) {
-        final dir = await getApplicationDocumentsDirectory();
-        final file = File('${dir.path}/screenshot_${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await file.writeAsBytes(bytes);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تم حفظ اللقطة: ${file.path}')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل التقاط اللقطة: $e')),
       );
     }
   }
@@ -473,7 +452,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       ],
     ).then((value) {
       if (value == 'speed') {
-        showSpeedPicker(context, settings);
+        _showSpeedPicker(settings);
       } else if (value == 'fit') {
         _toggleFit();
       } else if (value == 'remember') {
@@ -483,7 +462,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Widget _buildQuickActionsBar() {
-    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -496,8 +474,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           _qaBtn(Symbols.star_rounded, _isFavorite(widget.video.path) ? Colors.amber : Colors.white70, _toggleFavorite),
           const SizedBox(width: 10),
           _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
-          const SizedBox(width: 10),
-          _qaBtn(Symbols.camera_rounded, Colors.white70, _captureScreenshot),
           const SizedBox(width: 10),
           _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
         ],
@@ -685,7 +661,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  void showSpeedPicker(BuildContext context, SettingsProvider s) {
+  void _showSpeedPicker(SettingsProvider s) {
     final cs = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
