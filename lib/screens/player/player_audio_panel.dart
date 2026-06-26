@@ -1,151 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
-/// قسم تكبير الصوت ضمن لوحة الصوت الجانبية.
-/// يعكس مباشرة _volumeLevel من PlayerScreen (نفس المصدر الذي
-/// تستخدمه إيماءة السحب العمودي) فلا يوجد مصدران للحقيقة.
-class AudioBoostSection extends StatelessWidget {
-  final double boost; // من 0 إلى 200 (%)
-  final ValueChanged<double> onChanged;
+class LiveAudioSettings extends StatelessWidget {
+  final double volumeLevel;
+  final List<AudioTrack> audioTracks;
+  final AudioTrack? currentTrack;
+  final ValueChanged<double> onVolumeChanged;
+  final ValueChanged<AudioTrack> onTrackSelected;
+  final VoidCallback onClose;
 
-  const AudioBoostSection({
+  const LiveAudioSettings({
     super.key,
-    required this.boost,
-    required this.onChanged,
+    required this.volumeLevel,
+    required this.audioTracks,
+    required this.currentTrack,
+    required this.onVolumeChanged,
+    required this.onTrackSelected,
+    required this.onClose,
   });
 
-  Color _color(double v) {
-    if (v <= 100) return const Color(0xFF4FC3F7); // أزرق فاتح
-    if (v <= 140) return const Color(0xFFFFB74D); // برتقالي
-    return const Color(0xFFEF5350);               // أحمر
-  }
-
-  String _label(double v) {
-    if (v <= 100) return 'مستوى طبيعي';
-    if (v <= 130) return 'تكبير خفيف';
-    if (v <= 160) return 'تكبير قوي';
-    return '⚠️ تشويه محتمل';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final color = _color(boost);
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // ── العنوان الرئيسي ──
-      _PanelHeader(icon: Icons.graphic_eq_rounded, title: 'تكبير الصوت'),
-      const SizedBox(height: 12),
-
-      // ── قيمة كبيرة + حالة ──
-      Center(
-        child: Column(children: [
-          AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 200),
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w800,
-              fontSize: 48,
-            ),
-            child: Text('${boost.round()}%'),
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xE5232323),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('الصوت', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(icon: const Icon(Symbols.close_rounded, color: Colors.white70), onPressed: onClose),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                const Icon(Symbols.volume_up_rounded, color: Colors.white70),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('مستوى الصوت', style: TextStyle(color: Colors.white))),
+                Text('${(volumeLevel * 100).round()}%', style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold)),
+              ]),
+              Slider(
+                value: volumeLevel.clamp(0.5, 2.0), min: 0.5, max: 2.0, divisions: 30,
+                onChanged: onVolumeChanged, activeColor: cs.primary,
+              ),
+              if (audioTracks.isNotEmpty) ...[
+                const Divider(color: Colors.white24),
+                const Text('المسارات الصوتية', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                ...audioTracks.map((track) => ListTile(
+                  dense: true,
+                  title: Text(track.title ?? track.language ?? 'مسار صوتي', style: const TextStyle(color: Colors.white)),
+                  trailing: currentTrack == track ? Icon(Symbols.check_rounded, color: cs.primary) : null,
+                  onTap: () => onTrackSelected(track),
+                )),
+              ],
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(_label(boost), style: TextStyle(color: color.withOpacity(0.75), fontSize: 13)),
-        ]),
-      ),
-      const SizedBox(height: 12),
-
-      // ── شريط السحب ──
-      SliderTheme(
-        data: SliderThemeData(
-          trackHeight: 5,
-          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-          overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
-          activeTrackColor: color,
-          inactiveTrackColor: Colors.white10,
-          thumbColor: color,
-          overlayColor: color.withOpacity(0.2),
         ),
-        child: Slider(
-          value: boost.clamp(50, 200),
-          min: 50, max: 200,
-          divisions: 30,
-          onChanged: onChanged,
-        ),
-      ),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('50%', style: TextStyle(color: Colors.white38, fontSize: 11)),
-          Text('100%', style: TextStyle(color: Colors.white38, fontSize: 11)),
-          Text('200%', style: TextStyle(color: Colors.white38, fontSize: 11)),
-        ],
-      ),
-      const SizedBox(height: 14),
-
-      // ── أزرار سريعة ──
-      Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-        for (final val in [100.0, 130.0, 160.0, 200.0])
-          _QuickBtn(
-            label: '${val.toInt()}%',
-            active: (boost - val).abs() < 3,
-            color: _color(val),
-            onTap: () => onChanged(val),
-          ),
-      ]),
-    ]);
-  }
-}
-
-/// رأس موحَّد للوحة
-class _PanelHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Color? color;
-  const _PanelHeader({required this.icon, required this.title, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? Theme.of(context).colorScheme.primary;
-    return Row(children: [
-      Container(
-        width: 32, height: 32,
-        decoration: BoxDecoration(color: c.withOpacity(0.18), borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, color: c, size: 18),
-      ),
-      const SizedBox(width: 10),
-      Text(title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
-          )),
-    ]);
-  }
-}
-
-class _QuickBtn extends StatelessWidget {
-  final String label;
-  final bool active;
-  final Color color;
-  final VoidCallback onTap;
-  const _QuickBtn({required this.label, required this.active, required this.color, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: active ? color.withOpacity(0.22) : Colors.white.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: active ? color : Colors.white24, width: active ? 1.5 : 1),
-        ),
-        child: Text(label,
-            style: TextStyle(
-              color: active ? color : Colors.white54,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            )),
       ),
     );
   }
