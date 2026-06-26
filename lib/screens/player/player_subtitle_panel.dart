@@ -87,19 +87,21 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
             _buildSubtitleToggleSection(),
           ],
 
-          _SectionTile(
-            icon: Symbols.video_file_rounded,
-            title: 'الترجمات المدمجة',
-            isOpen: _openSection == 1,
-            onTap: () => _toggleSection(1),
-            trailing: Text(
-              widget.subtitleTracks.isNotEmpty ? '${widget.subtitleTracks.length} مسارات' : 'لا يوجد',
-              style: const TextStyle(color: Colors.white38, fontSize: 12),
+          if (widget.subtitleTracks.isNotEmpty) ...[
+            _SectionTile(
+              icon: Symbols.video_file_rounded,
+              title: 'الترجمات المدمجة',
+              isOpen: _openSection == 1,
+              onTap: () => _toggleSection(1),
+              trailing: Text(
+                '${widget.subtitleTracks.length} مسارات',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
             ),
-          ),
-          if (_openSection == 1) ...[
-            const SizedBox(height: 4),
-            _buildEmbeddedTracksSection(),
+            if (_openSection == 1) ...[
+              const SizedBox(height: 4),
+              _buildEmbeddedTracksSection(),
+            ],
           ],
 
           _SectionTile(
@@ -130,6 +132,21 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
           if (_openSection == 3) ...[
             const SizedBox(height: 4),
             _buildAppearanceSection(s),
+          ],
+
+          _SectionTile(
+            icon: Symbols.open_with_rounded,
+            title: 'الموضع',
+            isOpen: _openSection == 7,
+            onTap: () => _toggleSection(7),
+            trailing: Text(
+              '${s.bottomPadding.toInt()}px / ${s.horizontalMargin.toInt()}px',
+              style: TextStyle(color: cs.primary, fontSize: 12),
+            ),
+          ),
+          if (_openSection == 7) ...[
+            const SizedBox(height: 4),
+            _buildPositionSection(s),
           ],
 
           _SectionTile(
@@ -202,17 +219,6 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
 
   Widget _buildEmbeddedTracksSection() {
     final cs = Theme.of(context).colorScheme;
-    if (widget.subtitleTracks.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Text('لا توجد ترجمات مدمجة في هذا الملف',
-            style: TextStyle(color: Colors.white38)),
-      );
-    }
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.04),
@@ -369,6 +375,52 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
           value: s.subtitleItalic,
           onChanged: s.setSubtitleItalic,
           activeColor: cs.primary,
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildPositionSection(SettingsProvider s) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _SettingRow(label: 'الارتفاع عن الأسفل', value: '${s.bottomPadding.toInt()} px'),
+        SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 3,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            activeTrackColor: cs.primary,
+            inactiveTrackColor: Colors.white12,
+            thumbColor: cs.primary,
+          ),
+          child: Slider(
+            value: s.bottomPadding,
+            min: 0,
+            max: 300,
+            onChanged: s.setBottomPadding,
+          ),
+        ),
+        const SizedBox(height: 14),
+        _SettingRow(label: 'الهامش الأفقي', value: '${s.horizontalMargin.toInt()} px'),
+        SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 3,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            activeTrackColor: cs.primary,
+            inactiveTrackColor: Colors.white12,
+            thumbColor: cs.primary,
+          ),
+          child: Slider(
+            value: s.horizontalMargin,
+            min: 0,
+            max: 120,
+            onChanged: s.setHorizontalMargin,
+          ),
         ),
       ]),
     );
