@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -10,11 +12,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../models/video_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/subtitle_service.dart';
 import '../../services/pip_service.dart';
+import '../info_screen.dart';
 import 'player_indicators.dart';
 import 'player_controls.dart';
 import 'player_audio_panel.dart';
@@ -476,19 +480,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   Future<void> _captureScreenshot() async {
     try {
-      final Uint8List? bytes = await _controller.screenshot(format: 'image/jpeg');
+      final Uint8List? bytes = await _player.screenshot(format: 'image/jpeg');
       if (bytes != null) {
         final dir = await getApplicationDocumentsDirectory();
         final file = File('${dir.path}/screenshot_${DateTime.now().millisecondsSinceEpoch}.jpg');
         await file.writeAsBytes(bytes);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تم حفظ اللقطة: ${file.path}')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('تم حفظ اللقطة: ${file.path}')),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل التقاط اللقطة: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل التقاط اللقطة: $e')),
+        );
+      }
     }
   }
 
@@ -575,7 +583,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           onSyncChanged: _onSubtitleSyncChanged,
                         )
                       : _currentMenu == ActiveMenu.audio
-                          ? _buildAudioPanelContent()
+                          ? AudioSettingsPanel(
+                              player: _player,
+                              volumeLevel: _volumeLevel,
+                              onVolumeChanged: _onVolumeChanged,
+                              audioTracks: _audioTracks,
+                              currentAudioTrack: _player.state.track.audio,
+                              onTrackSelected: (track) => setState(() => _player.setAudioTrack(track)),
+                              audioDelay: _audioDelay,
+                              onAudioDelayChanged: (v) {
+                                setState(() => _audioDelay = v);
+                                // `setAudioDelay` غير موجودة في بعض إصدارات media_kit، لذا نعلقها
+                                // يمكن إضافة تعويض عبر seek لاحقاً إذا لزم
+                              },
+                              onClose: () => setState(() => _currentMenu = ActiveMenu.none),
+                            )
                           : const SizedBox.shrink(),
                 ),
               ],
@@ -583,23 +605,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildAudioPanelContent() {
-    return AudioSettingsPanel(
-      player: _player,
-      volumeLevel: _volumeLevel,
-      onVolumeChanged: _onVolumeChanged,
-      audioTracks: _audioTracks,
-      currentAudioTrack: _player.state.track.audio,
-      onTrackSelected: (track) => setState(() => _player.setAudioTrack(track)),
-      audioDelay: _audioDelay,
-      onAudioDelayChanged: (v) {
-        setState(() => _audioDelay = v);
-        _player.setAudioDelay(v / 1000.0);
-      },
-      onClose: () => setState(() => _currentMenu = ActiveMenu.none),
     );
   }
 
