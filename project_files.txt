@@ -1,0 +1,1965 @@
+=== lib/services/thumbnail_service.dart ===
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/video_item.dart';
+
+class ThumbnailService {
+  static final ThumbnailService _instance = ThumbnailService._internal();
+  factory ThumbnailService() => _instance;
+  ThumbnailService._internal();
+
+  final Map<String, ValueNotifier<Uint8List?>> _notifiers = {};
+  final Map<String, ValueNotifier<String?>> _errors = {};
+  final Set<String> _pending = {};
+  int _active = 0;
+  static const _maxConcurrent = 1;
+  final List<Future<void> Function()> _queue = [];
+
+  ValueNotifier<Uint8List?> getNotifier(VideoItem video) {
+    final path = video.path;
+    if (!_notifiers.containsKey(path)) {
+      _notifiers[path] = ValueNotifier(null);
+      _errors[path] = ValueNotifier(null);
+      _enqueue(video);
+    }
+    return _notifiers[path]!;
+  }
+
+  ValueNotifier<String?> getErrorNotifier(VideoItem video) {
+    return _errors.putIfAbsent(video.path, () => ValueNotifier(null));
+  }
+
+  void _enqueue(VideoItem video) {
+    _queue.add(() => _generate(video));
+    _drain();
+  }
+
+  void _drain() {
+    while (_active < _maxConcurrent && _queue.isNotEmpty) {
+      final task = _queue.removeAt(0);
+      _active++;
+      task().whenComplete(() {
+        _active--;
+        _drain();
+      });
+    }
+  }
+
+  Future<void> _generate(VideoItem video) async {
+    final path = video.path;
+    if (_pending.contains(path)) return;
+    _pending.add(path);
+    _errors[path]?.value = null;
+
+    try {
+      final cacheFile = await _cacheFile(path);
+
+      // استخدام الكاش إذا وُجد
+      if (await cacheFile.exists()) {
+        final bytes = await cacheFile.readAsBytes();
+        if (bytes.isNotEmpty) {
+          _notifiers[path]?.value = bytes;
+          return;
+        }
+        // ملف فارغ → احذفه وأعد التوليد
+        await cacheFile.delete();
+      }
+
+      final bytes = await _ffmpegThumb(video, cacheFile.path);
+      if (bytes != null && bytes.isNotEmpty) {
+        await cacheFile.writeAsBytes(bytes);
+        _notifiers[path]?.value = bytes;
+      } else {
+        _errors[path]?.value ??= 'تعذّر استخراج الصورة';
+      }
+    } catch (e) {
+      _errors[path]?.value = 'خطأ: $e';
+    } finally {
+      _pending.remove(path);
+    }
+  }
+
+  Future<Uint8List?> _ffmpegThumb(VideoItem video, String savePath) async {
+    final videoPath = video.path;
+    if (!await File(videoPath).exists()) {
+      _errors[videoPath]?.value = 'الملف غير موجود';
+      return null;
+    }
+
+    // ── رابط رمزي للمسارات الطويلة (> 200 حرف) ──
+    String inputPath = videoPath;
+    Link? symlink;
+    if (videoPath.length > 200) {
+      try {
+        final tmp = await getTemporaryDirectory();
+        final linkPath = '${tmp.path}/sv_${_shortHash(videoPath)}.vid';
+        symlink = Link(linkPath);
+        if (!await symlink.exists()) {
+          await symlink.create(videoPath);
+        }
+        inputPath = linkPath;
+      } catch (_) {}
+    }
+
+    try {
+      // نقطة البداية: 10% من مدة الفيديو، بحد أدنى 2 ثانية
+      final seekSec = video.duration.inSeconds > 0
+          ? (video.duration.inSeconds * 0.1).round().clamp(2, 99999)
+          : 5;
+
+      // الأمر السريع
+      final cmd = '-y -ss $seekSec -noaccurate_seek -i "$inputPath"'
+          ' -vframes 1'
+          ' -vf "scale=720:-2"'
+          ' -q:v 5'
+          ' -an'
+          ' "$savePath"';
+
+      // ✅ نستخدم executeAsync مع Completer لتجنب تجميد الواجهة
+      final completer = Completer<Uint8List?>();
+      await FFmpegKit.executeAsync(
+        cmd,
+        onComplete: (session) async {
+          try {
+            final returnCode = await session.getReturnCode();
+            if (ReturnCode.isSuccess(returnCode)) {
+              final out = File(savePath);
+              if (await out.exists()) {
+                final bytes = await out.readAsBytes();
+                if (bytes.isNotEmpty) {
+                  completer.complete(bytes);
+                  return;
+                }
+              }
+              _errors[videoPath]?.value = 'الملف الناتج فارغ';
+            } else {
+              final log = await session.getOutput();
+              _errors[videoPath]?.value = 'FFmpeg فشل: ${log ?? "غير معروف"}';
+            }
+            completer.complete(null);
+          } catch (e) {
+            _errors[videoPath]?.value = 'استثناء: $e';
+            completer.complete(null);
+          }
+        },
+        onLog: (log) {
+          // يمكنك تفعيلها للتصحيح
+          // debugPrint('FFmpeg log: ${log.getMessage()}');
+        },
+      );
+
+      // انتظار النتيجة مع مهلة 15 ثانية (اختياري، يمنع التعليق للأبد)
+      return completer.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          _errors[videoPath]?.value = 'انتهى الوقت المحدد (15 ثانية)';
+          return null;
+        },
+      );
+    } catch (e) {
+      _errors[videoPath]?.value = 'استثناء: $e';
+      return null;
+    } finally {
+      if (symlink != null) {
+        try { await symlink.delete(); } catch (_) {}
+      }
+    }
+  }
+
+  Future<File> _cacheFile(String videoPath) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (!await thumbDir.exists()) {
+      await thumbDir.create(recursive: true);
+    }
+    final name = _shortHash(videoPath);
+    return File('${thumbDir.path}/$name.jpg');
+  }
+
+  String _shortHash(String input) {
+    int h = 5381;
+    for (int i = 0; i < input.length; i++) {
+      h = ((h << 5) + h + input.codeUnitAt(i)) & 0x7FFFFFFF;
+    }
+    return h.toRadixString(16).padLeft(8, '0');
+  }
+
+  Future<void> clearCache() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final thumbDir = Directory('${dir.path}/thumbnails');
+    if (await thumbDir.exists()) await thumbDir.delete(recursive: true);
+    _notifiers.forEach((_, n) => n.value = null);
+    _notifiers.clear();
+    _errors.clear();
+    _pending.clear();
+    _queue.clear();
+    _active = 0;
+  }
+}
+=== lib/widgets/video_thumbnail_loader.dart ===
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import '../models/video_item.dart';
+import '../services/thumbnail_service.dart';
+
+class VideoThumbnailLoader extends StatelessWidget {
+  final VideoItem video;
+  final double width;
+  final double height;
+
+  const VideoThumbnailLoader({
+    super.key,
+    required this.video,
+    this.width = 120,
+    this.height = 80,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbnailNotifier = ThumbnailService().getNotifier(video);
+    final errorNotifier = ThumbnailService().getErrorNotifier(video);
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ValueListenableBuilder<Uint8List?>(
+          valueListenable: thumbnailNotifier,
+          builder: (context, bytes, child) {
+            if (bytes != null) {
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) =>
+                    _buildPlaceholder('فشل تحميل الصورة'),
+              );
+            }
+            return ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (context, errorText, _) =>
+                  _buildPlaceholder(errorText),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(String? errorText) {
+    if (errorText != null && errorText.isNotEmpty) {
+      return Container(
+        color: const Color(0xFF1A1A1A),
+        padding: const EdgeInsets.all(4),
+        alignment: Alignment.center,
+        child: Text(
+          errorText,
+          style: const TextStyle(
+            color: Colors.redAccent,
+            fontSize: 8,
+            height: 1.2,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }
+    return Container(
+      color: Colors.grey[900],
+      child: const Center(
+        child: Icon(Icons.video_file_rounded,
+            color: Colors.white30, size: 36),
+      ),
+    );
+  }
+}
+=== lib/widgets/video_card.dart ===
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
+import '../models/video_item.dart';
+import '../providers/library_provider.dart';
+import 'video_thumbnail_loader.dart';
+
+class VideoCard extends StatelessWidget {
+  final VideoItem video;
+  final VoidCallback onTap;
+  final VoidCallback? onMoreTap;
+
+  const VideoCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onMoreTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 90, height: 64,
+                child: Stack(fit: StackFit.expand, children: [
+                  VideoThumbnailLoader(video: video, width: 90, height: 64),
+                  Positioned(
+                    bottom: 4, right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.72),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(video.formattedDuration,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  _ResumeProgressBar(video: video),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: _Info(video: video)),
+            if (onMoreTap != null)
+              IconButton(
+                icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 22),
+                onPressed: onMoreTap,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class VideoGridCard extends StatelessWidget {
+  final VideoItem video;
+  final VoidCallback onTap;
+  final VoidCallback? onMoreTap;
+
+  const VideoGridCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onMoreTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(fit: StackFit.expand, children: [
+                VideoThumbnailLoader(video: video, width: double.infinity, height: double.infinity),
+                Positioned(
+                  bottom: 6, right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.75),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(video.formattedDuration,
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                _ResumeProgressBar(video: video),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(video.name,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: cs.onSurface, fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 3),
+                  Text(video.formattedSize, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 10)),
+                ])),
+                if (onMoreTap != null)
+                  IconButton(
+                    icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
+                    onPressed: onMoreTap,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumeProgressBar extends StatelessWidget {
+  final VideoItem video;
+  const _ResumeProgressBar({required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    final lib = context.read<LibraryProvider>();
+    final position = lib.getCachedPosition(video.path);
+    if (position == null || position.inMilliseconds <= 0) {
+      return const SizedBox.shrink();
+    }
+
+    final totalDuration = video.duration;
+    if (totalDuration.inMilliseconds <= 0) return const SizedBox.shrink();
+
+    final progress = (position.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
+    final cs = Theme.of(context).colorScheme;
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: LinearProgressIndicator(
+        value: progress,
+        backgroundColor: Colors.transparent,
+        valueColor: AlwaysStoppedAnimation<Color>(cs.primary.withOpacity(0.8)),
+        minHeight: 3,
+      ),
+    );
+  }
+}
+
+class _Info extends StatelessWidget {
+  final VideoItem video;
+  const _Info({required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(video.name,
+          maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: cs.onSurface, fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3)),
+      const SizedBox(height: 6),
+      Row(children: [
+        _Tag(video.formattedSize, cs),
+        const SizedBox(width: 6),
+        _Tag(video.extension.toUpperCase(), cs, primary: true),
+        
+        ValueListenableBuilder<List<String>>(
+          valueListenable: video.subtitlesNotifier,
+          builder: (context, subtitles, _) {
+            if (subtitles.isEmpty) return const SizedBox.shrink();
+            return Row(
+              children: subtitles.map((sub) => Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.green.withOpacity(0.35)),
+                  ),
+                  child: Text(sub, style: const TextStyle(
+                    color: Colors.green, fontSize: 8.5, fontWeight: FontWeight.w900
+                  )),
+                ),
+              )).toList(),
+            );
+          },
+        ),
+      ]),
+      const SizedBox(height: 4),
+      Row(children: [
+        Icon(Symbols.folder_rounded, size: 12, color: cs.onSurfaceVariant.withOpacity(0.6)),
+        const SizedBox(width: 4),
+        Expanded(child: Text(video.folder,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.6), fontSize: 11))),
+      ]),
+    ]);
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final String label;
+  final ColorScheme cs;
+  final bool primary;
+  const _Tag(this.label, this.cs, {this.primary = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: primary ? cs.primaryContainer.withOpacity(0.4) : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label, style: TextStyle(
+        color: primary ? cs.primary : cs.onSurfaceVariant,
+        fontSize: 10, fontWeight: FontWeight.w600,
+      )),
+    );
+  }
+}
+=== lib/screens/home/home_screen.dart ===
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../models/video_item.dart';
+import '../../providers/library_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../player/player_screen.dart';
+import '../settings/settings_screen.dart';
+import '../info_screen.dart';
+import '../favorites_screen.dart';
+import '../playlist_screen.dart';
+import 'home_tabs.dart';
+import 'home_search_delegate.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  int _currentIndex = 0;
+  String? _browsingFolder;
+
+  late AnimationController _rotateController;
+  late Animation<double> _rotateAnimation;
+
+  final List<String> _favorites = [];
+  final List<String> _playlist = [];
+
+  bool _isFabVisible = true;
+  Timer? _showFabTimer;
+
+  final List<IconData> _tabs = const [
+    Symbols.video_library_rounded,
+    Symbols.folder_rounded,
+    Symbols.history_rounded,
+    Symbols.more_horiz_rounded,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _rotateController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _rotateAnimation = Tween<double>(begin: 0, end: 0.5).animate(
+      CurvedAnimation(parent: _rotateController, curve: Curves.easeInOut),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initLibrary();
+      _loadFavorites();
+    });
+  }
+
+  @override
+  void dispose() {
+    _rotateController.dispose();
+    _showFabTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadFavorites() async {
+    final p = await SharedPreferences.getInstance();
+    final favs = p.getStringList('favorite_paths') ?? [];
+    setState(() => _favorites.addAll(favs));
+  }
+
+  Future<void> _saveFavorites() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('favorite_paths', _favorites);
+  }
+
+  bool _isFavorite(String path) => _favorites.contains(path);
+
+  void _toggleFavorite(String path) {
+    setState(() {
+      if (_isFavorite(path)) {
+        _favorites.remove(path);
+      } else {
+        _favorites.add(path);
+      }
+    });
+    _saveFavorites();
+  }
+
+  Future<void> _initLibrary() async {
+    final lib = context.read<LibraryProvider>();
+    await lib.loadCachedVideos();
+    if (!mounted) return;
+    await lib.scan();
+    await lib.loadRecent();
+  }
+
+  Future<void> _refreshLibrary() async {
+    await context.read<LibraryProvider>().scan();
+    await context.read<LibraryProvider>().loadRecent();
+  }
+
+  Future<void> _openPlayer(VideoItem video) async {
+    await context.read<LibraryProvider>().addRecent(video.path);
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(video: video)));
+  }
+
+  Future<void> _openByPath(String path) async {
+    if (!File(path).existsSync()) return;
+    final stat = File(path).statSync();
+    await _openPlayer(VideoItem.fromPath(path: path, size: stat.size, modified: stat.modified));
+  }
+
+  void _playLastVideo() {
+    final lib = context.read<LibraryProvider>();
+    final recent = lib.recentPaths;
+    if (recent.isNotEmpty) {
+      _openByPath(recent.first);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد فيديو سابق')),
+      );
+    }
+  }
+
+  List<VideoItem> _sorted(List<VideoItem> list) {
+    final s = context.read<SettingsProvider>();
+    final sorted = List<VideoItem>.from(list);
+    switch (s.sortBy) {
+      case 'name':
+        sorted.sort((a, b) => a.name.compareTo(b.name));
+      case 'size':
+        sorted.sort((a, b) => a.size.compareTo(b.size));
+      case 'duration':
+        sorted.sort((a, b) => a.duration.compareTo(b.duration));
+      default:
+        sorted.sort((a, b) => a.modified.compareTo(b.modified));
+    }
+    return s.sortDesc ? sorted.reversed.toList() : sorted;
+  }
+
+  void _onViewOptionsPressed() {
+    _rotateController.forward().then((_) => _rotateController.reverse());
+    _showViewOptionsPopup();
+  }
+
+  void _showViewOptionsPopup() {
+    final settings = context.read<SettingsProvider>();
+    final cs = Theme.of(context).colorScheme;
+
+    bool currentGrid;
+    if (_currentIndex == 0) {
+      currentGrid = settings.libraryGridView;
+    } else if (_currentIndex == 1) {
+      currentGrid = settings.foldersGridView;
+    } else {
+      currentGrid = settings.recentGridView;
+    }
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 50,
+        80,
+        MediaQuery.of(context).size.width,
+        0,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'grid',
+          child: Row(
+            children: [
+              Icon(Symbols.grid_view_rounded, color: currentGrid ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('شبكة', style: TextStyle(fontWeight: currentGrid ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'list',
+          child: Row(
+            children: [
+              Icon(Symbols.view_list_rounded, color: !currentGrid ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('قائمة', style: TextStyle(fontWeight: !currentGrid ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'date',
+          child: Row(
+            children: [
+              Icon(Symbols.calendar_today_rounded, color: settings.sortBy == 'date' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('التاريخ', style: TextStyle(fontWeight: settings.sortBy == 'date' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'name',
+          child: Row(
+            children: [
+              Icon(Symbols.sort_by_alpha_rounded, color: settings.sortBy == 'name' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('الاسم', style: TextStyle(fontWeight: settings.sortBy == 'name' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'size',
+          child: Row(
+            children: [
+              Icon(Symbols.data_usage_rounded, color: settings.sortBy == 'size' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('الحجم', style: TextStyle(fontWeight: settings.sortBy == 'size' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'duration',
+          child: Row(
+            children: [
+              Icon(Symbols.timer_rounded, color: settings.sortBy == 'duration' ? cs.primary : null),
+              const SizedBox(width: 12),
+              Text('المدة', style: TextStyle(fontWeight: settings.sortBy == 'duration' ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'toggle_order',
+          child: Row(
+            children: [
+              Icon(settings.sortDesc ? Symbols.arrow_downward_rounded : Symbols.arrow_upward_rounded),
+              const SizedBox(width: 12),
+              Text(settings.sortDesc ? 'تنازلي' : 'تصاعدي'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      if (value == 'grid') {
+        if (_currentIndex == 0) {
+          settings.setLibraryGridView(true);
+        } else if (_currentIndex == 1) {
+          settings.setFoldersGridView(true);
+        } else {
+          settings.setRecentGridView(true);
+        }
+      } else if (value == 'list') {
+        if (_currentIndex == 0) {
+          settings.setLibraryGridView(false);
+        } else if (_currentIndex == 1) {
+          settings.setFoldersGridView(false);
+        } else {
+          settings.setRecentGridView(false);
+        }
+      } else if (value == 'toggle_order') {
+        settings.setSortDesc(!settings.sortDesc);
+      } else {
+        settings.setSortBy(value!);
+      }
+    });
+  }
+
+  void _showMoreMenu() {
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 50,
+        MediaQuery.of(context).size.height - 100,
+        MediaQuery.of(context).size.width,
+        0,
+      ),
+      items: [
+        const PopupMenuItem(
+          value: 'settings',
+          child: Row(children: [
+            Icon(Symbols.settings_rounded),
+            SizedBox(width: 12),
+            Text('الإعدادات'),
+          ]),
+        ),
+        const PopupMenuItem(
+          value: 'favorites',
+          child: Row(children: [
+            Icon(Symbols.star_rounded),
+            SizedBox(width: 12),
+            Text('المفضلة'),
+          ]),
+        ),
+        const PopupMenuItem(
+          value: 'playlist',
+          child: Row(children: [
+            Icon(Symbols.playlist_play_rounded),
+            SizedBox(width: 12),
+            Text('قائمة التشغيل'),
+          ]),
+        ),
+        const PopupMenuItem(
+          value: 'hidden',
+          child: Row(children: [
+            Icon(Symbols.visibility_off_rounded),
+            SizedBox(width: 12),
+            Text('الملفات المخفية'),
+          ]),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'settings') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+      } else if (value == 'favorites') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesScreen()));
+      } else if (value == 'playlist') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: _playlist)));
+      } else if (value == 'hidden') {
+        _showHiddenVideos();
+      }
+    });
+  }
+
+  void _openInFileManager(VideoItem video) async {
+    final folderPath = File(video.path).parent.path;
+    final uri = Uri.parse('file://$folderPath');
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر فتح مدير الملفات')),
+      );
+    }
+  }
+
+  Widget _buildFloatingNavBar() {
+    final cs = Theme.of(context).colorScheme;
+    final width = MediaQuery.of(context).size.width;
+    final totalWidth = width - 32;
+    final tabWidth = totalWidth / _tabs.length;
+    final pillWidth = tabWidth - 16;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Container(
+        height: 64,
+        decoration: BoxDecoration(
+          color: cs.surface.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                left: (_currentIndex == 3 ? 0 : _currentIndex) * tabWidth + 8,
+                top: 8,
+                bottom: 8,
+                width: pillWidth,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+              ),
+              Row(
+                children: List.generate(_tabs.length, (index) {
+                  final icon = _tabs[index];
+                  final isActive = _currentIndex == index;
+                  return Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (index == 3) {
+                          _showMoreMenu();
+                          return;
+                        }
+                        setState(() => _currentIndex = index);
+                      },
+                      child: Icon(
+                        icon,
+                        color: isActive ? cs.primary : cs.onSurfaceVariant,
+                        size: isActive ? 28 : 26,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _onScrollUpdate(double delta) {
+    if (delta > 10 || delta < -10) {
+      if (_isFabVisible) {
+        setState(() => _isFabVisible = false);
+      }
+      _showFabTimer?.cancel();
+      _showFabTimer = Timer(const Duration(milliseconds: 600), () {
+        if (!_isFabVisible && mounted) {
+          setState(() => _isFabVisible = true);
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final settings = context.watch<SettingsProvider>();
+    final lib = context.watch<LibraryProvider>();
+
+    return Scaffold(
+      extendBody: true, // ← يجعل الـ body يمتد تحت الشريط فتختفي الطبقة خلفه
+      appBar: AppBar(
+        title: const Text('SR Player'),
+        centerTitle: false,
+        titleTextStyle: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 22),
+        actions: [
+          AnimatedBuilder(
+            animation: _rotateAnimation,
+            builder: (context, child) => Transform.rotate(angle: _rotateAnimation.value * 3.14159, child: child),
+            child: IconButton(icon: const Icon(Symbols.grid_view_rounded), onPressed: _onViewOptionsPressed, tooltip: 'خيارات العرض والفرز'),
+          ),
+          IconButton(icon: const Icon(Symbols.search_rounded), onPressed: () => showSearch(context: context, delegate: VideoSearchDelegate(lib.videos, _openPlayer))),
+        ],
+      ),
+      body: NotificationListener<ScrollUpdateNotification>(
+        onNotification: (notification) {
+          if (notification.dragDetails != null) {
+            _onScrollUpdate(notification.dragDetails!.delta.dy);
+          }
+          return false;
+        },
+        child: IndexedStack(
+          index: _currentIndex,
+          children: [
+            RefreshIndicator(onRefresh: _refreshLibrary, child: LibraryTab(videos: _sorted(lib.videos), gridView: settings.libraryGridView, onOpen: _openPlayer, onMore: (v) => _buildVideoOptionsSheet(v), loading: lib.loading)),
+            _buildFoldersTab(lib, settings),
+            RefreshIndicator(onRefresh: _refreshLibrary, child: RecentTab(paths: lib.recentPaths, all: lib.videos, gridView: settings.recentGridView, onOpen: _openByPath, onClear: lib.clearRecent)),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _buildFloatingNavBar(),
+      floatingActionButton: _isFabVisible
+          ? FloatingActionButton(
+              onPressed: _playLastVideo,
+              backgroundColor: cs.primary,
+              shape: const CircleBorder(),
+              child: const Icon(Symbols.play_arrow_rounded, color: Colors.white),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildFoldersTab(LibraryProvider lib, SettingsProvider settings) {
+    if (_browsingFolder != null) {
+      final folderVideos = _sorted(lib.videos.where((v) => v.folder == _browsingFolder).toList());
+      return Column(children: [
+        Container(color: Theme.of(context).colorScheme.surface, padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), child: Row(children: [
+          IconButton(icon: const Icon(Symbols.arrow_back_rounded), onPressed: () => setState(() => _browsingFolder = null), tooltip: 'رجوع إلى المجلدات'),
+          const SizedBox(width: 4),
+          Text(_browsingFolder!, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+          const Spacer(),
+          Text('${folderVideos.length} فيديو', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+          const SizedBox(width: 8),
+        ])),
+        const Divider(height: 1),
+        Expanded(child: LibraryTab(videos: folderVideos, gridView: settings.foldersGridView, onOpen: _openPlayer, onMore: (v) => _buildVideoOptionsSheet(v), loading: false)),
+      ]);
+    }
+    return RefreshIndicator(onRefresh: _refreshLibrary, child: FoldersTab(byFolder: lib.byFolder, gridView: settings.foldersGridView, onTap: (folder) => setState(() => _browsingFolder = folder), onMore: _buildFolderOptionsSheet));
+  }
+
+  void _buildFolderOptionsSheet(String folderName, List<VideoItem> folderVideos) {
+    final cs = Theme.of(context).colorScheme;
+    final lib = context.read<LibraryProvider>();
+    final totalSize = folderVideos.fold<int>(0, (s, v) => s + v.size);
+    final sizeStr = totalSize < 1024 * 1024 * 1024 ? '${(totalSize / (1024 * 1024)).toStringAsFixed(0)} MB' : '${(totalSize / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    final bool allHidden = folderVideos.every((v) => lib.hiddenPaths.contains(v.path));
+    showModalBottomSheet(context: context, builder: (_) => SafeArea(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.only(bottom: 16), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 12), child: Column(children: [Text(folderName, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14)), const SizedBox(height: 4), Text('${folderVideos.length} فيديو  •  $sizeStr', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))])),
+      const Divider(height: 1),
+      _sheetTile(icon: Symbols.play_arrow_rounded, title: 'تشغيل الكل', iconBg: cs.primaryContainer, iconColor: cs.onPrimaryContainer, onTap: () { Navigator.pop(context); if (folderVideos.isNotEmpty) _openPlayer(folderVideos.first); }),
+      _sheetTile(icon: Symbols.shuffle_rounded, title: 'تشغيل عشوائي', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); if (folderVideos.isNotEmpty) { folderVideos.shuffle(); _openPlayer(folderVideos.first); } }),
+      const Divider(height: 1),
+      _sheetTile(icon: Symbols.info_rounded, title: 'خصائص المجلد', iconBg: cs.secondaryContainer, iconColor: cs.onSecondaryContainer, onTap: () { Navigator.pop(context); showDialog(context: context, builder: (ctx) => AlertDialog(title: Text(folderName), content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [_infoRow('عدد الملفات', '${folderVideos.length}'), _infoRow('الحجم الإجمالي', sizeStr), _infoRow('أول ملف', folderVideos.isNotEmpty ? folderVideos.first.modified.toString() : '-')]), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('موافق'))])); }),
+      _sheetTile(icon: _isFavorite(folderName) ? Symbols.star_rounded : Symbols.star_outline_rounded, title: _isFavorite(folderName) ? 'إزالة من المفضلة' : 'إضافة للمفضلة', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); _toggleFavorite(folderName); }),
+      const Divider(height: 1),
+      _sheetTile(icon: allHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded, title: allHidden ? 'إظهار الكل' : 'إخفاء الكل', iconBg: cs.errorContainer, iconColor: cs.onErrorContainer, onTap: () { Navigator.pop(context); for (final v in folderVideos) { if (allHidden) { lib.unhideVideo(v.path); } else { lib.hideVideo(v.path); } } }),
+      _sheetTile(icon: Symbols.delete_rounded, title: 'حذف المجلد', iconBg: cs.errorContainer, iconColor: cs.onErrorContainer, onTap: () { Navigator.pop(context); _confirmDeleteFolder(folderVideos); }),
+      const Divider(height: 1),
+      _sheetTile(icon: Symbols.swap_horiz_rounded, title: 'تحويل الكل (قريباً)', enabled: false),
+      _sheetTile(icon: Symbols.music_note_rounded, title: 'استخراج الصوت (قريباً)', enabled: false),
+      _sheetTile(icon: Symbols.image_rounded, title: 'إعادة توليد الصور (قريباً)', enabled: false),
+    ])))));
+  }
+
+  void _buildVideoOptionsSheet(VideoItem video) {
+    final cs = Theme.of(context).colorScheme;
+    final lib = context.read<LibraryProvider>();
+    final isHidden = lib.hiddenPaths.contains(video.path);
+    showModalBottomSheet(context: context, builder: (_) => SafeArea(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.only(bottom: 16), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 12), child: Text(video.name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14))),
+      const Divider(height: 1),
+      _sheetTile(icon: Symbols.play_arrow_rounded, title: 'تشغيل', iconBg: cs.primaryContainer, iconColor: cs.onPrimaryContainer, onTap: () { Navigator.pop(context); _openPlayer(video); }),
+      _sheetTile(icon: Symbols.info_rounded, title: 'معلومات', iconBg: cs.secondaryContainer, iconColor: cs.onSecondaryContainer, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: video))); }),
+      const Divider(height: 1),
+      _sheetTile(icon: Symbols.content_cut_rounded, title: 'قص الفيديو (قريباً)', enabled: false),
+      _sheetTile(icon: Symbols.swap_horiz_rounded, title: 'تحويل صيغة (قريباً)', enabled: false),
+      _sheetTile(icon: Symbols.music_note_rounded, title: 'استخراج الصوت (قريباً)', enabled: false),
+      _sheetTile(icon: Symbols.gif_rounded, title: 'صورة متحركة GIF (قريباً)', enabled: false),
+      const Divider(height: 1),
+      _sheetTile(icon: _isFavorite(video.path) ? Symbols.star_rounded : Symbols.star_outline_rounded, title: _isFavorite(video.path) ? 'إزالة من المفضلة' : 'إضافة للمفضلة', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); _toggleFavorite(video.path); }),
+      _sheetTile(icon: Symbols.playlist_add_rounded, title: 'إضافة إلى قائمة التشغيل', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); if (!_playlist.contains(video.path)) { _playlist.add(video.path); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت الإضافة إلى قائمة التشغيل'))); } else { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الملف موجود مسبقاً في القائمة'))); } }),
+      _sheetTile(icon: Symbols.drive_file_rename_outline_rounded, title: 'تغيير الاسم', iconBg: cs.surfaceContainerHighest, iconColor: cs.onSurfaceVariant, onTap: () { Navigator.pop(context); _renameFile(video); }),
+      const Divider(height: 1),
+      _sheetTile(icon: Symbols.share_rounded, title: 'مشاركة', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); Share.shareXFiles([XFile(video.path)], subject: video.name); }),
+      _sheetTile(icon: Symbols.content_copy_rounded, title: 'نسخ المسار', iconBg: cs.surfaceContainerHighest, iconColor: cs.onSurfaceVariant, onTap: () { Navigator.pop(context); Clipboard.setData(ClipboardData(text: video.path)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نسخ المسار'))); }),
+      _sheetTile(icon: Symbols.folder_open_rounded, title: 'فتح في مدير الملفات', iconBg: cs.surfaceContainerHighest, iconColor: cs.onSurfaceVariant, onTap: () { Navigator.pop(context); _openInFileManager(video); }),
+      const Divider(height: 1),
+      _sheetTile(icon: Symbols.image_rounded, title: 'إعادة توليد الصورة (قريباً)', enabled: false),
+      _sheetTile(icon: Symbols.subtitles_rounded, title: 'استخراج الترجمة (قريباً)', enabled: false),
+      _sheetTile(icon: Symbols.bar_chart_rounded, title: 'خصائص الترميز (قريباً)', enabled: false),
+      const Divider(height: 1),
+      _sheetTile(icon: isHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded, title: isHidden ? 'إلغاء الإخفاء' : 'إخفاء', iconBg: isHidden ? cs.secondaryContainer : cs.errorContainer, iconColor: isHidden ? cs.onSecondaryContainer : cs.onErrorContainer, onTap: () { Navigator.pop(context); if (isHidden) { lib.unhideVideo(video.path); } else { lib.hideVideo(video.path); } }),
+      _sheetTile(icon: Symbols.delete_rounded, title: 'حذف', iconBg: cs.errorContainer, iconColor: cs.onErrorContainer, onTap: () { Navigator.pop(context); _confirmDeleteFile(video); }),
+    ])))));
+  }
+
+  Widget _sheetTile({required IconData icon, required String title, Color? iconBg, Color? iconColor, VoidCallback? onTap, bool enabled = true}) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = iconBg ?? cs.surfaceContainerHighest;
+    final fg = iconColor ?? cs.onSurfaceVariant;
+    return Opacity(opacity: enabled ? 1.0 : 0.5, child: ListTile(leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: fg, size: 22)), title: Text(title, style: TextStyle(color: enabled ? cs.onSurface : cs.onSurfaceVariant, fontSize: 14)), onTap: enabled ? onTap : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً')))));
+  }
+
+  void _renameFile(VideoItem video) {
+    final controller = TextEditingController(text: video.name);
+    showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('تغيير الاسم'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'الاسم الجديد'), autofocus: true), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), TextButton(onPressed: () { final newName = controller.text.trim(); if (newName.isNotEmpty && newName != video.name) { final oldFile = File(video.path); final newPath = '${oldFile.parent.path}/$newName.${video.extension}'; try { oldFile.renameSync(newPath); context.read<LibraryProvider>().scan(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تغيير الاسم بنجاح'))); } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل تغيير الاسم: $e'))); } } Navigator.pop(ctx); }, child: const Text('موافق'))]));
+  }
+
+  void _confirmDeleteFile(VideoItem video) {
+    showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('حذف الملف'), content: Text('هل أنت متأكد من حذف "${video.name}"؟'), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), TextButton(onPressed: () { Navigator.pop(ctx); final file = File(video.path); if (file.existsSync()) { file.deleteSync(); context.read<LibraryProvider>().scan(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف "${video.name}"'))); } }, child: const Text('حذف', style: TextStyle(color: Colors.red)))]));
+  }
+
+  void _confirmDeleteFolder(List<VideoItem> videos) {
+    showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('حذف المجلد'), content: Text('هل أنت متأكد من حذف ${videos.length} فيديو؟'), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), TextButton(onPressed: () { Navigator.pop(ctx); for (final v in videos) { final file = File(v.path); if (file.existsSync()) file.deleteSync(); } context.read<LibraryProvider>().scan(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف ${videos.length} فيديو'))); }, child: const Text('حذف', style: TextStyle(color: Colors.red)))]));
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(value),
+      ]),
+    );
+  }
+
+  void _showHiddenVideos() {
+    final lib = context.read<LibraryProvider>();
+    final hidden = lib.allVideos.where((v) => lib.hiddenPaths.contains(v.path)).toList();
+    final cs = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.95,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (ctx, scroll) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(children: [
+              Icon(Symbols.visibility_off_rounded, color: cs.primary, size: 20),
+              const SizedBox(width: 8),
+              Text('الملفات المخفية (${hidden.length})',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface)),
+              const Spacer(),
+              if (hidden.isNotEmpty)
+                TextButton(
+                  onPressed: () {
+                    lib.clearHidden();
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('إظهار الكل'),
+                ),
+            ]),
+          ),
+          const Divider(height: 1),
+          if (hidden.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Symbols.visibility_rounded, size: 48, color: cs.onSurfaceVariant),
+                  const SizedBox(height: 12),
+                  Text('لا يوجد ملفات مخفية', style: TextStyle(color: cs.onSurfaceVariant)),
+                ]),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                controller: scroll,
+                itemCount: hidden.length,
+                itemBuilder: (_, i) {
+                  final v = hidden[i];
+                  return ListTile(
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Symbols.video_file_rounded, color: cs.onSurfaceVariant),
+                    ),
+                    title: Text(v.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(v.formattedSize, style: const TextStyle(fontSize: 12)),
+                    trailing: TextButton(
+                      onPressed: () => lib.unhideVideo(v.path),
+                      child: const Text('إظهار'),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+=== lib/screens/home/home_tabs.dart ===
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../../models/video_item.dart';
+import '../../widgets/video_card.dart';
+
+class LibraryTab extends StatelessWidget {
+  final List<VideoItem> videos;
+  final bool gridView;
+  final void Function(VideoItem) onOpen;
+  final void Function(VideoItem) onMore;
+  final bool loading;
+
+  const LibraryTab({
+    super.key,
+    required this.videos,
+    required this.gridView,
+    required this.onOpen,
+    required this.onMore,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && videos.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (videos.isEmpty) {
+      return const EmptyState('ما لقينا فيديوهات', Symbols.video_library_rounded);
+    }
+    return gridView
+        ? GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
+            itemCount: videos.length,
+            itemBuilder: (_, i) =>
+                VideoGridCard(video: videos[i], onTap: () => onOpen(videos[i]), onMoreTap: () => onMore(videos[i])))
+        : ListView.builder(
+            padding: const EdgeInsets.only(top: 4, bottom: 90),
+            itemCount: videos.length,
+            itemBuilder: (_, i) =>
+                VideoCard(video: videos[i], onTap: () => onOpen(videos[i]), onMoreTap: () => onMore(videos[i])));
+  }
+}
+
+class RecentTab extends StatelessWidget {
+  final List<String> paths;
+  final List<VideoItem> all;
+  final bool gridView;
+  final void Function(String) onOpen;
+  final VoidCallback onClear;
+
+  const RecentTab({
+    super.key,
+    required this.paths,
+    required this.all,
+    required this.gridView,
+    required this.onOpen,
+    required this.onClear,
+  });
+
+  List<VideoItem> get list {
+    final map = {for (final v in all) v.path: v};
+    return paths
+        .map((p) {
+          if (map.containsKey(p)) return map[p]!;
+          try {
+            if (!File(p).existsSync()) return null;
+            final stat = File(p).statSync();
+            return VideoItem.fromPath(path: p, size: stat.size, modified: stat.modified);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<VideoItem>()
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final items = list;
+    if (items.isEmpty) return const EmptyState('ما شفتي فيديو بعد', Symbols.history_rounded);
+
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+        child: Row(children: [
+          Icon(Symbols.history_rounded, size: 16, color: cs.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text('${items.length} ملف', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+          const Spacer(),
+          TextButton.icon(
+              onPressed: onClear,
+              icon: Icon(Symbols.delete_sweep_rounded, size: 16, color: cs.error),
+              label: const Text('مسح', style: TextStyle(color: Colors.red, fontSize: 12)),
+              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10))),
+        ]),
+      ),
+      Expanded(
+        child: gridView
+            ? GridView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
+                itemCount: items.length,
+                itemBuilder: (_, i) => VideoGridCard(
+                    video: items[i], onTap: () => onOpen(items[i].path), onMoreTap: null),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.only(bottom: 90),
+                itemCount: items.length,
+                itemBuilder: (_, i) => VideoCard(
+                    video: items[i], onTap: () => onOpen(items[i].path)),
+              ),
+      ),
+    ]);
+  }
+}
+
+class FoldersTab extends StatelessWidget {
+  final Map<String, List<VideoItem>> byFolder;
+  final void Function(String) onTap;
+  final void Function(String folderName, List<VideoItem> videos)? onMore;
+  final bool gridView;
+
+  const FoldersTab({
+    super.key,
+    required this.byFolder,
+    required this.onTap,
+    this.onMore,
+    this.gridView = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final keys = byFolder.keys.toList()..sort();
+    if (keys.isEmpty) return const EmptyState('ما لقينا مجلدات', Symbols.folder_off_rounded);
+
+    final children = keys.map((folder) {
+      final videos = byFolder[folder]!;
+      final total = videos.fold<int>(0, (s, v) => s + v.size);
+      final size = total < 1024 * 1024 * 1024
+          ? '${(total / (1024 * 1024)).toStringAsFixed(0)} MB'
+          : '${(total / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+
+      if (gridView) {
+        return GestureDetector(
+          onTap: () => onTap(folder),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (onMore != null)
+                        GestureDetector(
+                          onTap: () => onMore!(folder, videos),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
+                          ),
+                        ),
+                    ],
+                  ),
+                  Icon(Symbols.folder_rounded, color: cs.onSecondaryContainer, size: 48),
+                  const SizedBox(height: 8),
+                  Text(folder, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text('${videos.length} فيديو  •  $size', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11)),
+                ],
+              ),
+            ),
+          ),
+        );
+      } else {
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          leading: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(14)),
+              child: Icon(Symbols.folder_rounded, color: cs.onSecondaryContainer, size: 28)),
+          title: Text(folder, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 15)),
+          subtitle: Text('${videos.length} فيديو  •  $size', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+          trailing: onMore != null
+              ? IconButton(
+                  icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 20),
+                  onPressed: () => onMore!(folder, videos),
+                )
+              : null,
+          onTap: () => onTap(folder),
+        );
+      }
+    }).toList();
+
+    if (gridView) {
+      return GridView.count(
+        crossAxisCount: 2,
+        padding: const EdgeInsets.all(12),
+        childAspectRatio: 1.2,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        children: children,
+      );
+    } else {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+        children: children,
+      );
+    }
+  }
+}
+
+class EmptyState extends StatelessWidget {
+  final String msg;
+  final IconData icon;
+  const EmptyState(this.msg, this.icon, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(color: cs.surfaceContainerHigh, shape: BoxShape.circle),
+            child: Icon(icon, size: 48, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 20),
+        Text(msg, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 17, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Text('اضغط "فتح ملف" لاختيار فيديو', style: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.6), fontSize: 13)),
+      ]),
+    );
+  }
+}
+=== lib/screens/home/home_search_delegate.dart ===
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../../models/video_item.dart';
+import '../../widgets/video_card.dart';
+
+class VideoSearchDelegate extends SearchDelegate<VideoItem?> {
+  final List<VideoItem> videos;
+  final Future<void> Function(VideoItem) onOpen;
+  VideoSearchDelegate(this.videos, this.onOpen);
+
+  @override
+  String get searchFieldLabel => 'ابحث عن فيديو...';
+
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+        if (query.isNotEmpty) IconButton(icon: const Icon(Symbols.close_rounded), onPressed: () => query = ''),
+      ];
+
+  @override
+  Widget buildLeading(BuildContext context) =>
+      IconButton(icon: const Icon(Symbols.arrow_back_rounded), onPressed: () => close(context, null));
+
+  @override
+  Widget buildResults(BuildContext context) => _list(context);
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _list(context);
+
+  Widget _list(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final results =
+        query.isEmpty ? videos : videos.where((v) => v.name.toLowerCase().contains(query.toLowerCase())).toList();
+    if (results.isEmpty) return Center(child: Text('ما لقينا نتائج', style: TextStyle(color: cs.onSurfaceVariant)));
+    return ListView.builder(
+      itemCount: results.length,
+      itemBuilder: (_, i) => VideoCard(
+        video: results[i],
+        onTap: () {
+          close(context, results[i]);
+          onOpen(results[i]);
+        },
+      ),
+    );
+  }
+}
+
+=== lib/providers/library_provider.dart ===
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/video_item.dart';
+
+class LibraryProvider extends ChangeNotifier {
+  List<VideoItem> _videos = [];
+  List<String> _recentPaths = [];
+  Set<String> _hiddenPaths = {};
+  bool _loading = false;
+  String? _error;
+
+  final Map<String, int> _positions = {};
+
+  List<VideoItem> get videos => _videos.where((v) => !_hiddenPaths.contains(v.path)).toList();
+  List<VideoItem> get allVideos => _videos;
+  List<String> get recentPaths => _recentPaths;
+  Set<String> get hiddenPaths => _hiddenPaths;
+  bool get loading => _loading;
+  String? get error => _error;
+
+  Map<String, List<VideoItem>> get byFolder {
+    final map = <String, List<VideoItem>>{};
+    for (final v in videos) {
+      map.putIfAbsent(v.folder, () => []).add(v);
+    }
+    return map;
+  }
+
+  Future<void> loadHidden() async {
+    final p = await SharedPreferences.getInstance();
+    _hiddenPaths = Set<String>.from(p.getStringList('hidden_paths') ?? []);
+    notifyListeners();
+  }
+
+  Future<void> hideVideo(String path) async {
+    _hiddenPaths.add(path);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('hidden_paths', _hiddenPaths.toList());
+    notifyListeners();
+  }
+
+  Future<void> unhideVideo(String path) async {
+    _hiddenPaths.remove(path);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('hidden_paths', _hiddenPaths.toList());
+    notifyListeners();
+  }
+
+  Future<void> clearHidden() async {
+    _hiddenPaths.clear();
+    final p = await SharedPreferences.getInstance();
+    await p.remove('hidden_paths');
+    notifyListeners();
+  }
+
+  Future<void> loadCachedVideos() async {
+    try {
+      await loadHidden();
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final List<dynamic> jsonList = json.decode(jsonString);
+        _videos = jsonList
+            .map((e) => VideoItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        notifyListeners();
+      }
+      await _loadPositions();
+    } catch (e) {
+      debugPrint('فشل تحميل الذاكرة المؤقتة: $e');
+    }
+  }
+
+  Future<void> _loadPositions() async {
+    final p = await SharedPreferences.getInstance();
+    for (final video in _videos) {
+      final ms = p.getInt('pos_${video.path}');
+      if (ms != null && ms > 0) {
+        _positions[video.path] = ms;
+      }
+    }
+  }
+
+  Future<void> _saveVideosToCache() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/video_cache.json');
+      final jsonList = _videos.map((v) => v.toJson()).toList();
+      await file.writeAsString(json.encode(jsonList));
+    } catch (e) {
+      debugPrint('فشل حفظ الذاكرة المؤقتة: $e');
+    }
+  }
+
+  Future<VideoItem?> _buildVideoItem(AssetEntity asset, String albumName) async {
+    try {
+      final file = await asset.file;
+      if (file == null) return null;
+
+      String name = asset.title ?? '';
+      if (name.isEmpty || name.length < 2) {
+        name = file.path.split('/').last;
+        final dotIndex = name.lastIndexOf('.');
+        if (dotIndex != -1) {
+          name = name.substring(0, dotIndex);
+        }
+        if (name.length < 2) {
+          name = '$albumName ${asset.id}';
+        }
+      }
+
+      return VideoItem(
+        id: asset.id,
+        path: file.path,
+        name: name,
+        size: file.lengthSync(),
+        modified: asset.modifiedDateTime,
+        folder: albumName,
+        duration: asset.videoDuration,
+        subtitleTypes: const [],
+      );
+    } catch (e) {
+      debugPrint('خطأ في بناء عنصر الفيديو: $e');
+      return null;
+    }
+  }
+
+  Future<void> scan() async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth && !ps.hasAccess) {
+        _error = 'لم يتم منح الإذن للوصول إلى الوسائط.';
+        _loading = false;
+        notifyListeners();
+        return;
+      }
+
+      final albums = await PhotoManager.getAssetPathList(type: RequestType.video);
+      final List<VideoItem> result = [];
+
+      const batchSize = 12;
+      for (final album in albums) {
+        final count = await album.assetCountAsync;
+        final assets = await album.getAssetListRange(start: 0, end: count);
+
+        for (var i = 0; i < assets.length; i += batchSize) {
+          final batch = assets.skip(i).take(batchSize);
+          final items = await Future.wait(
+            batch.map((asset) => _buildVideoItem(asset, album.name)),
+          );
+          result.addAll(items.whereType<VideoItem>());
+        }
+      }
+
+      result.sort((a, b) => b.modified.compareTo(a.modified));
+      _videos = result;
+      await _saveVideosToCache();
+      await _loadPositions();
+    } catch (e) {
+      _error = 'فشل المسح: $e';
+    }
+
+    _loading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadRecent() async {
+    final p = await SharedPreferences.getInstance();
+    _recentPaths = p.getStringList('recent_paths') ?? [];
+    notifyListeners();
+  }
+
+  Future<void> addRecent(String path) async {
+    _recentPaths.remove(path);
+    _recentPaths.insert(0, path);
+    if (_recentPaths.length > 30) _recentPaths.removeLast();
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('recent_paths', _recentPaths);
+    notifyListeners();
+  }
+
+  Future<void> clearRecent() async {
+    _recentPaths.clear();
+    final p = await SharedPreferences.getInstance();
+    await p.remove('recent_paths');
+    notifyListeners();
+  }
+
+  Future<void> savePosition(String path, Duration pos) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('pos_$path', pos.inMilliseconds);
+    _positions[path] = pos.inMilliseconds;
+    notifyListeners();
+  }
+
+  Duration? getCachedPosition(String path) {
+    final ms = _positions[path];
+    if (ms == null || ms <= 0) return null;
+    return Duration(milliseconds: ms);
+  }
+
+  Future<Duration?> getPosition(String path) async {
+    return getCachedPosition(path) ?? (await _loadPositionFromPrefs(path));
+  }
+
+  Future<Duration?> _loadPositionFromPrefs(String path) async {
+    final p = await SharedPreferences.getInstance();
+    final ms = p.getInt('pos_$path');
+    if (ms == null || ms == 0) return null;
+    _positions[path] = ms;
+    return Duration(milliseconds: ms);
+  }
+}
+=== lib/providers/settings_provider.dart ===
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class SettingsProvider extends ChangeNotifier {
+  // Theme
+  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode get themeMode => _themeMode;
+
+  // Player
+  bool _rememberPosition = true;
+  bool get rememberPosition => _rememberPosition;
+  bool _autoPlay = true;
+  bool get autoPlay => _autoPlay;
+  double _defaultSpeed = 1.0;
+  double get defaultSpeed => _defaultSpeed;
+
+  // Audio
+  double _defaultAudioBoost = 100.0;
+  double get defaultAudioBoost => _defaultAudioBoost;
+  String _preferredAudioLanguage = 'ara';
+  String get preferredAudioLanguage => _preferredAudioLanguage;
+
+  // Subtitle basics
+  bool _showSubtitlesByDefault = true;
+  bool get showSubtitlesByDefault => _showSubtitlesByDefault;
+  String _subtitleFolder = '';
+  String get subtitleFolder => _subtitleFolder;
+  String _subtitleEncoding = 'UTF-8';
+  String get subtitleEncoding => _subtitleEncoding;
+  String _preferredSubtitleLanguage = 'ara';
+  String get preferredSubtitleLanguage => _preferredSubtitleLanguage;
+  double _defaultSubtitleSync = 0.0;
+  double get defaultSubtitleSync => _defaultSubtitleSync;
+  bool _subtitleItalic = false;
+  bool get subtitleItalic => _subtitleItalic;
+  bool _subtitleRTL = false;
+  bool get subtitleRTL => _subtitleRTL;
+
+  // Subtitle font
+  double _subtitleFontSize = 30.0;
+  double get subtitleFontSize => _subtitleFontSize;
+  String _fontFamily = 'Roboto';
+  String get fontFamily => _fontFamily;
+  int _fontWeightIndex = 2;
+  int get fontWeightIndex => _fontWeightIndex;
+
+  // Subtitle colors
+  int _subtitleColorValue = 0xFFFFFFFF;
+  Color get subtitleColor => Color(_subtitleColorValue);
+  double _subtitleBgOpacity = 0.0;
+  double get subtitleBgOpacity => _subtitleBgOpacity;
+  Color _subtitleBgColor = const Color(0xFF000000);
+  Color get subtitleBgColor => _subtitleBgColor;
+
+  // Subtitle outline
+  Color _outlineColor = const Color(0xFF000000);
+  Color get outlineColor => _outlineColor;
+  double _outlineWidth = 2.0;
+  double get outlineWidth => _outlineWidth;
+  bool _outlineEnabled = true;
+  bool get outlineEnabled => _outlineEnabled;
+
+  // Text shadow
+  bool _textShadowEnabled = false;
+  bool get textShadowEnabled => _textShadowEnabled;
+  Color _textShadowColor = const Color(0xFF000000);
+  Color get textShadowColor => _textShadowColor;
+  double _textShadowBlurRadius = 4.0;
+  double get textShadowBlurRadius => _textShadowBlurRadius;
+  double _textShadowOffsetX = 1.0;
+  double get textShadowOffsetX => _textShadowOffsetX;
+  double _textShadowOffsetY = 1.0;
+  double get textShadowOffsetY => _textShadowOffsetY;
+
+  // Box shadow
+  bool _boxShadowEnabled = false;
+  bool get boxShadowEnabled => _boxShadowEnabled;
+  Color _boxShadowColor = const Color(0xFF000000);
+  Color get boxShadowColor => _boxShadowColor;
+  double _boxShadowBlurRadius = 4.0;
+  double get boxShadowBlurRadius => _boxShadowBlurRadius;
+  double _boxShadowOffsetX = 1.0;
+  double get boxShadowOffsetX => _boxShadowOffsetX;
+  double _boxShadowOffsetY = 1.0;
+  double get boxShadowOffsetY => _boxShadowOffsetY;
+
+  // Subtitle position
+  double _bottomPadding = 48.0;
+  double get bottomPadding => _bottomPadding;
+  double _horizontalMargin = 24.0;
+  double get horizontalMargin => _horizontalMargin;
+
+  // Library
+  String _sortBy = 'date';
+  String get sortBy => _sortBy;
+  bool _sortDesc = true;
+  bool get sortDesc => _sortDesc;
+  bool _libraryGridView = false;
+  bool get libraryGridView => _libraryGridView;
+  bool _foldersGridView = false;
+  bool get foldersGridView => _foldersGridView;
+  bool _recentGridView = false;
+  bool get recentGridView => _recentGridView;
+
+  Future<void> load() async {
+    final p = await SharedPreferences.getInstance();
+    _themeMode = ThemeMode.values[p.getInt('themeMode') ?? 1];
+    _rememberPosition = p.getBool('rememberPosition') ?? true;
+    _autoPlay = p.getBool('autoPlay') ?? true;
+    _defaultSpeed = p.getDouble('defaultSpeed') ?? 1.0;
+    _defaultAudioBoost = p.getDouble('defaultAudioBoost') ?? 100.0;
+    _preferredAudioLanguage = p.getString('preferredAudioLanguage') ?? 'ara';
+    _showSubtitlesByDefault = p.getBool('showSubtitles') ?? true;
+    _subtitleFolder = p.getString('subtitleFolder') ?? '';
+    _subtitleEncoding = p.getString('subtitleEncoding') ?? 'UTF-8';
+    _preferredSubtitleLanguage = p.getString('preferredSubtitleLanguage') ?? 'ara';
+    _defaultSubtitleSync = p.getDouble('defaultSubtitleSync') ?? 0.0;
+    _subtitleItalic = p.getBool('subtitleItalic') ?? false;
+    _subtitleRTL = p.getBool('subtitleRTL') ?? false;
+    _subtitleFontSize = p.getDouble('subtitleFontSize') ?? 30.0;
+    _fontFamily = p.getString('fontFamily') ?? 'Roboto';
+    _fontWeightIndex = p.getInt('fontWeightIndex') ?? 2;
+    _subtitleColorValue = p.getInt('subtitleColorValue') ?? 0xFFFFFFFF;
+    _subtitleBgOpacity = p.getDouble('subtitleBgOpacity') ?? 0.0;
+    _subtitleBgColor = Color(p.getInt('subtitleBgColor') ?? 0xFF000000);
+    _outlineColor = Color(p.getInt('outlineColor') ?? 0xFF000000);
+    _outlineWidth = p.getDouble('outlineWidth') ?? 2.0;
+    _outlineEnabled = p.getBool('outlineEnabled') ?? true;
+    _textShadowEnabled = p.getBool('textShadowEnabled') ?? false;
+    _textShadowColor = Color(p.getInt('textShadowColor') ?? 0xFF000000);
+    _textShadowBlurRadius = p.getDouble('textShadowBlurRadius') ?? 4.0;
+    _textShadowOffsetX = p.getDouble('textShadowOffsetX') ?? 1.0;
+    _textShadowOffsetY = p.getDouble('textShadowOffsetY') ?? 1.0;
+    _boxShadowEnabled = p.getBool('boxShadowEnabled') ?? false;
+    _boxShadowColor = Color(p.getInt('boxShadowColor') ?? 0xFF000000);
+    _boxShadowBlurRadius = p.getDouble('boxShadowBlurRadius') ?? 4.0;
+    _boxShadowOffsetX = p.getDouble('boxShadowOffsetX') ?? 1.0;
+    _boxShadowOffsetY = p.getDouble('boxShadowOffsetY') ?? 1.0;
+    _bottomPadding = p.getDouble('bottomPadding') ?? 48.0;
+    _horizontalMargin = p.getDouble('horizontalMargin') ?? 24.0;
+    _sortBy = p.getString('sortBy') ?? 'date';
+    _sortDesc = p.getBool('sortDesc') ?? true;
+    _libraryGridView = p.getBool('libraryGridView') ?? false;
+    _foldersGridView = p.getBool('foldersGridView') ?? false;
+    _recentGridView = p.getBool('recentGridView') ?? false;
+    notifyListeners();
+  }
+
+  Future<void> _save() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('themeMode', _themeMode.index);
+    await p.setBool('rememberPosition', _rememberPosition);
+    await p.setBool('autoPlay', _autoPlay);
+    await p.setDouble('defaultSpeed', _defaultSpeed);
+    await p.setDouble('defaultAudioBoost', _defaultAudioBoost);
+    await p.setString('preferredAudioLanguage', _preferredAudioLanguage);
+    await p.setBool('showSubtitles', _showSubtitlesByDefault);
+    await p.setString('subtitleFolder', _subtitleFolder);
+    await p.setString('subtitleEncoding', _subtitleEncoding);
+    await p.setString('preferredSubtitleLanguage', _preferredSubtitleLanguage);
+    await p.setDouble('defaultSubtitleSync', _defaultSubtitleSync);
+    await p.setBool('subtitleItalic', _subtitleItalic);
+    await p.setBool('subtitleRTL', _subtitleRTL);
+    await p.setDouble('subtitleFontSize', _subtitleFontSize);
+    await p.setString('fontFamily', _fontFamily);
+    await p.setInt('fontWeightIndex', _fontWeightIndex);
+    await p.setInt('subtitleColorValue', _subtitleColorValue);
+    await p.setDouble('subtitleBgOpacity', _subtitleBgOpacity);
+    await p.setInt('subtitleBgColor', _subtitleBgColor.toARGB32());
+    await p.setInt('outlineColor', _outlineColor.toARGB32());
+    await p.setDouble('outlineWidth', _outlineWidth);
+    await p.setBool('outlineEnabled', _outlineEnabled);
+    await p.setBool('textShadowEnabled', _textShadowEnabled);
+    await p.setInt('textShadowColor', _textShadowColor.toARGB32());
+    await p.setDouble('textShadowBlurRadius', _textShadowBlurRadius);
+    await p.setDouble('textShadowOffsetX', _textShadowOffsetX);
+    await p.setDouble('textShadowOffsetY', _textShadowOffsetY);
+    await p.setBool('boxShadowEnabled', _boxShadowEnabled);
+    await p.setInt('boxShadowColor', _boxShadowColor.toARGB32());
+    await p.setDouble('boxShadowBlurRadius', _boxShadowBlurRadius);
+    await p.setDouble('boxShadowOffsetX', _boxShadowOffsetX);
+    await p.setDouble('boxShadowOffsetY', _boxShadowOffsetY);
+    await p.setDouble('bottomPadding', _bottomPadding);
+    await p.setDouble('horizontalMargin', _horizontalMargin);
+    await p.setString('sortBy', _sortBy);
+    await p.setBool('sortDesc', _sortDesc);
+    await p.setBool('libraryGridView', _libraryGridView);
+    await p.setBool('foldersGridView', _foldersGridView);
+    await p.setBool('recentGridView', _recentGridView);
+  }
+
+  void resetAll() {
+    _themeMode = ThemeMode.dark;
+    _rememberPosition = true;
+    _autoPlay = true;
+    _defaultSpeed = 1.0;
+    _defaultAudioBoost = 100.0;
+    _preferredAudioLanguage = 'ara';
+    _showSubtitlesByDefault = true;
+    _subtitleFolder = '';
+    _subtitleEncoding = 'UTF-8';
+    _preferredSubtitleLanguage = 'ara';
+    _defaultSubtitleSync = 0.0;
+    _subtitleItalic = false;
+    _subtitleRTL = false;
+    _subtitleFontSize = 30.0;
+    _fontFamily = 'Roboto';
+    _fontWeightIndex = 2;
+    _subtitleColorValue = 0xFFFFFFFF;
+    _subtitleBgOpacity = 0.0;
+    _subtitleBgColor = const Color(0xFF000000);
+    _outlineColor = const Color(0xFF000000);
+    _outlineWidth = 2.0;
+    _outlineEnabled = true;
+    _textShadowEnabled = false;
+    _textShadowColor = const Color(0xFF000000);
+    _textShadowBlurRadius = 4.0;
+    _textShadowOffsetX = 1.0;
+    _textShadowOffsetY = 1.0;
+    _boxShadowEnabled = false;
+    _boxShadowColor = const Color(0xFF000000);
+    _boxShadowBlurRadius = 4.0;
+    _boxShadowOffsetX = 1.0;
+    _boxShadowOffsetY = 1.0;
+    _bottomPadding = 48.0;
+    _horizontalMargin = 24.0;
+    _sortBy = 'date';
+    _sortDesc = true;
+    _libraryGridView = false;
+    _foldersGridView = false;
+    _recentGridView = false;
+    _save();
+    notifyListeners();
+  }
+
+  // Setters
+  void setThemeMode(ThemeMode v) { _themeMode = v; notifyListeners(); _save(); }
+  void setRememberPosition(bool v) { _rememberPosition = v; notifyListeners(); _save(); }
+  void setAutoPlay(bool v) { _autoPlay = v; notifyListeners(); _save(); }
+  void setDefaultSpeed(double v) { _defaultSpeed = v; notifyListeners(); _save(); }
+  void setDefaultAudioBoost(double v) { _defaultAudioBoost = v; notifyListeners(); _save(); }
+  void setPreferredAudioLanguage(String v) { _preferredAudioLanguage = v; notifyListeners(); _save(); }
+  void setShowSubtitlesByDefault(bool v) { _showSubtitlesByDefault = v; notifyListeners(); _save(); }
+  void setSubtitleFolder(String v) { _subtitleFolder = v; notifyListeners(); _save(); }
+  void setSubtitleEncoding(String v) { _subtitleEncoding = v; notifyListeners(); _save(); }
+  void setPreferredSubtitleLanguage(String v) { _preferredSubtitleLanguage = v; notifyListeners(); _save(); }
+  void setDefaultSubtitleSync(double v) { _defaultSubtitleSync = v; notifyListeners(); _save(); }
+  void setSubtitleItalic(bool v) { _subtitleItalic = v; notifyListeners(); _save(); }
+  void setSubtitleRTL(bool v) { _subtitleRTL = v; notifyListeners(); _save(); }
+  void setSubtitleFontSize(double v) { _subtitleFontSize = v; notifyListeners(); _save(); }
+  void setFontFamily(String v) { _fontFamily = v; notifyListeners(); _save(); }
+  void setFontWeightIndex(int v) { _fontWeightIndex = v; notifyListeners(); _save(); }
+  void setSubtitleColor(Color c) { _subtitleColorValue = c.toARGB32(); notifyListeners(); _save(); }
+  void setSubtitleBgOpacity(double v) { _subtitleBgOpacity = v; notifyListeners(); _save(); }
+  void setSubtitleBgColor(Color c) { _subtitleBgColor = c; notifyListeners(); _save(); }
+  void setOutlineColor(Color c) { _outlineColor = c; notifyListeners(); _save(); }
+  void setOutlineWidth(double v) { _outlineWidth = v; notifyListeners(); _save(); }
+  void setOutlineEnabled(bool v) { _outlineEnabled = v; notifyListeners(); _save(); }
+  void setTextShadowEnabled(bool v) { _textShadowEnabled = v; notifyListeners(); _save(); }
+  void setTextShadowColor(Color c) { _textShadowColor = c; notifyListeners(); _save(); }
+  void setTextShadowBlurRadius(double v) { _textShadowBlurRadius = v; notifyListeners(); _save(); }
+  void setTextShadowOffsetX(double v) { _textShadowOffsetX = v; notifyListeners(); _save(); }
+  void setTextShadowOffsetY(double v) { _textShadowOffsetY = v; notifyListeners(); _save(); }
+  void setBoxShadowEnabled(bool v) { _boxShadowEnabled = v; notifyListeners(); _save(); }
+  void setBoxShadowColor(Color c) { _boxShadowColor = c; notifyListeners(); _save(); }
+  void setBoxShadowBlurRadius(double v) { _boxShadowBlurRadius = v; notifyListeners(); _save(); }
+  void setBoxShadowOffsetX(double v) { _boxShadowOffsetX = v; notifyListeners(); _save(); }
+  void setBoxShadowOffsetY(double v) { _boxShadowOffsetY = v; notifyListeners(); _save(); }
+  void setBottomPadding(double v) { _bottomPadding = v; notifyListeners(); _save(); }
+  void setHorizontalMargin(double v) { _horizontalMargin = v; notifyListeners(); _save(); }
+  void setSortBy(String v) { _sortBy = v; notifyListeners(); _save(); }
+  void setSortDesc(bool v) { _sortDesc = v; notifyListeners(); _save(); }
+  void setLibraryGridView(bool v) { _libraryGridView = v; notifyListeners(); _save(); }
+  void setFoldersGridView(bool v) { _foldersGridView = v; notifyListeners(); _save(); }
+  void setRecentGridView(bool v) { _recentGridView = v; notifyListeners(); _save(); }
+}
