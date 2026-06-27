@@ -54,7 +54,6 @@ class VideoCard extends StatelessWidget {
                     bottom: 0, left: 0, right: 0,
                     child: _ResumeProgressBar(video: video),
                   ),
-                  // ✅ علامة الصح عند التحديد
                   if (isSelected)
                     Positioned(
                       top: 4, right: 4,
@@ -71,7 +70,7 @@ class VideoCard extends StatelessWidget {
             ),
             const SizedBox(width: 14),
             Expanded(child: _Info(video: video)),
-            if (onMoreTap != null && onLongPress == null)
+            if (onMoreTap != null)
               IconButton(
                 icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 22),
                 onPressed: onMoreTap,
@@ -133,7 +132,6 @@ class VideoGridCard extends StatelessWidget {
                   bottom: 0, left: 0, right: 0,
                   child: _ResumeProgressBar(video: video),
                 ),
-                // ✅ علامة الصح عند التحديد
                 if (isSelected)
                   Positioned(
                     top: 6, right: 6,
@@ -157,7 +155,7 @@ class VideoGridCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(video.formattedSize, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 10)),
                 ])),
-                if (onMoreTap != null && onLongPress == null)
+                if (onMoreTap != null)
                   IconButton(
                     icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
                     onPressed: onMoreTap,
