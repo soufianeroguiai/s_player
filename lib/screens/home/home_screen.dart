@@ -363,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   PreferredSizeWidget _buildSelectionAppBar() {
     final cs = Theme.of(context).colorScheme;
     final lib = context.read<LibraryProvider>();
-    final totalCount = lib.videos.length; // يمكن تعديلها حسب التبويب الحالي
+    final totalCount = lib.videos.length;
     final selectedCount = _selectedVideos.length;
     final isSingle = selectedCount == 1;
     final firstVideo = _selectedVideos.first;
@@ -577,17 +577,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // ✅ التعديل الذكي: يختفي عند السحب للأسفل، يظهر فوراً عند السحب للأعلى
   void _onScrollUpdate(double delta) {
-    if (delta > 10 || delta < -10) {
+    // تمرير للأسفل ← إخفاء الزر فوراً
+    if (delta > 10) {
       if (_isFabVisible) {
         setState(() => _isFabVisible = false);
       }
       _showFabTimer?.cancel();
-      _showFabTimer = Timer(const Duration(milliseconds: 600), () {
-        if (!_isFabVisible && mounted) {
-          setState(() => _isFabVisible = true);
-        }
-      });
+    }
+    // تمرير للأعلى ← إظهار الزر فوراً
+    else if (delta < -10) {
+      if (!_isFabVisible) {
+        setState(() => _isFabVisible = true);
+      }
+      _showFabTimer?.cancel();
     }
   }
 
