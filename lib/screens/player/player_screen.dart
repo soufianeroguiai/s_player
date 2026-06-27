@@ -493,8 +493,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       width: panelWidth,
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xD9000000),
-          border: Border(left: BorderSide(color: Colors.white24, width: 1)),
+          color: Colors.transparent,
         ),
         child: SafeArea(
           child: Directionality(
@@ -502,8 +501,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.65),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -513,19 +518,25 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                             : _currentMenu == ActiveMenu.audio
                                 ? 'إعدادات الصوت'
                                 : 'المزيد',
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
-                      IconButton(
-                        icon: const Icon(Symbols.close_rounded, color: Colors.white70),
-                        onPressed: () {
+                      GestureDetector(
+                        onTap: () {
                           setState(() => _currentMenu = ActiveMenu.none);
                           _scheduleHide();
                         },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Symbols.close_rounded, color: Colors.white, size: 20),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const Divider(color: Colors.white24, height: 1),
                 Expanded(
                   child: _currentMenu == ActiveMenu.subtitles
                       ? SubtitleAppearancePanel(
@@ -664,7 +675,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
     }
 
-    // ✅ التصحيح: السماح بظهور الشريط عند تفعيل الاختصارات
     final bool controlsVisible = _showControls && !_isLocked && _currentMenu == ActiveMenu.none;
 
     return PopScope(
@@ -776,7 +786,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                // نافذة القفل (في الأسفل، عرض محدود، الأيقونة تتحرك داخله)
                 if (_isLocked)
                   Positioned(
                     bottom: 40,

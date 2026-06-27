@@ -60,7 +60,6 @@ class PlayerTopBar extends StatelessWidget {
 
           // السهم الأيسر (مفتاح الاختصارات)
           _AnimatedIconBtn(
-            // يتغير السهم إلى اليمين عند فتح الاختصارات لتوضيح إمكانية الإغلاق
             icon: isQuickActionsActive 
                 ? Symbols.keyboard_arrow_right_rounded 
                 : Symbols.keyboard_arrow_left_rounded,
@@ -75,11 +74,9 @@ class PlayerTopBar extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: isQuickActionsActive
                 ? Row(
-                    // يأخذ الـ Row مساحة الأيقونات فقط ولا يترك أي فراغ
                     mainAxisSize: MainAxisSize.min, 
                     children: quickActionWidgets,
                   )
-                // SizedBox بحجم الأيقونة تقريباً للحفاظ على ارتفاع الـ Row وعدم حدوث قفزة
                 : const SizedBox(height: 48, width: 0),
           ),
 
@@ -126,18 +123,13 @@ class _VideoTitleWidgetState extends State<_VideoTitleWidget> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      // تفعيل الحالة عند وضع الإصبع
       onTapDown: (_) => setState(() => _isPressed = true),
-      // إلغاء الحالة عند رفع الإصبع
       onTapUp: (_) => setState(() => _isPressed = false),
-      // إلغاء الحالة إذا تحرك الإصبع خارج المنطقة
       onTapCancel: () => setState(() => _isPressed = false),
       child: Stack(
-        // السماح للنص الكامل بالخروج من حدود الـ Stack للظهور فوق الأيقونات
         clipBehavior: Clip.none, 
         alignment: Alignment.centerLeft,
         children: [
-          // 1. النص الأصلي (يختفي عند الضغط)
           Opacity(
             opacity: _isPressed ? 0.0 : 1.0,
             child: ConstrainedBox(
@@ -154,21 +146,19 @@ class _VideoTitleWidgetState extends State<_VideoTitleWidget> {
             ),
           ),
           
-          // 2. النص الكامل المنبثق (يظهر فقط عند الضغط)
           if (_isPressed)
             Positioned(
-              left: -8, // لتعويض المسافة الفارغة (Padding) وجعله متناسقاً
+              left: -8,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.95), // خلفية داكنة جداً للوضوح
+                  color: Colors.black.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: Colors.white24, width: 1),
                   boxShadow: const [
                     BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4))
                   ],
                 ),
-                // السماح للنافذة المنبثقة بأخذ مساحة تصل إلى 75% من الشاشة
                 constraints: BoxConstraints(maxWidth: widget.screenWidth * 0.75),
                 child: Text(
                   widget.videoName,
@@ -177,7 +167,7 @@ class _VideoTitleWidgetState extends State<_VideoTitleWidget> {
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
-                  softWrap: true, // يسمح للنص الطويل بالنزول لسطر جديد
+                  softWrap: true,
                 ),
               ),
             ),
@@ -378,6 +368,7 @@ class PlayerBottomBar extends StatefulWidget {
 
 class _PlayerBottomBarState extends State<PlayerBottomBar> {
   bool _isSliding = false;
+  double? _tempSliderValue; // قيمة مؤقتة أثناء السحب
 
   String _fmt(Duration d) {
     final h = d.inHours;
@@ -421,13 +412,19 @@ class _PlayerBottomBarState extends State<PlayerBottomBar> {
                       overlayColor: widget.primaryColor.withOpacity(0.25),
                     ),
                     child: Slider(
-                      value: progress,
+                      value: _tempSliderValue ?? progress, // قيمة مؤقتة أثناء السحب
                       onChanged: (v) {
-                        setState(() => _isSliding = true);
-                        widget.onSeek(v);
+                        setState(() {
+                          _isSliding = true;
+                          _tempSliderValue = v; // تحديث مؤقت فقط
+                        });
                       },
-                      onChangeEnd: (_) {
-                        setState(() => _isSliding = false);
+                      onChangeEnd: (v) {
+                        widget.onSeek(v); // استدعاء seek مرة واحدة عند الانتهاء
+                        setState(() {
+                          _isSliding = false;
+                          _tempSliderValue = null; // إعادة التعيين
+                        });
                       },
                     ),
                   ),

@@ -197,9 +197,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
   Widget _buildSubtitleToggleSection() {
     return Container(
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
@@ -220,9 +222,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
   Widget _buildEmbeddedTracksSection() {
     final cs = Theme.of(context).colorScheme;
     return Container(
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(children: [
         ...widget.subtitleTracks.map((track) {
@@ -250,9 +254,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
   Widget _buildExternalSubtitleSection() {
     return Container(
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(children: [
         ListTile(
@@ -278,9 +284,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
     final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _SettingRow(label: 'حجم الخط', value: '${s.subtitleFontSize.toInt()} px'),
@@ -384,9 +392,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
     final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _SettingRow(label: 'الارتفاع عن الأسفل', value: '${s.bottomPadding.toInt()} px'),
@@ -430,9 +440,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
     final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _SettingRow(
@@ -467,9 +479,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
   Widget _buildEncodingSection(SettingsProvider s) {
     const encodings = ['UTF-8', 'UTF-16', 'Windows-1256', 'ISO-8859-6'];
     return Container(
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(children: encodings.map((enc) {
         final isSelected = s.subtitleEncoding == enc;
@@ -487,9 +501,11 @@ class _SubtitleAppearancePanelState extends State<SubtitleAppearancePanel> {
   Widget _buildAdvancedSection(SettingsProvider s) {
     return Container(
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: SwitchListTile(
         dense: true,
@@ -523,37 +539,52 @@ class _SectionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isOpen ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(12),
+        color: isOpen ? Colors.black.withOpacity(0.8) : Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isOpen ? cs.primary.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+          color: isOpen ? cs.primary.withOpacity(0.6) : Colors.white.withOpacity(0.08),
+          width: isOpen ? 1.5 : 1.0,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(children: [
-            Icon(icon, size: 18, color: isOpen ? cs.primary : Colors.white54),
-            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: isOpen ? cs.primary.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 18, color: isOpen ? cs.primary : Colors.white70),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(title,
                   style: TextStyle(
                     color: isOpen ? Colors.white : Colors.white70,
-                    fontSize: 13,
-                    fontWeight: isOpen ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 14,
+                    fontWeight: isOpen ? FontWeight.bold : FontWeight.w600,
                   )),
             ),
             if (trailing != null) ...[
               const SizedBox(width: 8),
               trailing!,
             ],
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
             Icon(isOpen ? Symbols.expand_less_rounded : Symbols.expand_more_rounded,
-                color: isOpen ? cs.primary : Colors.white38, size: 20),
+                color: isOpen ? cs.primary : Colors.white54, size: 22),
           ]),
         ),
       ),
