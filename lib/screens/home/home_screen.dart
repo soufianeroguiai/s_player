@@ -37,12 +37,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   bool _isFabVisible = true;
   Timer? _showFabTimer;
+  
+  // المتغير الخاص بتحديد الفيديو لظهور الشريط العلوي
+  VideoItem? _selectedVideo;
 
-  final List<IconData> _tabs = const [
-    Symbols.video_library_rounded,
-    Symbols.folder_rounded,
-    Symbols.history_rounded,
-    Symbols.more_horiz_rounded,
+  // تحديث قائمة التبويبات لتشمل العناوين
+  final List<Map<String, dynamic>> _tabs = const [
+    {'icon': Symbols.video_library_rounded, 'label': 'مكتبة'},
+    {'icon': Symbols.folder_rounded, 'label': 'ملفاتي'},
+    {'icon': Symbols.history_rounded, 'label': 'الأخيرة'},
+    {'icon': Symbols.more_horiz_rounded, 'label': 'المزيد'},
   ];
 
   @override
@@ -339,6 +343,69 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+  // ــــــــــــــــــ الشريط العلوي عند التحديد (الضغط المطول) ــــــــــــــــــ
+  PreferredSizeWidget _buildSelectionAppBar() {
+    final cs = Theme.of(context).colorScheme;
+    return AppBar(
+      backgroundColor: cs.primaryContainer,
+      leading: IconButton(
+        icon: Icon(Symbols.close_rounded, color: cs.onPrimaryContainer),
+        onPressed: () => setState(() => _selectedVideo = null), // إغلاق التحديد
+      ),
+      title: Text(
+        'عنصر واحد محدد',
+        style: TextStyle(color: cs.onPrimaryContainer, fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(Symbols.share_rounded, color: cs.onPrimaryContainer),
+          tooltip: 'مشاركة',
+          onPressed: () {
+            Share.shareXFiles([XFile(_selectedVideo!.path)], subject: _selectedVideo!.name);
+            setState(() => _selectedVideo = null);
+          },
+        ),
+        IconButton(
+          icon: Icon(Symbols.delete_rounded, color: cs.onPrimaryContainer),
+          tooltip: 'حذف',
+          onPressed: () {
+            _confirmDeleteFile(_selectedVideo!);
+            setState(() => _selectedVideo = null);
+          },
+        ),
+        IconButton(
+          icon: Icon(Symbols.info_rounded, color: cs.onPrimaryContainer),
+          tooltip: 'معلومات',
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: _selectedVideo!)));
+            setState(() => _selectedVideo = null);
+          },
+        ),
+        PopupMenuButton<String>(
+          icon: Icon(Symbols.more_vert_rounded, color: cs.onPrimaryContainer),
+          tooltip: 'المزيد',
+          onSelected: (value) {
+            if (value == 'rename') {
+              _renameFile(_selectedVideo!);
+            } else if (value == 'hide') {
+              context.read<LibraryProvider>().hideVideo(_selectedVideo!.path);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إخفاء الملف')));
+            } else if (value == 'move') {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ميزة نقل الملف (قريباً)')));
+            }
+            setState(() => _selectedVideo = null);
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(value: 'rename', child: Text('إعادة تسمية')),
+            const PopupMenuItem(value: 'hide', child: Text('إخفاء')),
+            const PopupMenuItem(value: 'move', child: Text('نقل ملف')),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ــــــــــــــــــ الشريط السفلي التفاعلي (السحب والأسماء) ــــــــــــــــــ
   Widget _buildFloatingNavBar() {
     final cs = Theme.of(context).colorScheme;
     final width = MediaQuery.of(context).size.width;
@@ -349,14 +416,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Container(
-        height: 64,
+        height: 70, // زيادة الارتفاع قليلاً ليتسع للنص
         decoration: BoxDecoration(
-          color: cs.surface.withOpacity(0.75),
+          color: cs.surface.withOpacity(0.90),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withOpacity(0.2),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
@@ -367,42 +434,75 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Stack(
             alignment: Alignment.center,
             children: [
+              // الحقل الأزرق المتحرك
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                left: (_currentIndex == 3 ? 0 : _currentIndex) * tabWidth + 8,
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOut,
+                left: (_currentIndex == 3 ? _currentIndex : _currentIndex) * tabWidth + 8,
                 top: 8,
                 bottom: 8,
                 width: pillWidth,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: cs.primary.withOpacity(0.15),
+                    color: cs.primary.withOpacity(0.20),
                     borderRadius: BorderRadius.circular(24),
                   ),
                 ),
               ),
-              Row(
-                children: List.generate(_tabs.length, (index) {
-                  final icon = _tabs[index];
-                  final isActive = _currentIndex == index;
-                  return Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        if (index == 3) {
-                          _showMoreMenu();
-                          return;
-                        }
-                        setState(() => _currentIndex = index);
-                      },
-                      child: Icon(
-                        icon,
-                        color: isActive ? cs.primary : cs.onSurfaceVariant,
-                        size: isActive ? 28 : 26,
+              // التقاط إيماءة السحب (GestureDetector)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate: (details) {
+                  int newIndex = (details.localPosition.dx / tabWidth).floor().clamp(0, 3);
+                  // تحديث الواجهة فوراً أثناء السحب ليتغير التبويب (ما عدا أيقونة المزيد)
+                  if (newIndex != _currentIndex && newIndex != 3) {
+                    setState(() => _currentIndex = newIndex);
+                  }
+                },
+                onHorizontalDragEnd: (details) {
+                  int finalIndex = (details.localPosition.dx / tabWidth).floor().clamp(0, 3);
+                  // إذا أفلت إصبعه فوق "المزيد"، قم بفتح القائمة
+                  if (finalIndex == 3) {
+                    _showMoreMenu();
+                  }
+                },
+                child: Row(
+                  children: List.generate(_tabs.length, (index) {
+                    final tab = _tabs[index];
+                    final isActive = _currentIndex == index;
+                    return Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (index == 3) {
+                            _showMoreMenu();
+                            return;
+                          }
+                          setState(() => _currentIndex = index);
+                        },
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              tab['icon'],
+                              color: isActive ? cs.primary : cs.onSurfaceVariant,
+                              size: isActive ? 26 : 24,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              tab['label'],
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                                color: isActive ? cs.primary : cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                }),
+                    );
+                  }),
+                ),
               ),
             ],
           ),
@@ -432,20 +532,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final lib = context.watch<LibraryProvider>();
 
     return Scaffold(
-      extendBody: true, // ← يجعل الـ body يمتد تحت الشريط فتختفي الطبقة خلفه
-      appBar: AppBar(
-        title: const Text('SR Player'),
-        centerTitle: false,
-        titleTextStyle: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 22),
-        actions: [
-          AnimatedBuilder(
-            animation: _rotateAnimation,
-            builder: (context, child) => Transform.rotate(angle: _rotateAnimation.value * 3.14159, child: child),
-            child: IconButton(icon: const Icon(Symbols.grid_view_rounded), onPressed: _onViewOptionsPressed, tooltip: 'خيارات العرض والفرز'),
-          ),
-          IconButton(icon: const Icon(Symbols.search_rounded), onPressed: () => showSearch(context: context, delegate: VideoSearchDelegate(lib.videos, _openPlayer))),
-        ],
-      ),
+      extendBody: true,
+      // تبديل AppBar حسب حالة التحديد
+      appBar: _selectedVideo != null
+          ? _buildSelectionAppBar()
+          : AppBar(
+              title: const Text('SR Player'),
+              centerTitle: false,
+              titleTextStyle: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 22),
+              actions: [
+                AnimatedBuilder(
+                  animation: _rotateAnimation,
+                  builder: (context, child) => Transform.rotate(angle: _rotateAnimation.value * 3.14159, child: child),
+                  child: IconButton(icon: const Icon(Symbols.grid_view_rounded), onPressed: _onViewOptionsPressed, tooltip: 'خيارات العرض والفرز'),
+                ),
+                IconButton(icon: const Icon(Symbols.search_rounded), onPressed: () => showSearch(context: context, delegate: VideoSearchDelegate(lib.videos, _openPlayer))),
+              ],
+            ),
       body: NotificationListener<ScrollUpdateNotification>(
         onNotification: (notification) {
           if (notification.dragDetails != null) {
@@ -453,13 +556,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           }
           return false;
         },
-        child: IndexedStack(
-          index: _currentIndex,
-          children: [
-            RefreshIndicator(onRefresh: _refreshLibrary, child: LibraryTab(videos: _sorted(lib.videos), gridView: settings.libraryGridView, onOpen: _openPlayer, onMore: (v) => _buildVideoOptionsSheet(v), loading: lib.loading)),
-            _buildFoldersTab(lib, settings),
-            RefreshIndicator(onRefresh: _refreshLibrary, child: RecentTab(paths: lib.recentPaths, all: lib.videos, gridView: settings.recentGridView, onOpen: _openByPath, onClear: lib.clearRecent)),
-          ],
+        // عند النقر خارج القوائم يتم إلغاء التحديد
+        child: GestureDetector(
+          onTap: () {
+            if (_selectedVideo != null) {
+              setState(() => _selectedVideo = null);
+            }
+          },
+          child: IndexedStack(
+            index: _currentIndex,
+            children: [
+              RefreshIndicator(
+                onRefresh: _refreshLibrary, 
+                // تغيير onMore لتقوم بتحديد الفيديو بدلاً من فتح النافذة السفلية
+                child: LibraryTab(videos: _sorted(lib.videos), gridView: settings.libraryGridView, onOpen: _openPlayer, onMore: (v) => setState(() => _selectedVideo = v), loading: lib.loading)
+              ),
+              _buildFoldersTab(lib, settings),
+              RefreshIndicator(
+                onRefresh: _refreshLibrary, 
+                child: RecentTab(paths: lib.recentPaths, all: lib.videos, gridView: settings.recentGridView, onOpen: _openByPath, onClear: lib.clearRecent)
+              ),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildFloatingNavBar(),
@@ -487,7 +605,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           const SizedBox(width: 8),
         ])),
         const Divider(height: 1),
-        Expanded(child: LibraryTab(videos: folderVideos, gridView: settings.foldersGridView, onOpen: _openPlayer, onMore: (v) => _buildVideoOptionsSheet(v), loading: false)),
+        // تعديل onMore هنا أيضاً لفتح شريط التحديد العلوي
+        Expanded(child: LibraryTab(videos: folderVideos, gridView: settings.foldersGridView, onOpen: _openPlayer, onMore: (v) => setState(() => _selectedVideo = v), loading: false)),
       ]);
     }
     return RefreshIndicator(onRefresh: _refreshLibrary, child: FoldersTab(byFolder: lib.byFolder, gridView: settings.foldersGridView, onTap: (folder) => setState(() => _browsingFolder = folder), onMore: _buildFolderOptionsSheet));
@@ -514,38 +633,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _sheetTile(icon: Symbols.swap_horiz_rounded, title: 'تحويل الكل (قريباً)', enabled: false),
       _sheetTile(icon: Symbols.music_note_rounded, title: 'استخراج الصوت (قريباً)', enabled: false),
       _sheetTile(icon: Symbols.image_rounded, title: 'إعادة توليد الصور (قريباً)', enabled: false),
-    ])))));
-  }
-
-  void _buildVideoOptionsSheet(VideoItem video) {
-    final cs = Theme.of(context).colorScheme;
-    final lib = context.read<LibraryProvider>();
-    final isHidden = lib.hiddenPaths.contains(video.path);
-    showModalBottomSheet(context: context, builder: (_) => SafeArea(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.only(bottom: 16), child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 12), child: Text(video.name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w500, fontSize: 14))),
-      const Divider(height: 1),
-      _sheetTile(icon: Symbols.play_arrow_rounded, title: 'تشغيل', iconBg: cs.primaryContainer, iconColor: cs.onPrimaryContainer, onTap: () { Navigator.pop(context); _openPlayer(video); }),
-      _sheetTile(icon: Symbols.info_rounded, title: 'معلومات', iconBg: cs.secondaryContainer, iconColor: cs.onSecondaryContainer, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: video))); }),
-      const Divider(height: 1),
-      _sheetTile(icon: Symbols.content_cut_rounded, title: 'قص الفيديو (قريباً)', enabled: false),
-      _sheetTile(icon: Symbols.swap_horiz_rounded, title: 'تحويل صيغة (قريباً)', enabled: false),
-      _sheetTile(icon: Symbols.music_note_rounded, title: 'استخراج الصوت (قريباً)', enabled: false),
-      _sheetTile(icon: Symbols.gif_rounded, title: 'صورة متحركة GIF (قريباً)', enabled: false),
-      const Divider(height: 1),
-      _sheetTile(icon: _isFavorite(video.path) ? Symbols.star_rounded : Symbols.star_outline_rounded, title: _isFavorite(video.path) ? 'إزالة من المفضلة' : 'إضافة للمفضلة', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); _toggleFavorite(video.path); }),
-      _sheetTile(icon: Symbols.playlist_add_rounded, title: 'إضافة إلى قائمة التشغيل', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); if (!_playlist.contains(video.path)) { _playlist.add(video.path); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت الإضافة إلى قائمة التشغيل'))); } else { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الملف موجود مسبقاً في القائمة'))); } }),
-      _sheetTile(icon: Symbols.drive_file_rename_outline_rounded, title: 'تغيير الاسم', iconBg: cs.surfaceContainerHighest, iconColor: cs.onSurfaceVariant, onTap: () { Navigator.pop(context); _renameFile(video); }),
-      const Divider(height: 1),
-      _sheetTile(icon: Symbols.share_rounded, title: 'مشاركة', iconBg: cs.tertiaryContainer, iconColor: cs.onTertiaryContainer, onTap: () { Navigator.pop(context); Share.shareXFiles([XFile(video.path)], subject: video.name); }),
-      _sheetTile(icon: Symbols.content_copy_rounded, title: 'نسخ المسار', iconBg: cs.surfaceContainerHighest, iconColor: cs.onSurfaceVariant, onTap: () { Navigator.pop(context); Clipboard.setData(ClipboardData(text: video.path)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نسخ المسار'))); }),
-      _sheetTile(icon: Symbols.folder_open_rounded, title: 'فتح في مدير الملفات', iconBg: cs.surfaceContainerHighest, iconColor: cs.onSurfaceVariant, onTap: () { Navigator.pop(context); _openInFileManager(video); }),
-      const Divider(height: 1),
-      _sheetTile(icon: Symbols.image_rounded, title: 'إعادة توليد الصورة (قريباً)', enabled: false),
-      _sheetTile(icon: Symbols.subtitles_rounded, title: 'استخراج الترجمة (قريباً)', enabled: false),
-      _sheetTile(icon: Symbols.bar_chart_rounded, title: 'خصائص الترميز (قريباً)', enabled: false),
-      const Divider(height: 1),
-      _sheetTile(icon: isHidden ? Symbols.visibility_rounded : Symbols.visibility_off_rounded, title: isHidden ? 'إلغاء الإخفاء' : 'إخفاء', iconBg: isHidden ? cs.secondaryContainer : cs.errorContainer, iconColor: isHidden ? cs.onSecondaryContainer : cs.onErrorContainer, onTap: () { Navigator.pop(context); if (isHidden) { lib.unhideVideo(video.path); } else { lib.hideVideo(video.path); } }),
-      _sheetTile(icon: Symbols.delete_rounded, title: 'حذف', iconBg: cs.errorContainer, iconColor: cs.onErrorContainer, onTap: () { Navigator.pop(context); _confirmDeleteFile(video); }),
     ])))));
   }
 
