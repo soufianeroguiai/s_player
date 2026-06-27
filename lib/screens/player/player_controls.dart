@@ -49,51 +49,38 @@ class PlayerTopBar extends StatelessWidget {
             onPressed: onBack,
           ),
 
-          // اسم الفيديو
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: screenWidth * 0.25),
-            child: _MarqueeText(
-              text: videoName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
-              ),
-            ),
+          // اسم الفيديو (يظهر كاملاً عند الضغط)
+          _VideoTitleWidget(
+            videoName: videoName,
+            screenWidth: screenWidth,
           ),
 
-          // فراغ كبير بين الاسم والأيقونات (Expanded)
-          const Expanded(child: SizedBox.shrink()),
+          // Spacer للقيام بدفع باقي الأيقونات إلى أقصى اليمين
+          const Spacer(),
 
           // السهم الأيسر (مفتاح الاختصارات)
           _AnimatedIconBtn(
-            icon: Symbols.keyboard_arrow_left_rounded,
+            // يتغير السهم إلى اليمين عند فتح الاختصارات لتوضيح إمكانية الإغلاق
+            icon: isQuickActionsActive 
+                ? Symbols.keyboard_arrow_right_rounded 
+                : Symbols.keyboard_arrow_left_rounded,
             color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
             onTap: onQuickActions,
           ),
 
-          // شريط الاختصارات المنزلق
-          AnimatedContainer(
+          // شريط الاختصارات المنزلق ذو الحجم الديناميكي
+          AnimatedSize(
             duration: const Duration(milliseconds: 300),
-            width: isQuickActionsActive ? screenWidth * 0.35 : 0,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              border: isQuickActionsActive
-                  ? Border(
-                      left: BorderSide(color: Colors.white24, width: 1),
-                    )
-                  : null,
-            ),
+            curve: Curves.easeInOut,
+            alignment: Alignment.centerLeft,
             child: isQuickActionsActive
-                ? SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Row(children: quickActionWidgets),
-                    ),
+                ? Row(
+                    // يأخذ الـ Row مساحة الأيقونات فقط ولا يترك أي فراغ
+                    mainAxisSize: MainAxisSize.min, 
+                    children: quickActionWidgets,
                   )
-                : const SizedBox.shrink(),
+                // SizedBox بحجم الأيقونة تقريباً للحفاظ على ارتفاع الـ Row وعدم حدوث قفزة
+                : const SizedBox(height: 48, width: 0),
           ),
 
           // أيقونة الصوت
@@ -117,6 +104,84 @@ class PlayerTopBar extends StatelessWidget {
             onTap: onSettingsMenu,
           ),
         ]),
+      ),
+    );
+  }
+}
+
+// ــــــــــــــــــــــــــــــ _VideoTitleWidget (عرض الاسم كاملاً عند الضغط) ــــــــــــــــــــــــــــــ
+class _VideoTitleWidget extends StatefulWidget {
+  final String videoName;
+  final double screenWidth;
+
+  const _VideoTitleWidget({required this.videoName, required this.screenWidth});
+
+  @override
+  State<_VideoTitleWidget> createState() => _VideoTitleWidgetState();
+}
+
+class _VideoTitleWidgetState extends State<_VideoTitleWidget> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      // تفعيل الحالة عند وضع الإصبع
+      onTapDown: (_) => setState(() => _isPressed = true),
+      // إلغاء الحالة عند رفع الإصبع
+      onTapUp: (_) => setState(() => _isPressed = false),
+      // إلغاء الحالة إذا تحرك الإصبع خارج المنطقة
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: Stack(
+        // السماح للنص الكامل بالخروج من حدود الـ Stack للظهور فوق الأيقونات
+        clipBehavior: Clip.none, 
+        alignment: Alignment.centerLeft,
+        children: [
+          // 1. النص الأصلي (يختفي عند الضغط)
+          Opacity(
+            opacity: _isPressed ? 0.0 : 1.0,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: widget.screenWidth * 0.3),
+              child: _MarqueeText(
+                text: widget.videoName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+                ),
+              ),
+            ),
+          ),
+          
+          // 2. النص الكامل المنبثق (يظهر فقط عند الضغط)
+          if (_isPressed)
+            Positioned(
+              left: -8, // لتعويض المسافة الفارغة (Padding) وجعله متناسقاً
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.95), // خلفية داكنة جداً للوضوح
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white24, width: 1),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4))
+                  ],
+                ),
+                // السماح للنافذة المنبثقة بأخذ مساحة تصل إلى 75% من الشاشة
+                constraints: BoxConstraints(maxWidth: widget.screenWidth * 0.75),
+                child: Text(
+                  widget.videoName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  softWrap: true, // يسمح للنص الطويل بالنزول لسطر جديد
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
