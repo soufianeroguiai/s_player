@@ -12,7 +12,7 @@ class PlayerTopBar extends StatelessWidget {
   final bool isAudioActive;
   final bool isSubtitleActive;
   final bool isQuickActionsActive;
-  final List<Widget> quickActionWidgets;
+  final List<Widget> quickActionWidgets; // أيقونات الاختصارات
 
   const PlayerTopBar({
     super.key,
@@ -43,50 +43,59 @@ class PlayerTopBar extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Row(children: [
+          // زر الرجوع
           IconButton(
             icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white),
             onPressed: onBack,
           ),
-          if (!isQuickActionsActive)
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: screenWidth * 0.25),
-              child: _MarqueeText(
-                text: videoName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
-                ),
+
+          // اسم الفيديو (دائماً ظاهر)
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: screenWidth * 0.25),
+            child: _MarqueeText(
+              text: videoName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+              ),
+            ),
+          ),
+
+          // منطقة الاختصارات أو Spacer
+          if (isQuickActionsActive)
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: quickActionWidgets),
               ),
             )
           else
-            Expanded(
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: isQuickActionsActive ? 1.0 : 0.0,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: quickActionWidgets,
-                ),
-              ),
-            ),
-          const Spacer(),
+            const Spacer(),
+
+          // السهم الأيسر للتحكم بالإجراءات السريعة
           _AnimatedIconBtn(
             icon: Symbols.keyboard_arrow_left_rounded,
             color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
             onTap: onQuickActions,
           ),
+
+          // الصوت
           _AnimatedIconBtn(
             icon: Symbols.graphic_eq_rounded,
             color: isAudioActive ? Colors.amberAccent : Colors.white70,
             onTap: onAudioMenu,
           ),
+
+          // الترجمة
           _AnimatedIconBtn(
             icon: isSubtitleActive ? Symbols.closed_caption_rounded : Symbols.closed_caption_off_rounded,
             color: isSubtitleActive ? Colors.amberAccent : Colors.white60,
             onTap: onSubtitleMenu,
           ),
+
+          // المزيد
           _AnimatedIconBtn(
             icon: Symbols.more_vert_rounded,
             color: Colors.white70,
@@ -98,6 +107,7 @@ class PlayerTopBar extends StatelessWidget {
   }
 }
 
+// ---------- _MarqueeText (نسخة التمرير المستمر) ----------
 class _MarqueeText extends StatefulWidget {
   final String text;
   final TextStyle style;
@@ -108,12 +118,10 @@ class _MarqueeText extends StatefulWidget {
 }
 
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
-  final GlobalKey _key = GlobalKey();
   late ScrollController _scrollController;
   double _textWidth = 0;
   bool _needsMarquee = false;
   Timer? _timer;
-  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
@@ -152,97 +160,37 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     });
   }
 
-  void _stopScroll() {
-    _timer?.cancel();
-  }
-
-  void _resumeScroll() {
-    if (_needsMarquee) _startScroll();
-  }
-
-  void _showTooltip() {
-    _stopScroll();
-    _overlayEntry?.remove();
-    final renderBox = _key.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-    final offset = renderBox.localToGlobal(Offset.zero);
-    final double tooltipHeight = 48;
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Stack(
-        children: [
-          Positioned(
-            left: offset.dx,
-            top: offset.dy - tooltipHeight - 8,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
-                ),
-                child: Text(
-                  widget.text,
-                  style: widget.style.copyWith(
-                    color: Colors.black87,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    shadows: [],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    Overlay.of(context).insert(_overlayEntry!);
-  }
-
-  void _hideTooltip() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-    _resumeScroll();
-  }
-
   @override
   void dispose() {
     _timer?.cancel();
-    _overlayEntry?.remove();
     _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final child = _needsMarquee
-        ? SizedBox(
-            key: _key,
-            height: 20,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              controller: _scrollController,
-              physics: const NeverScrollableScrollPhysics(),
-              child: Row(
-                children: [
-                  Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
-                  const SizedBox(width: 40),
-                  Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
-                ],
-              ),
-            ),
-          )
-        : Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
-
-    return GestureDetector(
-      onLongPress: _showTooltip,
-      onLongPressUp: _hideTooltip,
-      child: child,
+    if (!_needsMarquee) {
+      return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    return SizedBox(
+      height: 20,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        controller: _scrollController,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Row(
+          children: [
+            Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+            const SizedBox(width: 40),
+            Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+          ],
+        ),
+      ),
     );
   }
 }
 
+// ---------- _AnimatedIconBtn (زر مع تأثير ضغط) ----------
 class _AnimatedIconBtn extends StatefulWidget {
   final IconData icon;
   final Color color;
@@ -311,6 +259,7 @@ class _AnimatedIconBtnState extends State<_AnimatedIconBtn>
   }
 }
 
+// ---------- PlayerBottomBar (شريط التحكم السفلي) ----------
 class PlayerBottomBar extends StatefulWidget {
   final Duration position;
   final Duration duration;
@@ -436,6 +385,7 @@ class _PlayerBottomBarState extends State<PlayerBottomBar> {
   }
 }
 
+// ---------- _PlayBtn (زر التشغيل مع تدوير) ----------
 class _PlayBtn extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onTap;
@@ -502,6 +452,7 @@ class _PlayBtnState extends State<_PlayBtn> with SingleTickerProviderStateMixin 
   }
 }
 
+// ---------- _BottomBtn (زر سفلي صغير) ----------
 class _BottomBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;

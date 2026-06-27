@@ -621,19 +621,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  Widget _buildFloatingActions() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _qaBtn(Symbols.favorite_rounded, _isFavorite(widget.video.path) ? Colors.amber : Colors.white70, _toggleFavorite),
-        const SizedBox(height: 12),
-        _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
-        const SizedBox(height: 12),
-        _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
-      ],
-    );
-  }
-
   Widget _qaBtn(IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -788,7 +775,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                // نافذة القفل في الأسفل (بعرض محدود، الأيقونة تتحرك داخله فقط)
+                // نافذة القفل (في الأسفل، عرض محدود، الأيقونة تتحرك داخله)
                 if (_isLocked)
                   Positioned(
                     bottom: 40,
@@ -1012,14 +999,27 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       isAudioActive: _currentMenu == ActiveMenu.audio,
                       isSubtitleActive: _currentMenu == ActiveMenu.subtitles,
                       isQuickActionsActive: _showQuickActions,
+                      quickActionWidgets: _showQuickActions
+                          ? [
+                              _qaBtn(Symbols.camera_rounded, Colors.white70, _captureScreenshot),
+                              const SizedBox(width: 10),
+                              _qaBtn(
+                                _isFavorite(widget.video.path)
+                                    ? Symbols.favorite_rounded
+                                    : Symbols.favorite_outline_rounded,
+                                _isFavorite(widget.video.path) ? Colors.amber : Colors.white70,
+                                _toggleFavorite,
+                              ),
+                              const SizedBox(width: 10),
+                              _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
+                              const SizedBox(width: 10),
+                              _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
+                            ]
+                          : [],
                     ),
                   ),
-                  if (_showQuickActions)
-                    Positioned(
-                      top: 80,
-                      right: 20,
-                      child: _buildFloatingActions(),
-                    ),
+                  // حذفنا كتلة _showQuickActions المنفصلة لأن الأيقونات صارت في الشريط العلوي
+
                   Positioned(
                     bottom: 0,
                     left: 0,
