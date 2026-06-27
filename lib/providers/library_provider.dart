@@ -84,6 +84,7 @@ class LibraryProvider extends ChangeNotifier {
         _positions[video.path] = ms;
       }
     }
+    notifyListeners(); // ✅ إشعار الواجهة لتحديث أشرطة التقدم
   }
 
   Future<void> _saveVideosToCache() async {
@@ -149,8 +150,8 @@ class LibraryProvider extends ChangeNotifier {
 
       const batchSize = 12;
       for (final album in albums) {
-        // تجاهل الألبومات الافتراضية مثل "Recent" لتفادي التكرار
-        if (album.name == 'Recent' || album.isVirtual) continue;
+        // تجاهل الألبوم الوهمي "Recent" (ألبوم النظام الافتراضي)
+        if (album.name == 'Recent') continue;
 
         final count = await album.assetCountAsync;
         final assets = await album.getAssetListRange(start: 0, end: count);
