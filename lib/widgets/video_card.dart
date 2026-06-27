@@ -129,28 +129,32 @@ class _ResumeProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lib = context.read<LibraryProvider>();
-    final position = lib.getCachedPosition(video.path);
-    if (position == null || position.inMilliseconds <= 0) {
-      return const SizedBox.shrink();
-    }
+    // ✅ استخدام Consumer لإعادة البناء تلقائياً عند تغير LibraryProvider
+    return Consumer<LibraryProvider>(
+      builder: (context, lib, _) {
+        final position = lib.getCachedPosition(video.path);
+        if (position == null || position.inMilliseconds <= 0) {
+          return const SizedBox.shrink();
+        }
 
-    final totalDuration = video.duration;
-    if (totalDuration.inMilliseconds <= 0) return const SizedBox.shrink();
+        final totalDuration = video.duration;
+        if (totalDuration.inMilliseconds <= 0) return const SizedBox.shrink();
 
-    final progress = (position.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
-    final cs = Theme.of(context).colorScheme;
+        final progress = (position.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
+        final cs = Theme.of(context).colorScheme;
 
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: LinearProgressIndicator(
-        value: progress,
-        backgroundColor: Colors.transparent,
-        valueColor: AlwaysStoppedAnimation<Color>(cs.primary.withOpacity(0.8)),
-        minHeight: 3,
-      ),
+        return Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.transparent,
+            valueColor: AlwaysStoppedAnimation<Color>(cs.primary.withOpacity(0.8)),
+            minHeight: 3,
+          ),
+        );
+      },
     );
   }
 }

@@ -149,6 +149,9 @@ class LibraryProvider extends ChangeNotifier {
 
       const batchSize = 12;
       for (final album in albums) {
+        // تجاهل الألبومات الافتراضية مثل "Recent" لتفادي التكرار
+        if (album.name == 'Recent' || album.isVirtual) continue;
+
         final count = await album.assetCountAsync;
         final assets = await album.getAssetListRange(start: 0, end: count);
 
