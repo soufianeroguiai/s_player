@@ -47,6 +47,7 @@ class LibraryTab extends StatelessWidget {
                 video: v,
                 isSelected: selectedVideos.contains(v),
                 onTap: selectionMode ? () => onSelectionToggle(v) : () => onOpen(v),
+                onMoreTap: () => onMore(v),                // ✅ يظهر زر النقاط الثلاث
                 onLongPress: () => onSelectionToggle(v),
               );
             })
@@ -59,6 +60,7 @@ class LibraryTab extends StatelessWidget {
                 video: v,
                 isSelected: selectedVideos.contains(v),
                 onTap: selectionMode ? () => onSelectionToggle(v) : () => onOpen(v),
+                onMoreTap: () => onMore(v),                // ✅ يظهر زر النقاط الثلاث
                 onLongPress: () => onSelectionToggle(v),
               );
             });
