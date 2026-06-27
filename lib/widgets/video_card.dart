@@ -9,16 +9,26 @@ class VideoCard extends StatelessWidget {
   final VideoItem video;
   final VoidCallback onTap;
   final VoidCallback? onMoreTap;
+  final VoidCallback? onLongPress;
+  final bool isSelected;
 
-  const VideoCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+  const VideoCard({
+    super.key,
+    required this.video,
+    required this.onTap,
+    this.onMoreTap,
+    this.onLongPress,
+    this.isSelected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
-      onLongPress: onMoreTap,
-      child: Padding(
+      onLongPress: onLongPress ?? onMoreTap,
+      child: Container(
+        color: isSelected ? cs.primary.withOpacity(0.15) : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
@@ -40,19 +50,28 @@ class VideoCard extends StatelessWidget {
                           style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
                     ),
                   ),
-                  // ✅ التعديل: تم تغليف شريط التقدم بـ Positioned ليكون ابناً مباشراً للـ Stack هنا
                   Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
+                    bottom: 0, left: 0, right: 0,
                     child: _ResumeProgressBar(video: video),
                   ),
+                  // ✅ علامة الصح عند التحديد
+                  if (isSelected)
+                    Positioned(
+                      top: 4, right: 4,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: cs.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Symbols.check_rounded, color: Colors.white, size: 18),
+                      ),
+                    ),
                 ]),
               ),
             ),
             const SizedBox(width: 14),
             Expanded(child: _Info(video: video)),
-            if (onMoreTap != null)
+            if (onMoreTap != null && onLongPress == null)
               IconButton(
                 icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 22),
                 onPressed: onMoreTap,
@@ -70,17 +89,27 @@ class VideoGridCard extends StatelessWidget {
   final VideoItem video;
   final VoidCallback onTap;
   final VoidCallback? onMoreTap;
+  final VoidCallback? onLongPress;
+  final bool isSelected;
 
-  const VideoGridCard({super.key, required this.video, required this.onTap, this.onMoreTap});
+  const VideoGridCard({
+    super.key,
+    required this.video,
+    required this.onTap,
+    this.onMoreTap,
+    this.onLongPress,
+    this.isSelected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Card(
       clipBehavior: Clip.antiAlias,
+      color: isSelected ? cs.primary.withOpacity(0.15) : null,
       child: InkWell(
         onTap: onTap,
-        onLongPress: onMoreTap,
+        onLongPress: onLongPress ?? onMoreTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -100,13 +129,22 @@ class VideoGridCard extends StatelessWidget {
                         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
                   ),
                 ),
-                // ✅ التعديل: تم تغليف شريط التقدم بـ Positioned ليكون ابناً مباشراً للـ Stack هنا أيضاً
                 Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
+                  bottom: 0, left: 0, right: 0,
                   child: _ResumeProgressBar(video: video),
                 ),
+                // ✅ علامة الصح عند التحديد
+                if (isSelected)
+                  Positioned(
+                    top: 6, right: 6,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: cs.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Symbols.check_rounded, color: Colors.white, size: 20),
+                    ),
+                  ),
               ]),
             ),
             Padding(
@@ -119,7 +157,7 @@ class VideoGridCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(video.formattedSize, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 10)),
                 ])),
-                if (onMoreTap != null)
+                if (onMoreTap != null && onLongPress == null)
                   IconButton(
                     icon: Icon(Symbols.more_vert_rounded, color: cs.onSurfaceVariant, size: 18),
                     onPressed: onMoreTap,
@@ -154,7 +192,6 @@ class _ResumeProgressBar extends StatelessWidget {
         final progress = (position.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
         final cs = Theme.of(context).colorScheme;
 
-        // ✅ التعديل: إرجاع الـ Indicator مباشرة بدون تغليفه بـ Positioned داخلي
         return LinearProgressIndicator(
           value: progress,
           backgroundColor: Colors.transparent,

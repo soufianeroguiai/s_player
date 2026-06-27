@@ -10,6 +10,8 @@ class LibraryTab extends StatelessWidget {
   final void Function(VideoItem) onOpen;
   final void Function(VideoItem) onMore;
   final bool loading;
+  final Set<VideoItem> selectedVideos;
+  final void Function(VideoItem) onSelectionToggle;
 
   const LibraryTab({
     super.key,
@@ -18,6 +20,8 @@ class LibraryTab extends StatelessWidget {
     required this.onOpen,
     required this.onMore,
     this.loading = false,
+    this.selectedVideos = const {},
+    required this.onSelectionToggle,
   });
 
   @override
@@ -28,19 +32,36 @@ class LibraryTab extends StatelessWidget {
     if (videos.isEmpty) {
       return const EmptyState('ما لقينا فيديوهات', Symbols.video_library_rounded);
     }
+
+    final bool selectionMode = selectedVideos.isNotEmpty;
+
     return gridView
         ? GridView.builder(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
             itemCount: videos.length,
-            itemBuilder: (_, i) =>
-                VideoGridCard(video: videos[i], onTap: () => onOpen(videos[i]), onMoreTap: () => onMore(videos[i])))
+            itemBuilder: (_, i) {
+              final v = videos[i];
+              return VideoGridCard(
+                video: v,
+                isSelected: selectedVideos.contains(v),
+                onTap: selectionMode ? () => onSelectionToggle(v) : () => onOpen(v),
+                onLongPress: () => onSelectionToggle(v),
+              );
+            })
         : ListView.builder(
             padding: const EdgeInsets.only(top: 4, bottom: 90),
             itemCount: videos.length,
-            itemBuilder: (_, i) =>
-                VideoCard(video: videos[i], onTap: () => onOpen(videos[i]), onMoreTap: () => onMore(videos[i])));
+            itemBuilder: (_, i) {
+              final v = videos[i];
+              return VideoCard(
+                video: v,
+                isSelected: selectedVideos.contains(v),
+                onTap: selectionMode ? () => onSelectionToggle(v) : () => onOpen(v),
+                onLongPress: () => onSelectionToggle(v),
+              );
+            });
   }
 }
 
@@ -50,6 +71,8 @@ class RecentTab extends StatelessWidget {
   final bool gridView;
   final void Function(String) onOpen;
   final VoidCallback onClear;
+  final Set<VideoItem> selectedVideos;
+  final void Function(VideoItem) onSelectionToggle;
 
   const RecentTab({
     super.key,
@@ -58,6 +81,8 @@ class RecentTab extends StatelessWidget {
     required this.gridView,
     required this.onOpen,
     required this.onClear,
+    this.selectedVideos = const {},
+    required this.onSelectionToggle,
   });
 
   List<VideoItem> get list {
@@ -83,6 +108,8 @@ class RecentTab extends StatelessWidget {
     final items = list;
     if (items.isEmpty) return const EmptyState('ما شفتي فيديو بعد', Symbols.history_rounded);
 
+    final bool selectionMode = selectedVideos.isNotEmpty;
+
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
@@ -105,15 +132,27 @@ class RecentTab extends StatelessWidget {
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 10, mainAxisSpacing: 10),
                 itemCount: items.length,
-                itemBuilder: (_, i) => VideoGridCard(
-                    video: items[i], onTap: () => onOpen(items[i].path), onMoreTap: null),
-              )
+                itemBuilder: (_, i) {
+                  final v = items[i];
+                  return VideoGridCard(
+                    video: v,
+                    isSelected: selectedVideos.contains(v),
+                    onTap: selectionMode ? () => onSelectionToggle(v) : () => onOpen(v.path),
+                    onLongPress: () => onSelectionToggle(v),
+                  );
+                })
             : ListView.builder(
                 padding: const EdgeInsets.only(bottom: 90),
                 itemCount: items.length,
-                itemBuilder: (_, i) => VideoCard(
-                    video: items[i], onTap: () => onOpen(items[i].path)),
-              ),
+                itemBuilder: (_, i) {
+                  final v = items[i];
+                  return VideoCard(
+                    video: v,
+                    isSelected: selectedVideos.contains(v),
+                    onTap: selectionMode ? () => onSelectionToggle(v) : () => onOpen(v.path),
+                    onLongPress: () => onSelectionToggle(v),
+                  );
+                }),
       ),
     ]);
   }

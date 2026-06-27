@@ -38,8 +38,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isFabVisible = true;
   Timer? _showFabTimer;
   
-  // المتغير الخاص بتحديد الفيديو لظهور الشريط العلوي
-  VideoItem? _selectedVideo;
+  // تحديد متعدد
+  final Set<VideoItem> _selectedVideos = {};
 
   // تحديث قائمة التبويبات لتشمل العناوين
   final List<Map<String, dynamic>> _tabs = const [
@@ -343,60 +343,104 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // ــــــــــــــــــ الشريط العلوي عند التحديد (الضغط المطول) ــــــــــــــــــ
+  // تبديل تحديد عنصر
+  void _toggleSelection(VideoItem video) {
+    setState(() {
+      if (_selectedVideos.contains(video)) {
+        _selectedVideos.remove(video);
+      } else {
+        _selectedVideos.add(video);
+      }
+    });
+  }
+
+  // الدخول إلى وضع التحديد (يُستدعى بالضغط المطول)
+  void _enterSelectionMode(VideoItem video) {
+    _toggleSelection(video);
+  }
+
+  // ــــــــــــــــــ الشريط العلوي عند التحديد (يدعم متعدد) ــــــــــــــــــ
   PreferredSizeWidget _buildSelectionAppBar() {
     final cs = Theme.of(context).colorScheme;
+    final lib = context.read<LibraryProvider>();
+    final totalCount = lib.videos.length; // يمكن تعديلها حسب التبويب الحالي
+    final selectedCount = _selectedVideos.length;
+    final isSingle = selectedCount == 1;
+    final firstVideo = _selectedVideos.first;
+
     return AppBar(
       backgroundColor: cs.primaryContainer,
       leading: IconButton(
         icon: Icon(Symbols.close_rounded, color: cs.onPrimaryContainer),
-        onPressed: () => setState(() => _selectedVideo = null), // إغلاق التحديد
+        onPressed: () => setState(() => _selectedVideos.clear()),
       ),
       title: Text(
-        'عنصر واحد محدد',
+        '$selectedCount / $totalCount محدد',
         style: TextStyle(color: cs.onPrimaryContainer, fontSize: 18, fontWeight: FontWeight.bold),
       ),
       actions: [
         IconButton(
+          icon: Icon(Symbols.play_arrow_rounded, color: cs.onPrimaryContainer),
+          tooltip: 'تشغيل',
+          onPressed: () {
+            if (_selectedVideos.isNotEmpty) {
+              _openPlayer(firstVideo);
+              _selectedVideos.clear();
+            }
+          },
+        ),
+        IconButton(
           icon: Icon(Symbols.share_rounded, color: cs.onPrimaryContainer),
           tooltip: 'مشاركة',
           onPressed: () {
-            Share.shareXFiles([XFile(_selectedVideo!.path)], subject: _selectedVideo!.name);
-            setState(() => _selectedVideo = null);
+            if (_selectedVideos.isNotEmpty) {
+              Share.shareXFiles(
+                _selectedVideos.map((v) => XFile(v.path)).toList(),
+                subject: 'مشاركة ملفات',
+              );
+              _selectedVideos.clear();
+            }
           },
         ),
         IconButton(
           icon: Icon(Symbols.delete_rounded, color: cs.onPrimaryContainer),
           tooltip: 'حذف',
           onPressed: () {
-            _confirmDeleteFile(_selectedVideo!);
-            setState(() => _selectedVideo = null);
+            _confirmDeleteMultiple(_selectedVideos.toList());
+            _selectedVideos.clear();
           },
         ),
-        IconButton(
-          icon: Icon(Symbols.info_rounded, color: cs.onPrimaryContainer),
-          tooltip: 'معلومات',
-          onPressed: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: _selectedVideo!)));
-            setState(() => _selectedVideo = null);
-          },
-        ),
+        if (isSingle)
+          IconButton(
+            icon: Icon(Symbols.info_rounded, color: cs.onPrimaryContainer),
+            tooltip: 'معلومات',
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: firstVideo)));
+              _selectedVideos.clear();
+            },
+          ),
         PopupMenuButton<String>(
           icon: Icon(Symbols.more_vert_rounded, color: cs.onPrimaryContainer),
           tooltip: 'المزيد',
           onSelected: (value) {
             if (value == 'rename') {
-              _renameFile(_selectedVideo!);
+              if (isSingle) {
+                _renameFile(firstVideo);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يمكن إعادة تسمية عناصر متعددة')));
+              }
             } else if (value == 'hide') {
-              context.read<LibraryProvider>().hideVideo(_selectedVideo!.path);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إخفاء الملف')));
+              for (final v in _selectedVideos) {
+                context.read<LibraryProvider>().hideVideo(v.path);
+              }
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إخفاء ${_selectedVideos.length} ملف')));
             } else if (value == 'move') {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ميزة نقل الملف (قريباً)')));
             }
-            setState(() => _selectedVideo = null);
+            _selectedVideos.clear();
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: 'rename', child: Text('إعادة تسمية')),
+            if (isSingle) const PopupMenuItem(value: 'rename', child: Text('إعادة تسمية')),
             const PopupMenuItem(value: 'hide', child: Text('إخفاء')),
             const PopupMenuItem(value: 'move', child: Text('نقل ملف')),
           ],
@@ -405,7 +449,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ــــــــــــــــــ الشريط السفلي التفاعلي (السحب والأسماء) ــــــــــــــــــ
+  // مربع حوار حذف متعدد
+  void _confirmDeleteMultiple(List<VideoItem> videos) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف الملفات'),
+        content: Text('هل أنت متأكد من حذف ${videos.length} فيديو؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              for (final v in videos) {
+                final file = File(v.path);
+                if (file.existsSync()) file.deleteSync();
+              }
+              context.read<LibraryProvider>().scan();
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف ${videos.length} فيديو')));
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ــــــــــــــــــ الشريط السفلي التفاعلي (لم يتغير) ــــــــــــــــــ
   Widget _buildFloatingNavBar() {
     final cs = Theme.of(context).colorScheme;
     final width = MediaQuery.of(context).size.width;
@@ -416,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Container(
-        height: 70, // زيادة الارتفاع قليلاً ليتسع للنص
+        height: 70,
         decoration: BoxDecoration(
           color: cs.surface.withOpacity(0.90),
           borderRadius: BorderRadius.circular(32),
@@ -434,7 +504,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // الحقل الأزرق المتحرك
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOut,
@@ -449,19 +518,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 ),
               ),
-              // التقاط إيماءة السحب (GestureDetector)
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onHorizontalDragUpdate: (details) {
                   int newIndex = (details.localPosition.dx / tabWidth).floor().clamp(0, 3);
-                  // تحديث الواجهة فوراً أثناء السحب ليتغير التبويب (ما عدا أيقونة المزيد)
                   if (newIndex != _currentIndex && newIndex != 3) {
                     setState(() => _currentIndex = newIndex);
                   }
                 },
                 onHorizontalDragEnd: (details) {
                   int finalIndex = (details.localPosition.dx / tabWidth).floor().clamp(0, 3);
-                  // إذا أفلت إصبعه فوق "المزيد"، قم بفتح القائمة
                   if (finalIndex == 3) {
                     _showMoreMenu();
                   }
@@ -530,11 +596,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final cs = Theme.of(context).colorScheme;
     final settings = context.watch<SettingsProvider>();
     final lib = context.watch<LibraryProvider>();
+    final bool isSelectionMode = _selectedVideos.isNotEmpty;
 
     return Scaffold(
       extendBody: true,
-      // تبديل AppBar حسب حالة التحديد
-      appBar: _selectedVideo != null
+      appBar: isSelectionMode
           ? _buildSelectionAppBar()
           : AppBar(
               title: const Text('SR Player'),
@@ -556,32 +622,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           }
           return false;
         },
-        // عند النقر خارج القوائم يتم إلغاء التحديد
         child: GestureDetector(
           onTap: () {
-            if (_selectedVideo != null) {
-              setState(() => _selectedVideo = null);
+            if (isSelectionMode) {
+              setState(() => _selectedVideos.clear());
             }
           },
           child: IndexedStack(
             index: _currentIndex,
             children: [
               RefreshIndicator(
-                onRefresh: _refreshLibrary, 
-                // تغيير onMore لتقوم بتحديد الفيديو بدلاً من فتح النافذة السفلية
-                child: LibraryTab(videos: _sorted(lib.videos), gridView: settings.libraryGridView, onOpen: _openPlayer, onMore: (v) => setState(() => _selectedVideo = v), loading: lib.loading)
+                onRefresh: _refreshLibrary,
+                child: LibraryTab(
+                  videos: _sorted(lib.videos),
+                  gridView: settings.libraryGridView,
+                  onOpen: _openPlayer,
+                  onMore: (v) => _enterSelectionMode(v),
+                  loading: lib.loading,
+                  selectedVideos: _selectedVideos,
+                  onSelectionToggle: _toggleSelection,
+                ),
               ),
               _buildFoldersTab(lib, settings),
               RefreshIndicator(
-                onRefresh: _refreshLibrary, 
-                child: RecentTab(paths: lib.recentPaths, all: lib.videos, gridView: settings.recentGridView, onOpen: _openByPath, onClear: lib.clearRecent)
+                onRefresh: _refreshLibrary,
+                child: RecentTab(
+                  paths: lib.recentPaths,
+                  all: lib.videos,
+                  gridView: settings.recentGridView,
+                  onOpen: _openByPath,
+                  onClear: lib.clearRecent,
+                  selectedVideos: _selectedVideos,
+                  onSelectionToggle: _toggleSelection,
+                ),
               ),
             ],
           ),
         ),
       ),
       bottomNavigationBar: _buildFloatingNavBar(),
-      floatingActionButton: _isFabVisible
+      floatingActionButton: _isFabVisible && !isSelectionMode
           ? FloatingActionButton(
               onPressed: _playLastVideo,
               backgroundColor: cs.primary,
@@ -605,8 +685,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           const SizedBox(width: 8),
         ])),
         const Divider(height: 1),
-        // تعديل onMore هنا أيضاً لفتح شريط التحديد العلوي
-        Expanded(child: LibraryTab(videos: folderVideos, gridView: settings.foldersGridView, onOpen: _openPlayer, onMore: (v) => setState(() => _selectedVideo = v), loading: false)),
+        Expanded(child: LibraryTab(
+          videos: folderVideos,
+          gridView: settings.foldersGridView,
+          onOpen: _openPlayer,
+          onMore: (v) => _enterSelectionMode(v),
+          loading: false,
+          selectedVideos: _selectedVideos,
+          onSelectionToggle: _toggleSelection,
+        )),
       ]);
     }
     return RefreshIndicator(onRefresh: _refreshLibrary, child: FoldersTab(byFolder: lib.byFolder, gridView: settings.foldersGridView, onTap: (folder) => setState(() => _browsingFolder = folder), onMore: _buildFolderOptionsSheet));
