@@ -43,10 +43,12 @@ class PlayerTopBar extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Row(children: [
+          // زر الرجوع
           IconButton(
             icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white),
             onPressed: onBack,
           ),
+
           // اسم الفيديو
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: screenWidth * 0.25),
@@ -59,6 +61,16 @@ class PlayerTopBar extends StatelessWidget {
                 shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
               ),
             ),
+          ),
+
+          // فراغ كبير بين الاسم والأيقونات (Expanded)
+          const Expanded(child: SizedBox.shrink()),
+
+          // السهم الأيسر (مفتاح الاختصارات)
+          _AnimatedIconBtn(
+            icon: Symbols.keyboard_arrow_left_rounded,
+            color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
+            onTap: onQuickActions,
           ),
 
           // شريط الاختصارات المنزلق
@@ -84,24 +96,21 @@ class PlayerTopBar extends StatelessWidget {
                 : const SizedBox.shrink(),
           ),
 
-          const Spacer(),
-
-          // السهم الأيسر
-          _AnimatedIconBtn(
-            icon: Symbols.keyboard_arrow_left_rounded,
-            color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
-            onTap: onQuickActions,
-          ),
+          // أيقونة الصوت
           _AnimatedIconBtn(
             icon: Symbols.graphic_eq_rounded,
             color: isAudioActive ? Colors.amberAccent : Colors.white70,
             onTap: onAudioMenu,
           ),
+
+          // أيقونة الترجمة
           _AnimatedIconBtn(
             icon: isSubtitleActive ? Symbols.closed_caption_rounded : Symbols.closed_caption_off_rounded,
             color: isSubtitleActive ? Colors.amberAccent : Colors.white60,
             onTap: onSubtitleMenu,
           ),
+
+          // أيقونة المزيد
           _AnimatedIconBtn(
             icon: Symbols.more_vert_rounded,
             color: Colors.white70,
@@ -113,7 +122,7 @@ class PlayerTopBar extends StatelessWidget {
   }
 }
 
-// ---------- _MarqueeText (تمرير مستمر) ----------
+// ــــــــــــــــــــــــــــــ _MarqueeText (تمرير مستمر) ــــــــــــــــــــــــــــــ
 class _MarqueeText extends StatefulWidget {
   final String text;
   final TextStyle style;
@@ -196,7 +205,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   }
 }
 
-// ---------- _AnimatedIconBtn (أيقونة بتأثير ضغط) ----------
+// ــــــــــــــــــــــــــــــ _AnimatedIconBtn (أيقونة بتأثير ضغط) ــــــــــــــــــــــــــــــ
 class _AnimatedIconBtn extends StatefulWidget {
   final IconData icon;
   final Color color;
@@ -265,7 +274,7 @@ class _AnimatedIconBtnState extends State<_AnimatedIconBtn>
   }
 }
 
-// ---------- PlayerBottomBar (شريط التحكم السفلي) ----------
+// ــــــــــــــــــــــــــــــ PlayerBottomBar (شريط التحكم السفلي) ــــــــــــــــــــــــــــــ
 class PlayerBottomBar extends StatefulWidget {
   final Duration position;
   final Duration duration;
@@ -391,7 +400,7 @@ class _PlayerBottomBarState extends State<PlayerBottomBar> {
   }
 }
 
-// ---------- _PlayBtn (زر التشغيل مع دوران) ----------
+// ــــــــــــــــــــــــــــــ _PlayBtn (زر التشغيل مع دوران) ــــــــــــــــــــــــــــــ
 class _PlayBtn extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onTap;
@@ -458,7 +467,7 @@ class _PlayBtnState extends State<_PlayBtn> with SingleTickerProviderStateMixin 
   }
 }
 
-// ---------- _BottomBtn (أيقونة سفلية) ----------
+// ــــــــــــــــــــــــــــــ _BottomBtn (أيقونة سفلية) ــــــــــــــــــــــــــــــ
 class _BottomBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
