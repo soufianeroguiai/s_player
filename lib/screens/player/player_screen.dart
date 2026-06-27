@@ -664,7 +664,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       return Scaffold(backgroundColor: Colors.black, body: Video(controller: _controller));
     }
 
-    final bool controlsVisible = _showControls && !_isLocked && _currentMenu == ActiveMenu.none && !_showQuickActions;
+    // ✅ التصحيح: السماح بظهور الشريط عند تفعيل الاختصارات
+    final bool controlsVisible = _showControls && !_isLocked && _currentMenu == ActiveMenu.none;
 
     return PopScope(
       canPop: !_isLocked,
@@ -775,7 +776,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                // نافذة القفل
+                // نافذة القفل (في الأسفل، عرض محدود، الأيقونة تتحرك داخله)
                 if (_isLocked)
                   Positioned(
                     bottom: 40,
@@ -1006,7 +1007,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                               _qaBtn(
                                 _isFavorite(widget.video.path)
                                     ? Symbols.favorite_rounded
-                                    : Symbols.favorite_border, // ✅ الرمز الصحيح
+                                    : Symbols.favorite_border,
                                 _isFavorite(widget.video.path) ? Colors.amber : Colors.white70,
                                 _toggleFavorite,
                               ),
