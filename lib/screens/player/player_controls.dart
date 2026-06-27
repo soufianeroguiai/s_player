@@ -55,7 +55,6 @@ class PlayerTopBar extends StatelessWidget {
             screenWidth: screenWidth,
           ),
 
-          // Spacer للقيام بدفع باقي الأيقونات إلى أقصى اليمين
           const Spacer(),
 
           // السهم الأيسر (مفتاح الاختصارات)
@@ -67,15 +66,22 @@ class PlayerTopBar extends StatelessWidget {
             onTap: onQuickActions,
           ),
 
-          // شريط الاختصارات المنزلق ذو الحجم الديناميكي
+          // شريط الاختصارات المنزلق (تم استخدام تمرير أفقي لدعم الأيقونات المتعددة)
           AnimatedSize(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             alignment: Alignment.centerLeft,
             child: isQuickActionsActive
-                ? Row(
-                    mainAxisSize: MainAxisSize.min, 
-                    children: quickActionWidgets,
+                ? Container(
+                    constraints: BoxConstraints(maxWidth: screenWidth * 0.45),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min, 
+                        children: quickActionWidgets,
+                      ),
+                    ),
                   )
                 : const SizedBox(height: 48, width: 0),
           ),
@@ -133,7 +139,7 @@ class _VideoTitleWidgetState extends State<_VideoTitleWidget> {
           Opacity(
             opacity: _isPressed ? 0.0 : 1.0,
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: widget.screenWidth * 0.3),
+              constraints: BoxConstraints(maxWidth: widget.screenWidth * 0.25),
               child: _MarqueeText(
                 text: widget.videoName,
                 style: const TextStyle(
@@ -342,8 +348,6 @@ class PlayerBottomBar extends StatefulWidget {
   final VoidCallback onToggleFit;
   final VoidCallback onToggleLock;
   final VoidCallback onPip;
-  final VoidCallback onToggleOrientation;
-  final bool isLandscape;
 
   const PlayerBottomBar({
     super.key,
@@ -358,8 +362,6 @@ class PlayerBottomBar extends StatefulWidget {
     required this.onToggleFit,
     required this.onToggleLock,
     required this.onPip,
-    required this.onToggleOrientation,
-    this.isLandscape = true,
   });
 
   @override
@@ -368,7 +370,7 @@ class PlayerBottomBar extends StatefulWidget {
 
 class _PlayerBottomBarState extends State<PlayerBottomBar> {
   bool _isSliding = false;
-  double? _tempSliderValue; // قيمة مؤقتة أثناء السحب
+  double? _tempSliderValue;
 
   String _fmt(Duration d) {
     final h = d.inHours;
@@ -412,19 +414,27 @@ class _PlayerBottomBarState extends State<PlayerBottomBar> {
                       overlayColor: widget.primaryColor.withOpacity(0.25),
                     ),
                     child: Slider(
-                      value: _tempSliderValue ?? progress, // قيمة مؤقتة أثناء السحب
-                      onChanged: (v) {
+                      value: _tempSliderValue ?? progress,
+                      onChangeStart: (v) {
                         setState(() {
                           _isSliding = true;
-                          _tempSliderValue = v; // تحديث مؤقت فقط
+                          _tempSliderValue = v;
                         });
                       },
-                      onChangeEnd: (v) {
-                        widget.onSeek(v); // استدعاء seek مرة واحدة عند الانتهاء
+                      onChanged: (v) {
                         setState(() {
-                          _isSliding = false;
-                          _tempSliderValue = null; // إعادة التعيين
+                          _tempSliderValue = v;
                         });
+                      },
+                      onChangeEnd: (v) async {
+                        widget.onSeek(v); 
+                        await Future.delayed(const Duration(milliseconds: 400));
+                        if (mounted) {
+                          setState(() {
+                            _isSliding = false;
+                            _tempSliderValue = null; 
+                          });
+                        }
                       },
                     ),
                   ),
@@ -435,7 +445,6 @@ class _PlayerBottomBarState extends State<PlayerBottomBar> {
             SizedBox(
               height: 52,
               child: Row(children: [
-                _BottomBtn(icon: Symbols.picture_in_picture_rounded, onTap: widget.onPip, size: 22),
                 _BottomBtn(icon: Symbols.lock_rounded, onTap: widget.onToggleLock, size: 22),
                 const Spacer(),
                 _BottomBtn(icon: Symbols.replay_10_rounded, onTap: widget.onSkipBack, size: 28),
@@ -448,10 +457,8 @@ class _PlayerBottomBarState extends State<PlayerBottomBar> {
                 const SizedBox(width: 8),
                 _BottomBtn(icon: Symbols.forward_10_rounded, onTap: widget.onSkipForward, size: 28),
                 const Spacer(),
-                _BottomBtn(
-                  icon: widget.isLandscape ? Symbols.screen_rotation_rounded : Symbols.stay_current_portrait_rounded,
-                  onTap: widget.onToggleOrientation, size: 22,
-                ),
+                // تم وضع أيقونة النافذة المنبثقة بجوار خيار الأبعاد على اليمين
+                _BottomBtn(icon: Symbols.picture_in_picture_rounded, onTap: widget.onPip, size: 22),
                 _BottomBtn(icon: Symbols.aspect_ratio_rounded, onTap: widget.onToggleFit, size: 22),
               ]),
             ),

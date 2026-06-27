@@ -94,6 +94,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showLockHint = false;
   double _lockIconOffset = 0.0;
 
+  // حالات جديدة للإضافات المطلوبة
+  bool _showScreenshotFlash = false;
+  Timer? _sleepTimer;
+  bool _isNightMode = false;
+  double _preNightBrightness = 0.7;
+  double _preMuteVolume = 1.0;
+  PlaylistMode _playlistMode = PlaylistMode.none;
+  bool _isShuffle = false;
+
   @override
   void initState() {
     super.initState();
@@ -584,7 +593,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                     setState(() => _currentMenu = ActiveMenu.none);
                                     Navigator.push(context, MaterialPageRoute(builder: (_) => InfoScreen(video: widget.video)));
                                   },
-                                  onSleepTimer: null,
+                                  onSleepTimer: _showTimerPicker,
                                   onShowSpeedPicker: () {
                                     final settings = context.read<SettingsProvider>();
                                     _showSpeedPicker(settings);
@@ -611,6 +620,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Future<void> _captureScreenshot() async {
+    // تفعيل وميض التقاط الشاشة
+    setState(() => _showScreenshotFlash = true);
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) setState(() => _showScreenshotFlash = false);
+    });
+
     try {
       final Uint8List? bytes = await _player.screenshot(format: 'image/jpeg');
       if (bytes != null) {
@@ -632,10 +647,110 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  // دوال الاختصارات الجديدة
+  void _toggleNightMode() {
+    setState(() {
+      _isNightMode = !_isNightMode;
+      if (_isNightMode) {
+        _preNightBrightness = _brightnessNotifier.value;
+        _brightnessNotifier.value = 0.05;
+      } else {
+        _brightnessNotifier.value = _preNightBrightness;
+      }
+      ScreenBrightness.instance.setApplicationScreenBrightness(_brightnessNotifier.value);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_isNightMode ? 'تم تفعيل الوضع الليلي' : 'تم إيقاف الوضع الليلي')),
+    );
+  }
+
+  void _toggleMute() {
+    setState(() {
+      if (_volumeLevel > 0) {
+        _preMuteVolume = _volumeLevel;
+        _onVolumeChanged(0.0);
+      } else {
+        _onVolumeChanged(_preMuteVolume > 0 ? _preMuteVolume : 1.0);
+      }
+    });
+  }
+
+  void _toggleRepeat() {
+    setState(() {
+      if (_playlistMode == PlaylistMode.none) {
+        _playlistMode = PlaylistMode.all;
+      } else if (_playlistMode == PlaylistMode.all) {
+        _playlistMode = PlaylistMode.single;
+      } else {
+        _playlistMode = PlaylistMode.none;
+      }
+      _player.setPlaylistMode(_playlistMode);
+    });
+    final modeName = _playlistMode == PlaylistMode.none
+        ? 'إيقاف التكرار'
+        : _playlistMode == PlaylistMode.all
+            ? 'تكرار الكل'
+            : 'تكرار المقطع';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(modeName)));
+  }
+
+  void _toggleShuffle() {
+    setState(() {
+      _isShuffle = !_isShuffle;
+      _player.setShuffle(_isShuffle);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_isShuffle ? 'تشغيل عشوائي: مفعل' : 'تشغيل عشوائي: معطل')));
+  }
+
+  void _showTimerPicker() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+              child: Text('مؤقت النوم',
+                  style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+          const Divider(height: 1),
+          ListTile(
+            title: const Text('إيقاف المؤقت'),
+            onTap: () {
+              _sleepTimer?.cancel();
+              setState(() => _sleepTimer = null);
+              Navigator.pop(context);
+            },
+          ),
+          ...[15, 30, 45, 60, 90, 120].map((mins) => ListTile(
+                title: Text('$mins دقيقة'),
+                onTap: () {
+                  _sleepTimer?.cancel();
+                  setState(() {
+                    _sleepTimer = Timer(Duration(minutes: mins), () {
+                      _player.pause();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(content: Text('تم إيقاف التشغيل بواسطة المؤقت')));
+                      }
+                    });
+                  });
+                  Navigator.pop(context);
+                },
+              )),
+        ]),
+      ),
+    );
+  }
+
   Widget _qaBtn(IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
-      child: Icon(icon, color: color, size: 26),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Icon(icon, color: color, size: 26),
+      ),
     );
   }
 
@@ -648,7 +763,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-              child: Text('سرعة التشغيل', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
+              child: Text('سرعة التشغيل',
+                  style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 16))),
           const Divider(height: 1),
           ...[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((sp) => ListTile(
                 title: Text('${sp}x'),
@@ -749,11 +865,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     final isHorizontal = dx > dy;
 
                     if (isHorizontal) {
-                      final seekFactor = (_duration.inMilliseconds * 0.25)
-                          .clamp(30000.0, 600000.0);
+                      final seekFactor = (_duration.inMilliseconds * 0.25).clamp(30000.0, 600000.0);
                       final change = (details.focalPointDelta.dx / screenWidth) * seekFactor;
-                      _seekMsNotifier.value = (_seekMsNotifier.value + change)
-                          .clamp(0.0, _duration.inMilliseconds.toDouble());
+                      _seekMsNotifier.value =
+                          (_seekMsNotifier.value + change).clamp(0.0, _duration.inMilliseconds.toDouble());
                       _showSeekNotifier.value = true;
                       _showVolNotifier.value = false;
                       _showBrightNotifier.value = false;
@@ -784,6 +899,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     }
                   },
                   child: _buildVideoWidget(s),
+                ),
+
+                // تأثير التقاط الشاشة
+                IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _showScreenshotFlash ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: Container(color: Colors.white),
+                  ),
                 ),
 
                 if (_isLocked)
@@ -881,7 +1005,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                               const SizedBox(height: 8),
                               Text(
                                 _fmt(Duration(milliseconds: seekMs.toInt())),
-                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                               ),
                             ]),
                           ),
@@ -971,7 +1096,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(_fitOverlayText!,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ),
@@ -993,7 +1119,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       },
                       onSubtitleMenu: () {
                         setState(() {
-                          _currentMenu = _currentMenu == ActiveMenu.subtitles ? ActiveMenu.none : ActiveMenu.subtitles;
+                          _currentMenu =
+                              _currentMenu == ActiveMenu.subtitles ? ActiveMenu.none : ActiveMenu.subtitles;
                           _showQuickActions = false;
                           if (_currentMenu != ActiveMenu.none) cancelHideTimer(); else _scheduleHide();
                         });
@@ -1012,18 +1139,33 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       quickActionWidgets: _showQuickActions
                           ? [
                               _qaBtn(Symbols.camera_rounded, Colors.white70, _captureScreenshot),
-                              const SizedBox(width: 10),
                               _qaBtn(
-                                _isFavorite(widget.video.path)
-                                    ? Symbols.favorite_rounded
-                                    : Symbols.favorite_border,
+                                _isFavorite(widget.video.path) ? Symbols.favorite_rounded : Symbols.favorite_border,
                                 _isFavorite(widget.video.path) ? Colors.amber : Colors.white70,
                                 _toggleFavorite,
                               ),
-                              const SizedBox(width: 10),
                               _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
-                              const SizedBox(width: 10),
                               _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
+                              
+                              // إضافة الاختصارات الجديدة المطلوبة
+                              _qaBtn(
+                                _isLandscape ? Symbols.stay_current_portrait_rounded : Symbols.screen_rotation_rounded,
+                                Colors.white70,
+                                _toggleOrientation,
+                              ),
+                              _qaBtn(Symbols.speed_rounded, Colors.white70, () {
+                                _showSpeedPicker(context.read<SettingsProvider>());
+                                setState(() => _showQuickActions = false);
+                              }),
+                              _qaBtn(Symbols.timer_rounded, _sleepTimer != null ? Colors.amber : Colors.white70, _showTimerPicker),
+                              _qaBtn(Symbols.dark_mode_rounded, _isNightMode ? Colors.amber : Colors.white70, _toggleNightMode),
+                              _qaBtn(_volumeLevel == 0 ? Symbols.volume_off_rounded : Symbols.volume_up_rounded, _volumeLevel == 0 ? Colors.amber : Colors.white70, _toggleMute),
+                              _qaBtn(
+                                _playlistMode == PlaylistMode.single ? Symbols.repeat_one_rounded : Symbols.repeat_rounded,
+                                _playlistMode != PlaylistMode.none ? Colors.amber : Colors.white70,
+                                _toggleRepeat,
+                              ),
+                              _qaBtn(Symbols.shuffle_rounded, _isShuffle ? Colors.amber : Colors.white70, _toggleShuffle),
                             ]
                           : [],
                     ),
@@ -1051,8 +1193,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       onToggleFit: _toggleFit,
                       onToggleLock: _toggleLock,
                       onPip: _enterPip,
-                      onToggleOrientation: _toggleOrientation,
-                      isLandscape: _isLandscape,
                     ),
                   ),
                 ],
@@ -1100,6 +1240,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _indicatorTimer?.cancel();
     _fitOverlayTimer?.cancel();
     _seekHintTimer?.cancel();
+    _sleepTimer?.cancel();
     try {
       ScreenBrightness.instance.resetApplicationScreenBrightness();
     } catch (_) {}
