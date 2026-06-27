@@ -94,13 +94,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showLockHint = false;
   double _lockIconOffset = 0.0;
 
-  // حالات جديدة للإضافات المطلوبة
   bool _showScreenshotFlash = false;
   Timer? _sleepTimer;
   bool _isNightMode = false;
   double _preNightBrightness = 0.7;
   double _preMuteVolume = 1.0;
-  PlaylistMode _playlistMode = PlaylistMode.none;
+  // تم تصحيح القيمة هنا لتتوافق مع مكتبة media_kit
+  PlaylistMode _playlistMode = PlaylistMode.none; 
   bool _isShuffle = false;
 
   @override
@@ -620,7 +620,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Future<void> _captureScreenshot() async {
-    // تفعيل وميض التقاط الشاشة
     setState(() => _showScreenshotFlash = true);
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) setState(() => _showScreenshotFlash = false);
@@ -647,7 +646,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  // دوال الاختصارات الجديدة
   void _toggleNightMode() {
     setState(() {
       _isNightMode = !_isNightMode;
@@ -675,11 +673,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
   }
 
+  // تم تصحيح منطق التكرار هنا
   void _toggleRepeat() {
     setState(() {
       if (_playlistMode == PlaylistMode.none) {
-        _playlistMode = PlaylistMode.all;
-      } else if (_playlistMode == PlaylistMode.all) {
+        _playlistMode = PlaylistMode.loop; // التكرار
+      } else if (_playlistMode == PlaylistMode.loop) {
         _playlistMode = PlaylistMode.single;
       } else {
         _playlistMode = PlaylistMode.none;
@@ -688,7 +687,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
     final modeName = _playlistMode == PlaylistMode.none
         ? 'إيقاف التكرار'
-        : _playlistMode == PlaylistMode.all
+        : _playlistMode == PlaylistMode.loop
             ? 'تكرار الكل'
             : 'تكرار المقطع';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(modeName)));
@@ -901,7 +900,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                // تأثير التقاط الشاشة
                 IgnorePointer(
                   child: AnimatedOpacity(
                     opacity: _showScreenshotFlash ? 1.0 : 0.0,
@@ -1147,7 +1145,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                               _qaBtn(Symbols.playlist_add_rounded, Colors.white70, _addToPlaylist),
                               _qaBtn(Symbols.share_rounded, Colors.white70, _shareVideo),
                               
-                              // إضافة الاختصارات الجديدة المطلوبة
                               _qaBtn(
                                 _isLandscape ? Symbols.stay_current_portrait_rounded : Symbols.screen_rotation_rounded,
                                 Colors.white70,
