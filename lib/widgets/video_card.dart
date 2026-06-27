@@ -40,7 +40,13 @@ class VideoCard extends StatelessWidget {
                           style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
                     ),
                   ),
-                  _ResumeProgressBar(video: video),
+                  // ✅ التعديل: تم تغليف شريط التقدم بـ Positioned ليكون ابناً مباشراً للـ Stack هنا
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _ResumeProgressBar(video: video),
+                  ),
                 ]),
               ),
             ),
@@ -94,7 +100,13 @@ class VideoGridCard extends StatelessWidget {
                         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
                   ),
                 ),
-                _ResumeProgressBar(video: video),
+                // ✅ التعديل: تم تغليف شريط التقدم بـ Positioned ليكون ابناً مباشراً للـ Stack هنا أيضاً
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: _ResumeProgressBar(video: video),
+                ),
               ]),
             ),
             Padding(
@@ -129,7 +141,6 @@ class _ResumeProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ استخدام Consumer لإعادة البناء تلقائياً عند تغير LibraryProvider
     return Consumer<LibraryProvider>(
       builder: (context, lib, _) {
         final position = lib.getCachedPosition(video.path);
@@ -143,16 +154,12 @@ class _ResumeProgressBar extends StatelessWidget {
         final progress = (position.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
         final cs = Theme.of(context).colorScheme;
 
-        return Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: LinearProgressIndicator(
-            value: progress,
-            backgroundColor: Colors.transparent,
-            valueColor: AlwaysStoppedAnimation<Color>(cs.primary.withOpacity(0.8)),
-            minHeight: 3,
-          ),
+        // ✅ التعديل: إرجاع الـ Indicator مباشرة بدون تغليفه بـ Positioned داخلي
+        return LinearProgressIndicator(
+          value: progress,
+          backgroundColor: Colors.transparent,
+          valueColor: AlwaysStoppedAnimation<Color>(cs.primary.withOpacity(0.8)),
+          minHeight: 3,
         );
       },
     );

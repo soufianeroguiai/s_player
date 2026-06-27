@@ -150,7 +150,6 @@ class LibraryProvider extends ChangeNotifier {
 
       const batchSize = 12;
       for (final album in albums) {
-        // تجاهل الألبوم الوهمي "Recent" (ألبوم النظام الافتراضي)
         if (album.name == 'Recent') continue;
 
         final count = await album.assetCountAsync;
