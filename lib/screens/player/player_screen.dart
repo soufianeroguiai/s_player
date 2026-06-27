@@ -775,7 +775,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: _buildVideoWidget(s),
                 ),
 
-                // نافذة القفل (في الأسفل، عرض محدود، الأيقونة تتحرك داخله)
+                // نافذة القفل
                 if (_isLocked)
                   Positioned(
                     bottom: 40,
@@ -1006,7 +1006,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                               _qaBtn(
                                 _isFavorite(widget.video.path)
                                     ? Symbols.favorite_rounded
-                                    : Symbols.favorite_outline_rounded,
+                                    : Symbols.favorite_border, // ✅ الرمز الصحيح
                                 _isFavorite(widget.video.path) ? Colors.amber : Colors.white70,
                                 _toggleFavorite,
                               ),
@@ -1018,7 +1018,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           : [],
                     ),
                   ),
-                  // حذفنا كتلة _showQuickActions المنفصلة لأن الأيقونات صارت في الشريط العلوي
 
                   Positioned(
                     bottom: 0,
