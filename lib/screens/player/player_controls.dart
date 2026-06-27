@@ -12,7 +12,7 @@ class PlayerTopBar extends StatelessWidget {
   final bool isAudioActive;
   final bool isSubtitleActive;
   final bool isQuickActionsActive;
-  final List<Widget> quickActionWidgets; // أيقونات الاختصارات
+  final List<Widget> quickActionWidgets;
 
   const PlayerTopBar({
     super.key,
@@ -43,13 +43,11 @@ class PlayerTopBar extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Row(children: [
-          // زر الرجوع
           IconButton(
             icon: const Icon(Symbols.arrow_back_rounded, color: Colors.white),
             onPressed: onBack,
           ),
-
-          // اسم الفيديو (دائماً ظاهر)
+          // اسم الفيديو
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: screenWidth * 0.25),
             child: _MarqueeText(
@@ -63,39 +61,47 @@ class PlayerTopBar extends StatelessWidget {
             ),
           ),
 
-          // منطقة الاختصارات أو Spacer
-          if (isQuickActionsActive)
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: quickActionWidgets),
-              ),
-            )
-          else
-            const Spacer(),
+          // شريط الاختصارات المنزلق
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: isQuickActionsActive ? screenWidth * 0.35 : 0,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              border: isQuickActionsActive
+                  ? Border(
+                      left: BorderSide(color: Colors.white24, width: 1),
+                    )
+                  : null,
+            ),
+            child: isQuickActionsActive
+                ? SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(children: quickActionWidgets),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
 
-          // السهم الأيسر للتحكم بالإجراءات السريعة
+          const Spacer(),
+
+          // السهم الأيسر
           _AnimatedIconBtn(
             icon: Symbols.keyboard_arrow_left_rounded,
             color: isQuickActionsActive ? Colors.amberAccent : Colors.white70,
             onTap: onQuickActions,
           ),
-
-          // الصوت
           _AnimatedIconBtn(
             icon: Symbols.graphic_eq_rounded,
             color: isAudioActive ? Colors.amberAccent : Colors.white70,
             onTap: onAudioMenu,
           ),
-
-          // الترجمة
           _AnimatedIconBtn(
             icon: isSubtitleActive ? Symbols.closed_caption_rounded : Symbols.closed_caption_off_rounded,
             color: isSubtitleActive ? Colors.amberAccent : Colors.white60,
             onTap: onSubtitleMenu,
           ),
-
-          // المزيد
           _AnimatedIconBtn(
             icon: Symbols.more_vert_rounded,
             color: Colors.white70,
@@ -107,7 +113,7 @@ class PlayerTopBar extends StatelessWidget {
   }
 }
 
-// ---------- _MarqueeText (نسخة التمرير المستمر) ----------
+// ---------- _MarqueeText (تمرير مستمر) ----------
 class _MarqueeText extends StatefulWidget {
   final String text;
   final TextStyle style;
@@ -190,7 +196,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   }
 }
 
-// ---------- _AnimatedIconBtn (زر مع تأثير ضغط) ----------
+// ---------- _AnimatedIconBtn (أيقونة بتأثير ضغط) ----------
 class _AnimatedIconBtn extends StatefulWidget {
   final IconData icon;
   final Color color;
@@ -385,7 +391,7 @@ class _PlayerBottomBarState extends State<PlayerBottomBar> {
   }
 }
 
-// ---------- _PlayBtn (زر التشغيل مع تدوير) ----------
+// ---------- _PlayBtn (زر التشغيل مع دوران) ----------
 class _PlayBtn extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onTap;
@@ -452,7 +458,7 @@ class _PlayBtnState extends State<_PlayBtn> with SingleTickerProviderStateMixin 
   }
 }
 
-// ---------- _BottomBtn (زر سفلي صغير) ----------
+// ---------- _BottomBtn (أيقونة سفلية) ----------
 class _BottomBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
