@@ -823,6 +823,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      const Icon(Icons.drag_handle, color: Colors.white54),
                       if (isCustom)
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
@@ -830,8 +831,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.drag_handle, color: Colors.white54),
                     ],
                   ),
                 );
