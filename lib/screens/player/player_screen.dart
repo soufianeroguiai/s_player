@@ -50,6 +50,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Timer? _sleepTimer;
   int? _sleepMinutes;
   bool _showPlaylistEditor = false;
+  final Set<String> _hiddenFromSession = {};
   StreamSubscription<AccelerometerEvent>? _sensorSubscription;
 
   final ValueNotifier<double> _brightnessNotifier = ValueNotifier(0.7);
@@ -768,18 +769,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   Widget _buildPlaylistEditor() {
     final isCustom = _libraryProvider.playlistPaths.isNotEmpty;
+
     final videos = isCustom
         ? _libraryProvider.playlistPaths
             .map((path) => _libraryProvider.allVideos.where((v) => v.path == path).firstOrNull)
             .whereType<VideoItem>()
             .toList()
         : _libraryProvider.allVideos
-            .where((v) => v.folder == widget.video.folder)
+            .where((v) => v.folder == widget.video.folder && !_hiddenFromSession.contains(v.path))
             .toList()
           ..sort((a, b) => a.name.compareTo(b.name));
 
     void remove(String path) {
-      _libraryProvider.removeFromPlaylist(path);
+      if (isCustom) {
+        _libraryProvider.removeFromPlaylist(path);
+      } else {
+        _hiddenFromSession.add(path);
+      }
       setState(() {});
     }
 
@@ -788,8 +794,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       child: Column(
         children: [
           AppBar(
-            backgroundColor: Colors.black,
-            title: const Text('قوائم التشغيل'),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            title: const Text('قوائم التشغيل', style: TextStyle(fontSize: 16)),
             leading: IconButton(
               icon: const Icon(Icons.close),
               onPressed: () => setState(() => _showPlaylistEditor = false),
@@ -799,8 +806,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             child: ReorderableListView.builder(
               itemCount: videos.length,
               onReorder: (oldIndex, newIndex) {
-                _libraryProvider.reorderPlaylist(oldIndex, newIndex);
-                setState(() {});
+                if (isCustom) {
+                  _libraryProvider.reorderPlaylist(oldIndex, newIndex);
+                  setState(() {});
+                }
               },
               itemBuilder: (context, index) {
                 final video = videos[index];
@@ -849,14 +858,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   ),
                   subtitle: Text(video.formattedDuration,
                       style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                  trailing: isCustom
-                      ? IconButton(
-                          icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
-                          onPressed: () => remove(video.path),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        )
-                      : null,
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                    onPressed: () => remove(video.path),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    splashRadius: 20,
+                  ),
                 );
               },
             ),
